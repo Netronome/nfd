@@ -28,49 +28,95 @@
 
 
 /**
- * Queue configuration CSRs:
- * - @NS_VNIC_QCFG_MAX_TXQS and @NS_VNIC_QCFG_MAX_RXQS specify the
- *   maximum number of queues support by the vNIC instance.  These
- *   CSRs are read-only.  Note, this information can also be derived
- *   from the BAR size.
- * - @NS_VNIC_QCFG_ACTIVE_TXQS and @NS_VNIC_QCFG_ACTIVE_RXQS indicate
- *   how many queues are used by the driver.  The queues used are
- *   0-(Active - 1). These CSRs are read-write.  The driver may only
- *   change these values when the device is down.
- * - @NS_VNIC_QCFG_TXQ_LEN and @NS_VNIC_QCFG_RXQ_LEN allow the device
- *   driver to configure the size of the TX and RX queues.  These CSRs
- *   are read-write.  The driver may only change these values when the
- *   device is down.
+ * Read/Write config words
+ * @NS_VNIC_CFG_CTRL:        Global control
+ * @NS_VNIC_CFG_UPDATE:      Indicate which fields are updated
+ * @NS_VNIC_CFG_TXRS_ENABLE: Bitmask of enabled TX rings
+ * @NS_VNIC_CFG_RXRS_ENABLE: Bitmask of enabled RX rings
+ * @NS_VNIC_CFG_MTU:         Set MTU size
+ * @NS_VNIC_CFG_FLBUFSZ:     Set freelist buffer size (must be larger than MTU)
+ * @NS_VNIC_CFG_EXVEC:       MSI-X vector for exceptions
+ * @NS_VNIC_CFG_MACADDR:     MAC address
+ *
+ * TODO:
+ * - define UPDATE bits
  */
-#define NS_VNIC_QCFG_BASE		0x00c0
-#define NS_VNIC_QCFG_MAX_TXQS		(NS_VNIC_QCFG_BASE)
-#define NS_VNIC_QCFG_MAX_RXQS		(NS_VNIC_QCFG_BASE + 0x04)
-#define NS_VNIC_QCFG_ACTIVE_TXQS	(NS_VNIC_QCFG_BASE + 0x08)
-#define NS_VNIC_QCFG_ACTIVE_RXQS	(NS_VNIC_QCFG_BASE + 0x0c)
-#define NS_VNIC_QCFG_TXQ_LEN		(NS_VNIC_QCFG_BASE + 0x10)
-#define NS_VNIC_QCFG_RXQ_LEN		(NS_VNIC_QCFG_BASE + 0x14)
+#define NS_VNIC_CFG_CTRL		(0x0000)
+#define   NS_VNIC_CFG_CTRL_ENABLE	  (0x1 << 0)  /* Global enable */
+#define   NS_VNIC_CFG_CTRL_PROMISC	  (0x1 << 1)  /* Enable Promisc mode */
+#define   NS_VNIC_CFG_CTRL_RXCSUM	  (0x1 << 2)  /* Enable RX Checksum */
+#define   NS_VNIC_CFG_CTRL_TXCSUM	  (0x1 << 3)  /* Enable TX Checksum */
+#define   NS_VNIC_CFG_CTRL_RXVLAN	  (0x1 << 4)  /* Enable VLAN strip */
+#define   NS_VNIC_CFG_CTRL_TXVLAN	  (0x1 << 5)  /* Enable VLAN insert */
+#define   NS_VNIC_CFG_CTRL_RINGCFG	  (0x1 << 16) /* Ring runtime changes */
+#define NS_VNIC_CFG_UPDATE		(0x0004)
+#define   NS_VNIC_CFG_UPDATE_ERR	  (0x1 << 31) /* A error occurred */
+#define NS_VNIC_CFG_TXRS_ENABLE		(0x0008)
+#define NS_VNIC_CFG_RXRS_ENABLE		(0x0010)
+#define NS_VNIC_CFG_MTU			(0x0018)
+#define NS_VNIC_CFG_FLBUFSZ		(0x001c)
+#define NS_VNIC_CFG_EXVEC		(0x0020)
+#define NS_VNIC_CFG_MACADDR		(0x0024)
 
 
 /**
- * DMA address of TX queues on the host
- * 64 in total. These are 32bit DMA addresses, i.e., the queue
- * structures must be located in the low 4GB of host memory.  The CSRs
- * are read-write.  The driver may only change these values when the
- * device is down.
+ * Read-only words:
+ * @NS_VNIC_CFG_VERSION:     Firmware version number
+ * @NS_VNIC_CFG_STS:         Status
+ * @NS_VNIC_CFG_CAP:         Capabilities (same bits as @NS_VNIC_CFG_CTRL)
+ * @NS_VNIC_MAX_TXRINGS:     Maximum number of TX rings
+ * @NS_VNIC_MAX_RXRINGS:     Maximum number of RX rings
+ * @NS_VNIC_MAX_MTU:         Maximum support MTU
+ *
+ * TODO:
+ * - define more STS bits
  */
-#define NS_VNIC_TXQ_BASE		0x0100
-#define NS_VNIC_TXQ_ADDR(_x)		(NS_VNIC_TXQ_BASE + ((_x) * 0x4))
+#define NS_VNIC_CFG_VERSION		(0x0030)
+#define NS_VNIC_CFG_STS			(0x0034)
+#define   NS_VNIC_CFG_STS_LINK		  (0x1 << 0) /* Link up or down */
+#define NS_VNIC_CFG_CAP			(0x0038)
+#define NS_VNIC_CFG_MAX_TXRINGS		(0x003c)
+#define NS_VNIC_CFG_MAX_RXRINGS		(0x0040)
+#define NS_VNIC_CFG_MAX_MTU		(0x0044)
 
 
 /**
- * DMA address of TX queues on the host
- * 64 in total. These are 32bit DMA addresses, i.e., the queue
- * structures must be located in the low 4GB of host memory.  The CSRs
- * are read-write.  The driver may only change these values when the
- * device is down.
+ * TX rings
+ * @NS_VNIC_CFG_TXR_BASE:    Base offset for TX ring configuration
+ * @NS_VNIC_CFG_TXR_ADDR:    BAR offset of host address for TX ring _x
+ * @NS_VNIC_CFG_TXR_SZ       BAR offset to configure size for ring _x
+ * @NS_VNIC_CFG_TXR_VEC:     BAR offset to set MSI-X vector for ring _x
  */
-#define NS_VNIC_RXQ_BASE		0x0200
-#define NS_VNIC_RXQ_ADDR(_x)		(NS_VNIC_RXQ_BASE + ((_x) * 0x4))
+#define NS_VNIC_CFG_TXR_BASE		(0x0400)
+#define NS_VNIC_CFG_TXR_ADDR(_x)	(NS_VNIC_CFG_TXR_BASE + ((_x) * 0x4))
+#define NS_VNIC_CFG_TXR_SZ(_x)		(NS_VNIC_CFG_TXR_BASE + 0x100 + (_x))
+#define NS_VNIC_CFG_TXR_VEC(_x)		(NS_VNIC_CFG_TXR_BASE + 0x140 + (_x))
+
+
+/**
+ * RX rings
+ * @NS_VNIC_CFG_RXR_BASE:    Base offset for RX ring configuration
+ * @NS_VNIC_CFG_RXR_ADDR     BAR offset of host address for RX ring _x
+ * @NS_VNIC_CFG_RXR_SZ       BAR offset to configure size for ring _x
+ * @NS_VNIC_CFG_RXR_VEC:     BAR offset to set MSI-X vector for ring _x
+ */
+#define NS_VNIC_CFG_RXR_BASE		(0x0600)
+#define NS_VNIC_CFG_RXR_ADDR(_x)	(NS_VNIC_CFG_RXR_BASE + ((_x) * 0x4))
+#define NS_VNIC_CFG_RXR_SZ(_x)		(NS_VNIC_CFG_RXR_BASE + 0x100 + (_x))
+#define NS_VNIC_CFG_RXR_VEC(_x)		(NS_VNIC_CFG_RXR_BASE + 0x140 + (_x))
+
+
+/**
+ * Stats
+ * @NS_VNIC_CFG_TXR_STATS:   TX ring statistics (Packet and Byte count)
+ * @NS_VNIC_CFG_RXR_STATS:   RX ring statistics (Packet and Byte count)
+ */
+#define NS_VNIC_CFG_TXR_STATS_BASE	(0x0800)
+#define NS_VNIC_CFG_TXR_STATS(_x)	(NS_VNIC_CFG_TXR_STATS_BASE + \
+					 ((_x) * 0x10))
+#define NS_VNIC_CFG_RXR_STATS_BASE	(0x0c00)
+#define NS_VNIC_CFG_RXR_STATS(_x)	(NS_VNIC_CFG_RXR_STATS_BASE + \
+					 ((_x) * 0x10))
 
 #endif /* _NS_VNIC_CTRL_H_ */
 /*
