@@ -1,22 +1,6 @@
 /*
  * Copyright (C) 2014 Netronome Systems, Inc. All rights reserved.
  *
- * This software may be redistributed under either of two provisions:
- *
- * 1. The GNU General Public License version 2 (see
- *    http://www.gnu.org/licenses/old-licenses/gpl-2.0.html or
- *    COPYING.txt file) when it is used for Linux or other
- *    compatible free software as defined by GNU at
- *    http://www.gnu.org/licenses/license-list.html.
- *
- * 2. Or under a non-free commercial license executed directly with
- *    Netronome. The direct Netronome license does not apply when the
- *    software is used as part of the Linux kernel.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
  * vim:shiftwidth=8:noexpandtab
  *
  * @file kernel/ns_vnic_ctrl.h
@@ -39,17 +23,24 @@
  * @NS_VNIC_CFG_MACADDR:     MAC address
  *
  * TODO:
- * - define UPDATE bits
+ * - define Error details in UPDATE
  */
 #define NS_VNIC_CFG_CTRL		(0x0000)
-#define   NS_VNIC_CFG_CTRL_ENABLE	  (0x1 << 0)  /* Global enable */
-#define   NS_VNIC_CFG_CTRL_PROMISC	  (0x1 << 1)  /* Enable Promisc mode */
-#define   NS_VNIC_CFG_CTRL_RXCSUM	  (0x1 << 2)  /* Enable RX Checksum */
-#define   NS_VNIC_CFG_CTRL_TXCSUM	  (0x1 << 3)  /* Enable TX Checksum */
-#define   NS_VNIC_CFG_CTRL_RXVLAN	  (0x1 << 4)  /* Enable VLAN strip */
-#define   NS_VNIC_CFG_CTRL_TXVLAN	  (0x1 << 5)  /* Enable VLAN insert */
+#define   NS_VNIC_CFG_CTRL_ENABLE	  (0x1 <<  0) /* Global enable */
+#define   NS_VNIC_CFG_CTRL_PROMISC	  (0x1 <<  1) /* Enable Promisc mode */
+#define   NS_VNIC_CFG_CTRL_RXCSUM	  (0x1 <<  2) /* Enable RX Checksum */
+#define   NS_VNIC_CFG_CTRL_TXCSUM	  (0x1 <<  3) /* Enable TX Checksum */
+#define   NS_VNIC_CFG_CTRL_RXVLAN	  (0x1 <<  4) /* Enable VLAN strip */
+#define   NS_VNIC_CFG_CTRL_TXVLAN	  (0x1 <<  5) /* Enable VLAN insert */
 #define   NS_VNIC_CFG_CTRL_RINGCFG	  (0x1 << 16) /* Ring runtime changes */
+#define   NS_VNIC_CFG_CTRL_RSS		  (0x1 << 17) /* RSS */
+#define   NS_VNIC_CFG_CTRL_IRQMOD	  (0x1 << 18) /* Interrupt moderation */
+#define   NS_VNIC_CFG_CTRL_TXRPRIO	  (0x1 << 19) /* TX Ring priorities */
 #define NS_VNIC_CFG_UPDATE		(0x0004)
+#define   NS_VNIC_CFG_UPDATE_GEN	  (0x1 <<  0) /* General update */
+#define   NS_VNIC_CFG_UPDATE_RING	  (0x1 <<  1) /* Ring config change */
+#define   NS_VNIC_CFG_UPDATE_RSS	  (0x1 <<  2) /* RSS config change */
+#define   NS_VNIC_CFG_UPDATE_TXRPRIO	  (0x1 <<  3) /* TX Ring prio change */
 #define   NS_VNIC_CFG_UPDATE_ERR	  (0x1 << 31) /* A error occurred */
 #define NS_VNIC_CFG_TXRS_ENABLE		(0x0008)
 #define NS_VNIC_CFG_RXRS_ENABLE		(0x0010)
@@ -79,26 +70,48 @@
 #define NS_VNIC_CFG_MAX_RXRINGS		(0x0040)
 #define NS_VNIC_CFG_MAX_MTU		(0x0044)
 
+/**
+ * RSS configuration (only when NS_VNIC_CFG_CTRL_RSS is enabled)
+ * @NS_VNIC_CFG_RSS_CFG:     RSS configuration word
+ * @NS_VNIC_CFG_RSS_KEY:     RSS "secret" key
+ * @NS_VNIC_CFG_RSS_ITBL:    RSS indirection table
+ */
+#define NS_VNIC_CFG_RSS_BASE		(0x0100)
+#define NS_VNIC_CFG_RSS_CTRL		(NS_VNIC_CFG_RSS_BASE)
+#define   NS_VNIC_CFG_RSS_MASK		  (0x7f)
+#define   NS_VNIC_CFG_RSS_MASK_of(_x)	  ((_x) & 0x7f)
+#define   NS_VNIC_CFG_RSS_IPV4		  (1 <<  8) /* RSS for IPv4 */
+#define   NS_VNIC_CFG_RSS_IPV4TCP	  (1 <<  9) /* RSS for TCP/IPv4 */
+#define   NS_VNIC_CFG_RSS_IPV4UDP	  (1 << 10) /* RSS for UDP/IPv4 */
+#define   NS_VNIC_CFG_RSS_IPV6		  (1 << 11) /* RSS for IPv6 */
+#define   NS_VNIC_CFG_RSS_IPV6TCP	  (1 << 12) /* RSS for TCP/IPv6 */
+#define   NS_VNIC_CFG_RSS_IPV6UDP	  (1 << 13) /* RSS for UDP/IPv6 */
+#define   NS_VNIC_CFG_RSS_TOEPLITZ	  (1 << 24) /* Use Toeplitz hash */
+#define NS_VNIC_CFG_RSS_KEY		(NS_VNIC_CFG_RSS_BASE + 0x4)
+#define NS_VNIC_CFG_RSS_ITBL		(NS_VNIC_CFG_RSS_BASE + 0x4 + 0x28)
+
 
 /**
- * TX rings
+ * TX ring configuration
  * @NS_VNIC_CFG_TXR_BASE:    Base offset for TX ring configuration
- * @NS_VNIC_CFG_TXR_ADDR:    BAR offset of host address for TX ring _x
- * @NS_VNIC_CFG_TXR_SZ       BAR offset to configure size for ring _x
- * @NS_VNIC_CFG_TXR_VEC:     BAR offset to set MSI-X vector for ring _x
+ * @NS_VNIC_CFG_TXR_ADDR:    Offset of host address for TX ring _x
+ * @NS_VNIC_CFG_TXR_SZ:      Offset to configure size for ring _x
+ * @NS_VNIC_CFG_TXR_VEC:     Offset to set MSI-X vector for ring _x
+ * @NS_VNIC_CFG_TXR_PRIO:    Offset to set per TX ring priorities for ring _x.
  */
 #define NS_VNIC_CFG_TXR_BASE		(0x0400)
 #define NS_VNIC_CFG_TXR_ADDR(_x)	(NS_VNIC_CFG_TXR_BASE + ((_x) * 0x4))
 #define NS_VNIC_CFG_TXR_SZ(_x)		(NS_VNIC_CFG_TXR_BASE + 0x100 + (_x))
 #define NS_VNIC_CFG_TXR_VEC(_x)		(NS_VNIC_CFG_TXR_BASE + 0x140 + (_x))
+#define NS_VNIC_CFG_TXR_PRIO(_x)	(NS_VNIC_CFG_TXR_BASE + 0x180 + (_x))
 
 
 /**
- * RX rings
+ * RX ring configuration
  * @NS_VNIC_CFG_RXR_BASE:    Base offset for RX ring configuration
- * @NS_VNIC_CFG_RXR_ADDR     BAR offset of host address for RX ring _x
- * @NS_VNIC_CFG_RXR_SZ       BAR offset to configure size for ring _x
- * @NS_VNIC_CFG_RXR_VEC:     BAR offset to set MSI-X vector for ring _x
+ * @NS_VNIC_CFG_RXR_ADDR:    Offset of host address for RX ring _x
+ * @NS_VNIC_CFG_RXR_SZ:      Offset to configure size for ring _x
+ * @NS_VNIC_CFG_RXR_VEC:     Offset to set MSI-X vector for ring _x
  */
 #define NS_VNIC_CFG_RXR_BASE		(0x0600)
 #define NS_VNIC_CFG_RXR_ADDR(_x)	(NS_VNIC_CFG_RXR_BASE + ((_x) * 0x4))
