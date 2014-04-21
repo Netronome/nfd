@@ -10,6 +10,17 @@
 #ifndef _NS_VNIC_CTRL_H_
 #define _NS_VNIC_CTRL_H_
 
+/**
+ * @NS_VNIC_TXR_MAX:         Maximum number of TX rings
+ * @NS_VNIC_TXR_MASK:        Mask for TX rings
+ * @NS_VNIC_RXR_MAX:         Maximum number of RX rings
+ * @NS_VNIC_RXR_MASK:        Mask for RX rings
+ */
+#define NS_VNIC_TXR_MAX			64
+#define NS_VNIC_TXR_MASK		(NS_VNIC_TXR_MAX - 1)
+#define NS_VNIC_RXR_MAX			64
+#define NS_VNIC_RXR_MASK		(NS_VNIC_RXR_MAX - 1)
+
 
 /**
  * Read/Write config words
@@ -70,6 +81,7 @@
 #define NS_VNIC_CFG_MAX_RXRINGS		(0x0040)
 #define NS_VNIC_CFG_MAX_MTU		(0x0044)
 
+
 /**
  * RSS configuration (only when NS_VNIC_CFG_CTRL_RSS is enabled)
  * @NS_VNIC_CFG_RSS_CFG:     RSS configuration word
@@ -88,7 +100,10 @@
 #define   NS_VNIC_CFG_RSS_IPV6UDP	  (1 << 13) /* RSS for UDP/IPv6 */
 #define   NS_VNIC_CFG_RSS_TOEPLITZ	  (1 << 24) /* Use Toeplitz hash */
 #define NS_VNIC_CFG_RSS_KEY		(NS_VNIC_CFG_RSS_BASE + 0x4)
-#define NS_VNIC_CFG_RSS_ITBL		(NS_VNIC_CFG_RSS_BASE + 0x4 + 0x28)
+#define NS_VNIC_CFG_RSS_KEY_SZ		(0x28)
+#define NS_VNIC_CFG_RSS_ITBL		(NS_VNIC_CFG_RSS_BASE + 0x4 + \
+					 NS_VNIC_CFG_RSS_KEY_SZ)
+#define NS_VNIC_CFG_RSS_ITBL_SZ		(0x80)
 
 
 /**
