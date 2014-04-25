@@ -46,12 +46,13 @@
 #define   NS_VNIC_CFG_CTRL_RINGCFG	  (0x1 << 16) /* Ring runtime changes */
 #define   NS_VNIC_CFG_CTRL_RSS		  (0x1 << 17) /* RSS */
 #define   NS_VNIC_CFG_CTRL_IRQMOD	  (0x1 << 18) /* Interrupt moderation */
-#define   NS_VNIC_CFG_CTRL_TXRPRIO	  (0x1 << 19) /* TX Ring priorities */
+#define   NS_VNIC_CFG_CTRL_RINGPRIO	  (0x1 << 19) /* Ring priorities */
 #define NS_VNIC_CFG_UPDATE		(0x0004)
 #define   NS_VNIC_CFG_UPDATE_GEN	  (0x1 <<  0) /* General update */
 #define   NS_VNIC_CFG_UPDATE_RING	  (0x1 <<  1) /* Ring config change */
 #define   NS_VNIC_CFG_UPDATE_RSS	  (0x1 <<  2) /* RSS config change */
 #define   NS_VNIC_CFG_UPDATE_TXRPRIO	  (0x1 <<  3) /* TX Ring prio change */
+#define   NS_VNIC_CFG_UPDATE_RXRPRIO	  (0x1 <<  4) /* RX Ring prio change */
 #define   NS_VNIC_CFG_UPDATE_ERR	  (0x1 << 31) /* A error occurred */
 #define NS_VNIC_CFG_TXRS_ENABLE		(0x0008)
 #define NS_VNIC_CFG_RXRS_ENABLE		(0x0010)
@@ -127,11 +128,13 @@
  * @NS_VNIC_CFG_RXR_ADDR:    Offset of host address for RX ring _x
  * @NS_VNIC_CFG_RXR_SZ:      Offset to configure size for ring _x
  * @NS_VNIC_CFG_RXR_VEC:     Offset to set MSI-X vector for ring _x
+ * @NS_VNIC_CFG_TXR_PRIO:    Offset to set per RX ring priorities for ring _x.
  */
 #define NS_VNIC_CFG_RXR_BASE		(0x0600)
 #define NS_VNIC_CFG_RXR_ADDR(_x)	(NS_VNIC_CFG_RXR_BASE + ((_x) * 0x4))
 #define NS_VNIC_CFG_RXR_SZ(_x)		(NS_VNIC_CFG_RXR_BASE + 0x100 + (_x))
 #define NS_VNIC_CFG_RXR_VEC(_x)		(NS_VNIC_CFG_RXR_BASE + 0x140 + (_x))
+#define NS_VNIC_CFG_RXR_PRIO(_x)	(NS_VNIC_CFG_RXR_BASE + 0x180 + (_x))
 
 
 /**
