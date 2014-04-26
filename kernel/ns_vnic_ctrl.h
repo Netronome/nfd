@@ -36,7 +36,7 @@
  * TODO:
  * - define Error details in UPDATE
  */
-#define NS_VNIC_CFG_CTRL		(0x0000)
+#define NS_VNIC_CFG_CTRL		0x0000
 #define   NS_VNIC_CFG_CTRL_ENABLE	  (0x1 <<  0) /* Global enable */
 #define   NS_VNIC_CFG_CTRL_PROMISC	  (0x1 <<  1) /* Enable Promisc mode */
 #define   NS_VNIC_CFG_CTRL_RXCSUM	  (0x1 <<  2) /* Enable RX Checksum */
@@ -48,19 +48,19 @@
 #define   NS_VNIC_CFG_CTRL_RSS		  (0x1 << 17) /* RSS */
 #define   NS_VNIC_CFG_CTRL_IRQMOD	  (0x1 << 18) /* Interrupt moderation */
 #define   NS_VNIC_CFG_CTRL_RINGPRIO	  (0x1 << 19) /* Ring priorities */
-#define NS_VNIC_CFG_UPDATE		(0x0004)
+#define NS_VNIC_CFG_UPDATE		0x0004
 #define   NS_VNIC_CFG_UPDATE_GEN	  (0x1 <<  0) /* General update */
 #define   NS_VNIC_CFG_UPDATE_RING	  (0x1 <<  1) /* Ring config change */
 #define   NS_VNIC_CFG_UPDATE_RSS	  (0x1 <<  2) /* RSS config change */
 #define   NS_VNIC_CFG_UPDATE_TXRPRIO	  (0x1 <<  3) /* TX Ring prio change */
 #define   NS_VNIC_CFG_UPDATE_RXRPRIO	  (0x1 <<  4) /* RX Ring prio change */
 #define   NS_VNIC_CFG_UPDATE_ERR	  (0x1 << 31) /* A error occurred */
-#define NS_VNIC_CFG_TXRS_ENABLE		(0x0008)
-#define NS_VNIC_CFG_RXRS_ENABLE		(0x0010)
-#define NS_VNIC_CFG_MTU			(0x0018)
-#define NS_VNIC_CFG_FLBUFSZ		(0x001c)
-#define NS_VNIC_CFG_EXVEC		(0x0020)
-#define NS_VNIC_CFG_MACADDR		(0x0024)
+#define NS_VNIC_CFG_TXRS_ENABLE		0x0008
+#define NS_VNIC_CFG_RXRS_ENABLE		0x0010
+#define NS_VNIC_CFG_MTU			0x0018
+#define NS_VNIC_CFG_FLBUFSZ		0x001c
+#define NS_VNIC_CFG_EXVEC		0x0020
+#define NS_VNIC_CFG_MACADDR		0x0024
 
 
 /**
@@ -75,13 +75,13 @@
  * TODO:
  * - define more STS bits
  */
-#define NS_VNIC_CFG_VERSION		(0x0030)
-#define NS_VNIC_CFG_STS			(0x0034)
+#define NS_VNIC_CFG_VERSION		0x0030
+#define NS_VNIC_CFG_STS			0x0034
 #define   NS_VNIC_CFG_STS_LINK		  (0x1 << 0) /* Link up or down */
-#define NS_VNIC_CFG_CAP			(0x0038)
-#define NS_VNIC_CFG_MAX_TXRINGS		(0x003c)
-#define NS_VNIC_CFG_MAX_RXRINGS		(0x0040)
-#define NS_VNIC_CFG_MAX_MTU		(0x0044)
+#define NS_VNIC_CFG_CAP			0x0038
+#define NS_VNIC_CFG_MAX_TXRINGS		0x003c
+#define NS_VNIC_CFG_MAX_RXRINGS		0x0040
+#define NS_VNIC_CFG_MAX_MTU		0x0044
 
 
 /**
@@ -90,8 +90,8 @@
  * @NS_VNIC_CFG_RSS_KEY:     RSS "secret" key
  * @NS_VNIC_CFG_RSS_ITBL:    RSS indirection table
  */
-#define NS_VNIC_CFG_RSS_BASE		(0x0100)
-#define NS_VNIC_CFG_RSS_CTRL		(NS_VNIC_CFG_RSS_BASE)
+#define NS_VNIC_CFG_RSS_BASE		0x0100
+#define NS_VNIC_CFG_RSS_CTRL		NS_VNIC_CFG_RSS_BASE
 #define   NS_VNIC_CFG_RSS_MASK		  (0x7f)
 #define   NS_VNIC_CFG_RSS_MASK_of(_x)	  ((_x) & 0x7f)
 #define   NS_VNIC_CFG_RSS_IPV4		  (1 <<  8) /* RSS for IPv4 */
@@ -102,10 +102,10 @@
 #define   NS_VNIC_CFG_RSS_IPV6UDP	  (1 << 13) /* RSS for UDP/IPv6 */
 #define   NS_VNIC_CFG_RSS_TOEPLITZ	  (1 << 24) /* Use Toeplitz hash */
 #define NS_VNIC_CFG_RSS_KEY		(NS_VNIC_CFG_RSS_BASE + 0x4)
-#define NS_VNIC_CFG_RSS_KEY_SZ		(0x28)
+#define NS_VNIC_CFG_RSS_KEY_SZ		0x28
 #define NS_VNIC_CFG_RSS_ITBL		(NS_VNIC_CFG_RSS_BASE + 0x4 + \
 					 NS_VNIC_CFG_RSS_KEY_SZ)
-#define NS_VNIC_CFG_RSS_ITBL_SZ		(0x80)
+#define NS_VNIC_CFG_RSS_ITBL_SZ		0x80
 
 
 /**
@@ -116,7 +116,7 @@
  * @NS_VNIC_CFG_TXR_VEC:     Offset to set MSI-X vector for ring _x
  * @NS_VNIC_CFG_TXR_PRIO:    Offset to set per TX ring priorities for ring _x.
  */
-#define NS_VNIC_CFG_TXR_BASE		(0x0400)
+#define NS_VNIC_CFG_TXR_BASE		0x0400
 #define NS_VNIC_CFG_TXR_ADDR(_x)	(NS_VNIC_CFG_TXR_BASE + ((_x) * 0x4))
 #define NS_VNIC_CFG_TXR_SZ(_x)		(NS_VNIC_CFG_TXR_BASE + 0x100 + (_x))
 #define NS_VNIC_CFG_TXR_VEC(_x)		(NS_VNIC_CFG_TXR_BASE + 0x140 + (_x))
@@ -131,7 +131,7 @@
  * @NS_VNIC_CFG_RXR_VEC:     Offset to set MSI-X vector for ring _x
  * @NS_VNIC_CFG_TXR_PRIO:    Offset to set per RX ring priorities for ring _x.
  */
-#define NS_VNIC_CFG_RXR_BASE		(0x0600)
+#define NS_VNIC_CFG_RXR_BASE		0x0600
 #define NS_VNIC_CFG_RXR_ADDR(_x)	(NS_VNIC_CFG_RXR_BASE + ((_x) * 0x4))
 #define NS_VNIC_CFG_RXR_SZ(_x)		(NS_VNIC_CFG_RXR_BASE + 0x100 + (_x))
 #define NS_VNIC_CFG_RXR_VEC(_x)		(NS_VNIC_CFG_RXR_BASE + 0x140 + (_x))
@@ -143,10 +143,10 @@
  * @NS_VNIC_CFG_TXR_STATS:   TX ring statistics (Packet and Byte count)
  * @NS_VNIC_CFG_RXR_STATS:   RX ring statistics (Packet and Byte count)
  */
-#define NS_VNIC_CFG_TXR_STATS_BASE	(0x0800)
+#define NS_VNIC_CFG_TXR_STATS_BASE	0x0800
 #define NS_VNIC_CFG_TXR_STATS(_x)	(NS_VNIC_CFG_TXR_STATS_BASE + \
 					 ((_x) * 0x10))
-#define NS_VNIC_CFG_RXR_STATS_BASE	(0x0c00)
+#define NS_VNIC_CFG_RXR_STATS_BASE	0x0c00
 #define NS_VNIC_CFG_RXR_STATS(_x)	(NS_VNIC_CFG_RXR_STATS_BASE + \
 					 ((_x) * 0x10))
 
