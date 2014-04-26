@@ -43,6 +43,7 @@
 #define   NS_VNIC_CFG_CTRL_TXCSUM	  (0x1 <<  3) /* Enable TX Checksum */
 #define   NS_VNIC_CFG_CTRL_RXVLAN	  (0x1 <<  4) /* Enable VLAN strip */
 #define   NS_VNIC_CFG_CTRL_TXVLAN	  (0x1 <<  5) /* Enable VLAN insert */
+#define   NS_VNIC_CFG_CTRL_LSO		  (0x1 <<  6) /* LSO/TSO */
 #define   NS_VNIC_CFG_CTRL_RINGCFG	  (0x1 << 16) /* Ring runtime changes */
 #define   NS_VNIC_CFG_CTRL_RSS		  (0x1 << 17) /* RSS */
 #define   NS_VNIC_CFG_CTRL_IRQMOD	  (0x1 << 18) /* Interrupt moderation */
