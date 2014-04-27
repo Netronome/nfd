@@ -11,6 +11,11 @@
 #define _NS_VNIC_CTRL_H_
 
 /**
+ * Configuration BAR size
+ */
+#define NS_VNIC_CFG_BAR_SZ		4096
+
+/**
  * @NS_VNIC_TXR_MAX:         Maximum number of TX rings
  * @NS_VNIC_TXR_MASK:        Mask for TX rings
  * @NS_VNIC_RXR_MAX:         Maximum number of RX rings
