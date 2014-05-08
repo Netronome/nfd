@@ -49,7 +49,7 @@ main(void)
         /* Initialisation that swaps and takes longer */
         init_service_qc();
         init_distr_seqn();
-        vnic_ctrl_setup();
+        vnic_cfg_setup();
 
         /* TEMP: Mark initialisation complete */
         status |= (1<<STATUS_INIT_DONE_BIT);

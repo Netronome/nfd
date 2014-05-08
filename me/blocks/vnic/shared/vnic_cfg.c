@@ -164,19 +164,19 @@ _vnic_cfg_queue_setup()
 }
 
 void
-nfd_ctrl_write_max_qs(unsigned int vnic)
+vnic_cfg_write_cap(unsigned int vnic)
 {
-    __xwrite unsigned int cfg[] = {MAX_VNIC_QUEUES, MAX_VNIC_QUEUES};
+    __xwrite unsigned int cfg[] = {VNIC_CFG_VERSION, 0, VNIC_CFG_CAP,
+                                   MAX_VNIC_QUEUES, MAX_VNIC_QUEUES,
+                                   VNIC_CFG_MAX_MTU};
 
-    ctassert(NS_VNIC_CFG_MAX_RXRINGS ==  NS_VNIC_CFG_MAX_TXRINGS + 4);
-    mem_write64(&cfg, VNIC_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_MAX_TXRINGS,
+    mem_write64(&cfg, VNIC_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_VERSION,
                 sizeof cfg);
 }
 
 void
-vnic_ctrl_setup()
+vnic_cfg_setup()
 {
-     __xwrite unsigned int cfg[] = {MAX_VNIC_QUEUES, MAX_VNIC_QUEUES};
     unsigned int vnic;
 
     /* Setup the configuration message rings */
@@ -196,7 +196,7 @@ vnic_ctrl_setup()
      */
 
     for (vnic = 0; vnic < MAX_VNICS; vnic++) {
-        nfd_ctrl_write_max_qs(vnic);
+        vnic_cfg_write_cap(vnic);
     }
 }
 

@@ -8,6 +8,24 @@
 #define _BLOCKS__SHARED_VNIC_CFG_H_
 
 #include <nfp/mem_ring.h>
+#include <ns_vnic_ctrl.h>
+
+/* XXX Magic number currently
+ * Set to official version number before release */
+#define VNIC_CFG_VERSION 0x1248
+
+#ifndef VNIC_CFG_CAP
+/* XXX Set some "random" bits in the capabilities field
+ * for testing purposes */
+#define VNIC_CFG_CAP                                            \
+    (NS_VNIC_CFG_CTRL_ENABLE | NS_VNIC_CFG_CTRL_PROMISC |       \
+     NS_VNIC_CFG_CTRL_RXCSUM | NS_VNIC_CFG_CTRL_TXCSUM |        \
+     NS_VNIC_CFG_CTRL_LSO)
+#endif
+
+#ifndef VNIC_CFG_MAX_MTU
+#define VNIC_CFG_MAX_MTU        1518
+#endif
 
 /* XXX allocate using generic resource management */
 #define REQUESTER_ID_BASE       (6<<6)
@@ -60,7 +78,7 @@ struct vnic_cfg_msg {
 
 void nfd_ctrl_write_max_qs(unsigned int vnic);
 
-void vnic_ctrl_setup();
+void vnic_cfg_setup();
 
 __intrinsic void vnic_cfg_init_cfg_msg(SIGNAL *cfg_sig,
                                        struct vnic_cfg_msg *cfg_msg);
