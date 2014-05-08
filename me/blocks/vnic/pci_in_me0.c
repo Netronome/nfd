@@ -89,22 +89,22 @@ main(void)
 
             gather_status();
 
+            /* Either check for a message, or perform one tick of processing
+             * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
                 int curr_vnic;
 
                 curr_vnic = vnic_cfg_next_vnic();
 
                 if (curr_vnic >= 0) {
+                    cfg_msg.__raw = 0;
                     cfg_msg.vnic = curr_vnic;
                     cfg_msg.msg_valid = 1;
+
+                    vnic_cfg_parse_msg((void *) &cfg_msg, VNIC_CFG_PCI_IN);
                 }
-            }
-
-            /* XXX can use if-else to deliberately delay processing */
-            if (cfg_msg.msg_valid) {
-
-                /* XXX process message */
-                dummy_gather_vnic_setup((void *) &cfg_msg, PCIE_QC_SZ_8k + 8);
+            } else {
+                service_qc_vnic_setup(&cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
                     vnic_cfg_start_cfg_msg(&cfg_msg,

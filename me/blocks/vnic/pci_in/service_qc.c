@@ -14,6 +14,7 @@
 #include <vnic/pci_in_cfg.h>
 #include <vnic/pci_in/pci_in_internal.h>
 #include <vnic/shared/qc.h>
+#include <vnic/shared/vnic_cfg.h>
 
 /**
  * State variables for PCI.IN queue controller accesses
@@ -66,6 +67,65 @@ init_service_qc ()
     /* XXX set all QC queues to a safe state! */
 }
 
+
+__intrinsic void
+service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
+{
+    struct qc_queue_config txq;
+    unsigned char queue, ring_sz;
+    unsigned int ring_base;
+    unsigned int bmsk_queue;
+
+    vnic_cfg_proc_msg(cfg_msg, &queue, &ring_sz, &ring_base, VNIC_CFG_PCI_IN);
+
+    if (cfg_msg->error || !cfg_msg->interested) {
+        return;
+    }
+
+    queue += cfg_msg->vnic * MAX_VNIC_QUEUES;
+    bmsk_queue = map_natural_to_bitmask(queue);
+
+    txq.watermark    = PCIE_QC_WM_4;
+    txq.event_data   = TXQ_EVENT_DATA;
+    txq.ptr          = 0;
+
+    if (cfg_msg->up_bit) {
+        /* Up the queue:
+         * - Set ring size and requester ID info
+         * - (Re)clear queue pointers in case something changed them
+         *   while down */
+        queue_data[bmsk_queue].tx_w = 0;
+        queue_data[bmsk_queue].tx_s = 0;
+        queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
+        queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
+        queue_data[bmsk_queue].ring_base_addr = ring_base;
+
+        txq.event_type   = PCIE_QC_EVENT_NOT_EMPTY;
+        txq.size         = ring_sz - 8; /* XXX add define for size shift */
+        qc_init_queue(PCIE_ISL, queue<<1 + TXQ_START, &txq);
+    } else {
+        /* Down the queue:
+         * - Prevent it issuing events
+         * - Clear active_msk bit
+         * - Clear pending_msk bit
+         * - Clear the proc bitmask bit?
+         * - Clear tx_w and tx_s
+         * - Try to count pending packets? Host responsibility? */
+
+        /* Clear active and pending bitmask bits */
+        clear_queue(bmsk_queue, &active_bmsk);
+        clear_queue(bmsk_queue, &pending_bmsk);
+
+        /* Clear queue LM state */
+        queue_data[bmsk_queue].tx_w = 0;
+        queue_data[bmsk_queue].tx_s = 0;
+
+        /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
+        txq.event_type   = PCIE_QC_EVENT_NO_EVENT;
+        txq.size         = 0;
+        qc_init_queue(PCIE_ISL, queue<<1 + TXQ_START, &txq);
+    }
+}
 
 void
 service_qc()

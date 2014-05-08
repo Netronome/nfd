@@ -64,16 +64,42 @@ MEM_RING_DECLARE(VNIC_CFG_RING_ADDR(PCIE_ISL, 0), VNIC_CFG_RING_SZ);
 MEM_RING_DECLARE(VNIC_CFG_RING_ADDR(PCIE_ISL, 1), VNIC_CFG_RING_SZ);
 MEM_RING_DECLARE(VNIC_CFG_RING_ADDR(PCIE_ISL, 2), VNIC_CFG_RING_SZ);
 
+/**
+ * @param msg_valid     message contains valid information
+ * @param error         an error has been detected
+ * @param interested    this component must process this message
+ * @param up_bit        the current queue is up
+ * @param spare         spare bits
+ * @param queue         queue number to process
+ * @param vnic          vnic to process
+ *
+ * This structure is passed between NFD components and used internally
+ * to carry configuration messages.  'vnic', 'msg_valid', and 'error' are
+ * passed between components (other fields must be zeroed).  'msg_valid' is
+ * used to determine whether to process a configuration message, and must be
+ * set when passing the structure to the next stage.  Unsetting this bit signals
+ * that processing in this stage is complete.  'up_bit' and 'queue' are only
+ * valid if 'msg_valid' and 'interested' are set, and 'error' is not set.
+ */
 struct vnic_cfg_msg {
     union {
         struct {
             unsigned int msg_valid:1;
             unsigned int error:1;
-            unsigned int spare:22;
+            unsigned int interested:1;
+            unsigned int up_bit:1;
+            unsigned int spare:12;
+            unsigned int queue:8;
             unsigned int vnic:8;
         };
         unsigned int __raw;
     };
+};
+
+enum vnic_cfg_component {
+    VNIC_CFG_PCI_IN,
+    VNIC_CFG_PCI_OUT,
+    VNIC_CFG_APP_MASTER
 };
 
 void nfd_ctrl_write_max_qs(unsigned int vnic);
@@ -107,5 +133,37 @@ __intrinsic void vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                                            __dram void *rbase_out,
                                            unsigned int rnum_in,
                                            __dram void *rbase_in);
+
+/**
+ * Read configuration message from BAR and interpret fields
+ * @param cfg_msg       holds state related to the configuration request
+ * @param comp          which component to specialise code for
+ *
+ * This method performs basic consistency checks on the configuration BAR
+ * information, and determines whether the message affects the current
+ * component.  It sets up internal data such as caching ring enables, and
+ * also reads the first ring address and ring sizes (if necessary).  This
+ * prepares the internal state for the 'vnic_cfg_proc_msg' method.
+ */
+__intrinsic void vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg,
+                                    enum vnic_cfg_component comp);
+
+/**
+ * Extract BAR information
+ * @param cfg_msg       holds state related to the configuration request
+ * @param queue         which queue to process next
+ * @param ring_sz       size of the ring
+ * @param ring_base     base address for the ring
+ * @param comp          which component to specialise code for
+ *
+ * Test 'cfg_msg' and internal state to determine whether any queue
+ * configuration must be changed in this configuration cycle.  If not, this is
+ * indicated through flags in 'cfg_msg', otherwise at least queue will be valid.
+ * If the queue must be "up'ed", 'ring_sz' and 'ring_base' will also be valid.
+ */
+__intrinsic void vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg,
+                                   unsigned char *queue, unsigned char *ring_sz,
+                                   unsigned int *ring_base,
+                                   enum vnic_cfg_component comp);
 
 #endif /* !_BLOCKS__SHARED_VNIC_CFG_H_ */

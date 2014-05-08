@@ -12,6 +12,7 @@
  * The following files implement all the funcitonality in <utils/*.h>.
  */
 
+#include "_c/mem_bulk32.c"
 #include "_c/nn_ring.c"
 #include "_c/pcie.c"
 #include "_c/qcntl.c"

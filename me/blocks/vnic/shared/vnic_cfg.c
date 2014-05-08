@@ -20,6 +20,7 @@
 #include <vnic/shared/vnic_cfg.h>
 
 #include <vnic/shared/qc.h>
+#include <vnic/utils/mem_bulk32.h>
 #include <vnic/utils/qcntl.h>
 
 #include <ns_vnic_ctrl.h>
@@ -67,6 +68,10 @@ __remote SIGNAL VNIC_CFG_SIG_NEXT_ME;
 __export __emem __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS) char
     VNIC_CFG_BASE(PCIE_ISL)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
 
+static unsigned int cfg_ring_enables[2] = {0, 0};
+__xread unsigned int cfg_ring_addr = 0;
+__xread char cfg_ring_sizes[4] = {0, 0, 0, 0};
+
 /* XXX move to some sort of CT library */
 __intrinsic void
 send_interthread_sig(unsigned int dst_me, unsigned int ctx, unsigned int sig_no)
@@ -102,6 +107,29 @@ ffs(unsigned int data)
         bne[match];
         immed[ret, -1];
     match:
+    }
+
+    return ret;
+}
+
+
+/* Providing a separate test to manage cfg_ring_enables (declared as an array)
+ * gives us more control over the code generated than trying to use a 64bit
+ * type and regular c instructions. */
+__intrinsic int
+_ring_enables_test(unsigned int queue)
+{
+    /* XXX handle a few special cases efficiently: <= 32 queues, and 1 queue */
+    /* 32 bits per unsigned int */
+    unsigned int mod_queue = queue & (32-1);
+    int ret;
+
+    /* Test which unsigned int bitmask the queue is stored in,
+     * then do a test on that bitmask. */
+    if (queue & 32) {
+        ret = (1 & (cfg_ring_enables[1] >> mod_queue));
+    } else {
+        ret = (1 & (cfg_ring_enables[0] >> mod_queue));
     }
 
     return ret;
@@ -295,12 +323,12 @@ vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
     struct vnic_cfg_msg cfg_msg_tmp;
     __xrw struct vnic_cfg_msg cfg_msg_wr;
 
-    /* Copy cfg_msg to write transfer register with "msg_valid" set
-     * XXX check that this results in an
-     * "alu[xfer, msg, or, 1, <<n]" type instruction */
+    /* Clear the internal state fields and set msg_valid before sending  */
     cfg_msg_tmp.__raw = 0;
     cfg_msg_tmp.msg_valid = 1;
-    cfg_msg_wr.__raw = cfg_msg->__raw | cfg_msg_tmp.__raw;
+    cfg_msg_tmp.error = cfg_msg->error;
+    cfg_msg_tmp.vnic = cfg_msg->vnic;
+    cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
     mem_ring_put(rnum, mem_ring_get_addr(rbase), &cfg_msg_wr,
                  sizeof cfg_msg_wr);
@@ -359,12 +387,12 @@ vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
     SIGNAL_PAIR put_sig;
     SIGNAL_PAIR get_sig;
 
-    /* Copy cfg_msg to write transfer register with "msg_valid" set
-     * XXX check that this results in an
-     * "alu[xfer, msg, or, 1, <<n]" type instruction */
+    /* Clear the internal state fields and set msg_valid before sending  */
     cfg_msg_tmp.__raw = 0;
     cfg_msg_tmp.msg_valid = 1;
-    cfg_msg_wr.__raw = cfg_msg->__raw | cfg_msg_tmp.__raw;
+    cfg_msg_tmp.error = cfg_msg->error;
+    cfg_msg_tmp.vnic = cfg_msg->vnic;
+    cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
     /* Put is guaranteed to succeed by design (the ring larger than
      * the number of possible vNICs). */
@@ -383,4 +411,142 @@ vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
 
     send_interthread_sig(next_me, 0,
                          __signal_number(cfg_sig_remote, next_me));
+}
+
+__intrinsic void
+vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
+{
+    /* XXX rewrite to set a signal mask so that we can leave
+     * address and size access to complete. */
+
+    __xread unsigned int cfg_bar_data[6];
+
+    ctassert(__is_ct_const(comp));
+
+    /* XXX do we want to use this method for the APP master as well? */
+    if (comp == VNIC_CFG_PCI_OUT) {
+        /* Need RXRS_ENABLES, at 0x10 */
+        mem_read64(cfg_bar_data,
+                 VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_CTRL,
+                 6 * sizeof(unsigned int));
+    } else {
+        /* Only need TXRS_ENABLES, at 0x08 */
+        mem_read64(cfg_bar_data,
+                 VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_CTRL,
+                 4 * sizeof(unsigned int));
+    }
+
+    /* Check capabilities */
+    if (cfg_bar_data[NS_VNIC_CFG_CTRL] & ~VNIC_CFG_CAP) {
+        /* Mark an error and abort processing */
+        cfg_msg->error = 1;
+        return;
+    }
+
+    /* Check if change affects this component */
+    if (comp == VNIC_CFG_PCI_IN || comp == VNIC_CFG_PCI_OUT) {
+        /* Only interested in the change if it contains a general update */
+        if (cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2] & NS_VNIC_CFG_UPDATE_GEN) {
+            cfg_msg->interested = 1;
+        }
+    } else {
+        /* XXX handle App MEs */
+        cfg_msg->interested = 1;
+    }
+
+    /* Set the queue to process to zero */
+    cfg_msg->queue = 0;
+
+    /* Copy ring configs
+     * If the vNIC is not up, set all ring enables to zero */
+    if (cfg_bar_data[NS_VNIC_CFG_CTRL] & NS_VNIC_CFG_CTRL_ENABLE) {
+        unsigned int enables_ind, addr_off, sz_off;
+
+        if (comp == VNIC_CFG_PCI_OUT) {
+            enables_ind = NS_VNIC_CFG_RXRS_ENABLE >> 2;
+            addr_off =    NS_VNIC_CFG_RXR_ADDR(0);
+            sz_off =      NS_VNIC_CFG_RXR_SZ(0);
+        } else {
+            enables_ind = NS_VNIC_CFG_TXRS_ENABLE >> 2;
+            addr_off =    NS_VNIC_CFG_TXR_ADDR(0);
+            sz_off =      NS_VNIC_CFG_TXR_SZ(0);
+        }
+
+        /* Access ring enables */
+        cfg_ring_enables[0] = cfg_bar_data[enables_ind];
+        cfg_ring_enables[1] = cfg_bar_data[enables_ind + 1];
+
+        /* Cache next ring address and size */
+        mem_read32(&cfg_ring_addr,
+                   VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + addr_off,
+                   sizeof(cfg_ring_addr));
+        mem_read32(cfg_ring_sizes,
+                   VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + sz_off,
+                   sizeof(cfg_ring_sizes));
+    } else {
+        /* All rings are set disabled, we won't need any addresses or sizes */
+        cfg_ring_enables[0] = 0;
+        cfg_ring_enables[1] = 0;
+    }
+}
+
+__intrinsic void
+vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
+                  unsigned char *ring_sz, unsigned int *ring_base,
+                  enum vnic_cfg_component comp)
+{
+    unsigned int next_addr_off, next_sz_off;
+
+    /* XXX rewrite to set a signal mask so that we can leave
+     * address and size access to complete. */
+
+    /* Mark packet complete if an error is detected,
+     * or if the component is not interested in the change.
+     * XXX Journal the error? */
+    if (cfg_msg->error || !cfg_msg->interested) {
+        cfg_msg->msg_valid = 0;
+        return;
+    }
+
+    *queue = cfg_msg->queue;
+
+    /* Set up values for current queue */
+    if (_ring_enables_test(*queue)) {
+        cfg_msg->up_bit = 1;
+        *ring_base = cfg_ring_addr;
+        *ring_sz = cfg_ring_sizes[*queue & 3];
+    } else {
+        cfg_msg->up_bit = 0;
+    }
+
+    cfg_msg->queue++;
+    if (cfg_msg->queue == MAX_VNIC_QUEUES) {
+        /* This queue is the last */
+        cfg_msg->msg_valid = 0;
+        return;
+    }
+
+    /* Read values for next queue(s) */
+    if (comp == VNIC_CFG_PCI_OUT) {
+        next_addr_off = NS_VNIC_CFG_RXR_ADDR(cfg_msg->queue);
+        next_sz_off =   NS_VNIC_CFG_RXR_SZ(cfg_msg->queue);
+    } else {
+        next_addr_off = NS_VNIC_CFG_TXR_ADDR(cfg_msg->queue);
+        next_sz_off =   NS_VNIC_CFG_TXR_SZ(cfg_msg->queue);
+    }
+
+    /* We only use the address if the ring is enabled.
+     * Otherwise suppress read to save CPP bandwidth. */
+    if (_ring_enables_test(cfg_msg->queue)) {
+        mem_read32(&cfg_ring_addr,
+                   VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_addr_off,
+                   sizeof(cfg_ring_addr));
+    }
+
+    /* Sizes packed 4 per register, so reread every 4th queue */
+    if (cfg_msg->queue & 3 == 0) {
+        mem_read32(cfg_ring_sizes,
+                   VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_sz_off,
+                   sizeof(cfg_ring_sizes));
+    }
 }
