@@ -20,11 +20,11 @@
 #define VNIC_CFG_CAP                                            \
     (NS_VNIC_CFG_CTRL_ENABLE | NS_VNIC_CFG_CTRL_PROMISC |       \
      NS_VNIC_CFG_CTRL_RXCSUM | NS_VNIC_CFG_CTRL_TXCSUM |        \
-     NS_VNIC_CFG_CTRL_LSO)
+     NS_VNIC_CFG_CTRL_RXVLAN | NS_VNIC_CFG_CTRL_TXVLAN)
 #endif
 
 #ifndef VNIC_CFG_MAX_MTU
-#define VNIC_CFG_MAX_MTU        1518
+#define VNIC_CFG_MAX_MTU        1500
 #endif
 
 /* XXX allocate using generic resource management */
