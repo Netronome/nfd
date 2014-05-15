@@ -49,7 +49,7 @@ static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 void
 dummy_init_gather_shared()
 {
-    struct nfp_pcie_dma_cfg_one cfg;
+    struct pcie_dma_cfg_one cfg;
 
     /*
      * Initialise the NN ring
@@ -76,7 +76,7 @@ dummy_init_gather_shared()
     /* Ordering settings? */
     cfg.target_64   = 0;
     cfg.cpp_target  = 15;
-    set_DMA_config(PCIE_ISL, TX_GATHER_CFG_REG, cfg);
+    pcie_dma_cfg_set_one(PCIE_ISL, TX_GATHER_CFG_REG, cfg);
 }
 
 static __intrinsic void dummy_dma(unsigned int dma_mode, __xwrite void *descr,
