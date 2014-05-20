@@ -47,6 +47,8 @@ main(void)
         init_gather_status();
 
         /* Initialisation that swaps and takes longer */
+        vnic_cfg_setup_pf();
+
         init_service_qc();
         init_distr_seqn();
         vnic_cfg_setup();

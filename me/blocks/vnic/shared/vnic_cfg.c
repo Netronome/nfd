@@ -15,6 +15,7 @@
 
 #include <nfp6000/nfp_cls.h>
 #include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
 #include <nfp6000/nfp_qc.h>
 
 #include <vnic/shared/vnic_cfg.h>
@@ -134,6 +135,57 @@ _ring_enables_test(unsigned int queue)
 
     return ret;
 }
+
+/* XXX TEMP compute BAR address fields for PF */
+__intrinsic void
+_bar_addr(struct nfp_pcie_barcfg_p2c *bar, unsigned long long data)
+{
+    unsigned int addr_tmp = (data >> 19) & 0x1FFFFF;
+    bar->actaddr = addr_tmp >> 16;
+    bar->base = addr_tmp; /* XXX & 0xFFFF in this line causes error! */
+}
+
+/* XXX TEMP configure wide PF BARs to access config mem and QC  */
+__intrinsic void
+vnic_cfg_setup_pf()
+{
+    __gpr unsigned int addr_hi =  PCIE_ISL << 30;
+    unsigned int bar_base_addr;
+    struct nfp_pcie_barcfg_p2c bar_tmp;
+    __xwrite struct nfp_pcie_barcfg_p2c bar;
+    SIGNAL sig;
+
+    /* BAR0 (resource0) config mem */
+    bar_tmp.map_type = NFP_PCIE_BARCFG_P2C_MAP_TYPE_BULK;
+    bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_64BIT;
+    bar_tmp.target = 7; /* MU CPP target */
+    bar_tmp.token = 0;
+    _bar_addr(&bar_tmp, (unsigned long long) VNIC_CFG_BASE(PCIE_ISL));
+    bar = bar_tmp;
+
+    bar_base_addr = NFP_PCIE_BARCFG_P2C(0, 0);
+    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
+        ctx_swap[sig];
+
+    /* BAR1 (resource2) PCI.IN queues  */
+    bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_32BIT;
+    bar_tmp.target = 0; /* Internal PCIe Target */
+    _bar_addr(&bar_tmp, 0x80000);
+    bar = bar_tmp;
+
+    bar_base_addr = NFP_PCIE_BARCFG_P2C(1, 0);
+    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
+        ctx_swap[sig];
+
+    /* BAR2 (resource4) PCI.OUT queues */
+    _bar_addr(&bar_tmp, 0x80000 + 128 * 0x800);
+    bar = bar_tmp;
+
+    bar_base_addr = NFP_PCIE_BARCFG_P2C(2, 0);
+    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
+        ctx_swap[sig];
+}
+
 
 
 void

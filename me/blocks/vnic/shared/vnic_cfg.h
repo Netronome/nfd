@@ -102,6 +102,8 @@ enum vnic_cfg_component {
     VNIC_CFG_APP_MASTER
 };
 
+__intrinsic void vnic_cfg_setup_pf();
+
 void nfd_ctrl_write_max_qs(unsigned int vnic);
 
 void vnic_cfg_setup();
