@@ -128,6 +128,9 @@ __intrinsic void vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                                         unsigned int rnum,
                                         __dram void *rbase);
 
+__intrinsic void vnic_cfg_app_complete_cfg_msg(
+    __xread struct vnic_cfg_msg *cfg_msg);
+
 __intrinsic void vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                                            __remote SIGNAL *cfg_sig_remote,
                                            unsigned int next_me,

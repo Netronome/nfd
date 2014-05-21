@@ -401,6 +401,9 @@ vnic_cfg_app_check_cfg_msg(SIGNAL *cfg_sig, unsigned int rnum,
         mem_ring_get(rnum, mem_ring_get_addr(rbase), &cfg_msg,
                      sizeof cfg_msg);
 
+        /* XXX move out of this method */
+        vnic_cfg_app_complete_cfg_msg(&cfg_msg);
+
         local_csr_write(NFP_MECSR_MAILBOX_0, cfg_msg.vnic);
         local_csr_write(NFP_MECSR_MAILBOX_1, 0x11223344);
     }
@@ -425,6 +428,25 @@ vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
         }
     }
 }
+
+
+__intrinsic void
+vnic_cfg_app_complete_cfg_msg(__xread struct vnic_cfg_msg *cfg_msg)
+{
+    __xwrite unsigned int result;
+
+    if (cfg_msg->error) {
+        result = NS_VNIC_CFG_UPDATE_ERR;
+    } else {
+        /* XXX add NS_VNIC_CFG_UPDATE_SUCCESS value to ns_vnic_ctrl.h */
+        result = 0;
+    }
+
+    mem_write32(&result,
+               VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_UPDATE,
+               sizeof(result));
+}
+
 
 __intrinsic void
 vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
