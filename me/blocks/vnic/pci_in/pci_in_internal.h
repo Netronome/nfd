@@ -12,8 +12,10 @@ struct tx_queue_info {
     unsigned int tx_s;
     unsigned int ring_sz_msk;
     unsigned int requester_id;
-    unsigned int ring_base_addr;
-    unsigned int dummy[3];
+    unsigned int spare0:24;
+    unsigned int ring_base_hi:8;
+    unsigned int ring_base_lo;
+    unsigned int dummy[2];
 };
 
 struct batch_desc {

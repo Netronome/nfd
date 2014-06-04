@@ -152,7 +152,8 @@ dummy_gather_vnic_setup(void *cfg_msg_in, unsigned int queue_size)
         queue_data[bmsk_queue].ring_sz_msk = ((1 << queue_size) - 1);
         queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
         /* TEMP */
-        queue_data[bmsk_queue].ring_base_addr = (0x47<<24) | (queue<<16);
+        queue_data[bmsk_queue].ring_base_hi = 0;
+        queue_data[bmsk_queue].ring_base_lo = (0x47<<24) | (queue<<16);
     }
 
     init_qc_queues(PCIE_ISL, &txq, TXQ_START + start_queue * 2, 2,
@@ -237,8 +238,8 @@ gather()
              * Filling the descriptor can possibly be optimised either
              * by doing it all by hand, or playing with initialisation time.
              */
-            descr_tmp.pcie_addr_hi = 0;
-            descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_addr |
+            descr_tmp.pcie_addr_hi = queue_data[queue].ring_base_hi;
+            descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_lo |
                                       pcie_addr_off);
             descr_tmp.cpp_addr_lo =  desc_ring_base | desc_ring_off;
             descr_tmp.rid = queue_data[queue].requester_id;

@@ -70,7 +70,7 @@ __export __emem __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS) char
     VNIC_CFG_BASE(PCIE_ISL)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
 
 static unsigned int cfg_ring_enables[2] = {0, 0};
-__xread unsigned int cfg_ring_addr = 0;
+__xread unsigned int cfg_ring_addr[2] = {0, 0};
 __xread char cfg_ring_sizes[4] = {0, 0, 0, 0};
 
 /* XXX move to some sort of CT library */
@@ -551,7 +551,7 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
         cfg_ring_enables[1] = cfg_bar_data[enables_ind + 1];
 
         /* Cache next ring address and size */
-        mem_read32(&cfg_ring_addr,
+        mem_read64(&cfg_ring_addr,
                    VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + addr_off,
                    sizeof(cfg_ring_addr));
         mem_read32(cfg_ring_sizes,
@@ -566,7 +566,7 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
 
 __intrinsic void
 vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
-                  unsigned char *ring_sz, unsigned int *ring_base,
+                  unsigned char *ring_sz, unsigned int ring_base[2],
                   enum vnic_cfg_component comp)
 {
     unsigned int next_addr_off, next_sz_off;
@@ -587,7 +587,8 @@ vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
     /* Set up values for current queue */
     if (_ring_enables_test(*queue)) {
         cfg_msg->up_bit = 1;
-        *ring_base = cfg_ring_addr;
+        ring_base[0] = cfg_ring_addr[0];
+        ring_base[1] = cfg_ring_addr[1];
         *ring_sz = cfg_ring_sizes[*queue & 3];
     } else {
         cfg_msg->up_bit = 0;
@@ -612,7 +613,7 @@ vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
     /* We only use the address if the ring is enabled.
      * Otherwise suppress read to save CPP bandwidth. */
     if (_ring_enables_test(cfg_msg->queue)) {
-        mem_read32(&cfg_ring_addr,
+        mem_read64(&cfg_ring_addr,
                    VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_addr_off,
                    sizeof(cfg_ring_addr));
     }

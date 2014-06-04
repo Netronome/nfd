@@ -73,10 +73,10 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
 {
     struct qc_queue_config txq;
     unsigned char queue, ring_sz;
-    unsigned int ring_base;
+    unsigned int ring_base[2];
     unsigned int bmsk_queue;
 
-    vnic_cfg_proc_msg(cfg_msg, &queue, &ring_sz, &ring_base, VNIC_CFG_PCI_IN);
+    vnic_cfg_proc_msg(cfg_msg, &queue, &ring_sz, ring_base, VNIC_CFG_PCI_IN);
 
     if (cfg_msg->error || !cfg_msg->interested) {
         return;
@@ -98,7 +98,9 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].tx_s = 0;
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
         queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
-        queue_data[bmsk_queue].ring_base_addr = ring_base;
+        queue_data[bmsk_queue].spare0 = 0;
+        queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;
+        queue_data[bmsk_queue].ring_base_lo = ring_base[0];
 
         txq.event_type   = PCIE_QC_EVENT_NOT_EMPTY;
         txq.size         = ring_sz - 8; /* XXX add define for size shift */

@@ -7,6 +7,8 @@
 
 #include <nfp.h>
 
+#include <std/reg_utils.h>
+
 #include <vnic/pci_out/cache_desc_status.h>
 
 #include <vnic/pci_out/pci_out_internal.h>
@@ -27,21 +29,16 @@ static __xwrite struct rx_queue_info status_queue_info;
 void
 cache_desc_status_setup()
 {
+    __gpr struct rx_queue_info info_tmp;
+
     __implicit_write(&status_queue_sel);
 
     /* Fix the transfer registers used */
     __assign_relative_register(&status_queue_info, STATUS_Q_INFO_START);
     __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
 
-    /* XXX replace with mr_zero type command */
-    status_queue_info.fl_w = 0;
-    status_queue_info.fl_s = 0;
-    status_queue_info.ring_sz_msk = 0;
-    status_queue_info.requester_id = 0;
-    status_queue_info.ring_base_addr = 0;
-    status_queue_info.rx_w = 0;
-    status_queue_info.dummy[0] = 0;
-    status_queue_info.dummy[1] = 0;
+    reg_zero(&info_tmp, sizeof info_tmp);
+    status_queue_info = info_tmp;
 }
 
 

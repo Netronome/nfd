@@ -7,6 +7,8 @@
 
 #include <nfp.h>
 
+#include <std/reg_utils.h>
+
 #include <vnic/pci_in/gather_status.h>
 
 #include <vnic/pci_in/pci_in_internal.h>
@@ -37,6 +39,9 @@ static __xwrite struct tx_gather_status status_queue_indep;
 void
 init_gather_status()
 {
+    __gpr struct tx_queue_info info_tmp;
+    __gpr struct tx_gather_status indep_temp;
+
     __implicit_write(&status_queue_sel);
 
     /* Fix the transfer registers used */
@@ -44,27 +49,11 @@ init_gather_status()
     __assign_relative_register(&status_queue_info, STATUS_Q_INFO_START);
     __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
 
-    /* XXX replace with mr_zero type command */
-    status_queue_indep.actv_bmsk_hi = 0;
-    status_queue_indep.actv_bmsk_lo = 0;
-    status_queue_indep.actv_bmsk_proc = 0;
-    status_queue_indep.pend_bmsk_hi = 0;
-    status_queue_indep.pend_bmsk_lo = 0;
-    status_queue_indep.pend_bmsk_proc = 0;
-    status_queue_indep.dma_issued = 0;
-    status_queue_indep.dma_compl = 0;
+    reg_zero(&info_tmp, sizeof info_tmp);
+    status_queue_info = info_tmp;
 
-    status_queue_info.tx_w = 0;
-    status_queue_info.tx_s = 0;
-    status_queue_info.ring_sz_msk = 0;
-    status_queue_info.requester_id = 0;
-    status_queue_info.ring_base_addr = 0;
-    status_queue_info.dummy[0] = 0;
-    status_queue_info.dummy[1] = 0;
-    status_queue_info.dummy[2] = 0;
-
-
-
+    reg_zero(&indep_temp, sizeof indep_temp);
+    status_queue_indep = indep_temp;
 }
 
 

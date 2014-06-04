@@ -168,7 +168,7 @@ __intrinsic void vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg,
  */
 __intrinsic void vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg,
                                    unsigned char *queue, unsigned char *ring_sz,
-                                   unsigned int *ring_base,
+                                   unsigned int ring_base[2],
                                    enum vnic_cfg_component comp);
 
 #endif /* !_BLOCKS__SHARED_VNIC_CFG_H_ */

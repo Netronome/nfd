@@ -18,7 +18,8 @@ struct send_desc_info {
     unsigned int rx_w;
     unsigned int ring_sz_msk;
     unsigned int requester_id;
-    unsigned int ring_base_addr;
+    unsigned int ring_base_hi;
+    unsigned int ring_base_lo;
 };
 
 /*
@@ -61,7 +62,9 @@ send_desc_vnic_setup(void *cfg_msg_in, unsigned int queue_size)
 
         queue_data[bmsk_queue].ring_sz_msk = ((1 << queue_size) - 1);
         queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
-        queue_data[bmsk_queue].ring_base_addr = (0x56<<24) | (queue<<16);
+        queue_data[bmsk_queue].spare0 = 0;
+        queue_data[bmsk_queue].ring_base_hi = 0;
+        queue_data[bmsk_queue].ring_base_lo = (0x56<<24) | (queue<<16);
         queue_data[bmsk_queue].rx_w = 0;
     }
 

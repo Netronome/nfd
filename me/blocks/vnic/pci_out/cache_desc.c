@@ -50,7 +50,9 @@ cache_desc_vnic_setup(void *cfg_msg_in, unsigned int queue_size)
         queue_data[bmsk_queue].fl_s = 0;
         queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
         /* TEMP */
-        queue_data[bmsk_queue].ring_base_addr = (0x56<<24) | (queue<<16);
+        queue_data[bmsk_queue].spare0 = 0;
+        queue_data[bmsk_queue].ring_base_hi = 0;
+        queue_data[bmsk_queue].ring_base_lo = (0x56<<24) | (queue<<16);
         queue_data[bmsk_queue].ring_sz_msk = ((1 << queue_size) - 1);
         queue_data[bmsk_queue].rx_w = 0;
     }
