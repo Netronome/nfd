@@ -10,10 +10,11 @@
 
 #include <vnic/pci_in/issue_dma.h>
 
+#include <vnic/pci_in_cfg.h>
 #include <vnic/shared/qc.h>
 
 /* XXX Further data will be required when checking for follow on packets */
-static __shared __lmem unsigned int ring_rids[MAX_VNICS * MAX_VNIC_QUEUES];
+static __shared __lmem unsigned int ring_rids[MAX_TX_QUEUES];
 
 void
 issue_dma_setup_shared()

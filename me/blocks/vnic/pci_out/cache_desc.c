@@ -10,10 +10,11 @@
 
 #include <vnic/pci_out/cache_desc.h>
 
+#include <vnic/pci_out_cfg.h>
 #include <vnic/pci_out/pci_out_internal.h>
 #include <vnic/shared/qc.h>
 
-__shared __lmem struct rx_queue_info queue_data[MAX_VNICS * MAX_VNIC_QUEUES];
+__shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
 
 void
 cache_desc_setup_shared()

@@ -1,11 +1,13 @@
 /*
  * Copyright (C) 2012-2013 Netronome Systems, Inc.  All rights reserved.
  *
- * @file          blocks/vnic/pci_in/pci_in_cfg.h
+ * @file          blocks/vnic/pci_in_cfg.h
  * @brief         PCI.IN compile time configuration options
  */
 #ifndef _BLOCKS__VNIC_PCI_IN_CFG_H_
 #define _BLOCKS__VNIC_PCI_IN_CFG_H_
+
+#define MAX_TX_QUEUES       64
 
 #define MAX_TX_BATCH_SZ     4
 #define DESC_BATCH_Q_SZ     128

@@ -10,6 +10,7 @@
 
 #include <vnic/pci_out/send_desc.h>
 
+#include <vnic/pci_out_cfg.h>
 #include <vnic/pci_out/pci_out_internal.h>
 #include <vnic/shared/qc.h>
 
@@ -22,12 +23,7 @@ struct send_desc_info {
     unsigned int ring_base_lo;
 };
 
-/*
- * XXX what happens when MAX_VNICS * MAX_VNIC_QUEUES < 64? Are the first 32
- * queues guaranteed to be compact?
- */
-extern __shared __lmem struct rx_queue_info queue_data[MAX_VNICS *
-                                                       MAX_VNIC_QUEUES];
+extern __shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
 
 void
 send_desc_setup_shared()
