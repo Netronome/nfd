@@ -27,17 +27,20 @@ static volatile __xread unsigned int tx_data_event_xfer;
 static volatile SIGNAL tx_gather_event_sig;
 static volatile SIGNAL tx_data_event_sig;
 
-static volatile __xwrite unsigned int tx_gather_reflect_xwrite;
+static __xwrite unsigned int tx_gather_reflect_xwrite;
+static __xwrite unsigned int tx_data_reflect_xwrite;
 
 /*
  * Sequence numbers visible to other code on this ME
  * NB: avoid name clashes
  */
-__shared __gpr unsigned int gather_dma_seq_compl;
-__shared __gpr unsigned int data_dma_seq_compl;
+__shared __gpr unsigned int gather_dma_seq_compl = 0;
+__shared __gpr unsigned int data_dma_seq_compl = 0;
 
 __remote volatile __xread unsigned int tx_gather_reflect_xread;
+__remote volatile __xread unsigned int tx_data_reflect_xread;
 __remote volatile SIGNAL tx_gather_reflect_sig;
+__remote volatile SIGNAL tx_data_reflect_sig;
 
 
 /* XXX Move to some sort of CT reflect library */
@@ -58,20 +61,18 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
     /* Generic address computation.
      * Could be expensive if dst_me, or dst_xfer
      * not compile time constants */
-    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 15)<<2));
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
 
     indirect.__raw = 0;
     indirect.signal_num = sig_no;
     local_csr_write(NFP_MECSR_CMD_INDIRECT_REF_0, indirect.__raw);
 
     /* Currently just support reflect_write_sig_remote */
-    __intrinsic_begin();
     __asm {
         alu[--, --, b, 1, <<OV_SIG_NUM];
         ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
            __ct_const_val(count)], indirect_ref;
     };
-    __intrinsic_end();
 }
 
 void
@@ -91,8 +92,8 @@ init_distr_seqn()
     unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
         meid>>4, NFP_EVENT_PROVIDER_INDEX_CLS); /* TEMP _PCIE);*/
 
-    gather_dma_seq_compl = 0;
-    data_dma_seq_compl = 0;
+    tx_gather_reflect_xwrite = 0;
+    tx_data_reflect_xwrite = 0;
 
     /*
      * Set filter status.
@@ -147,12 +148,14 @@ distr_seqn()
 
     /* Gather */
     if (signal_test(&tx_gather_event_sig)) {
+        __implicit_read(&tx_gather_reflect_xwrite);
+
         /* Compute increase and update gather_dma_seq_compl */
         event.__raw = tx_gather_event_xfer;
         seqn_inc = (event.source - gather_dma_seq_compl) & 0xFFF;
         gather_dma_seq_compl += seqn_inc;
 
-        /* Mirror to remote ME TODO! */
+        /* Mirror to remote ME */
         tx_gather_reflect_xwrite = gather_dma_seq_compl;
         reflect_data(TX_DATA_DMA_ME,
                      __xfer_reg_number(&tx_gather_reflect_xread,
@@ -170,13 +173,21 @@ distr_seqn()
 
     /* Data */
     if (signal_test(&tx_data_event_sig)) {
+        __implicit_read(&tx_data_reflect_xwrite);
+
         /* Compute increase and update gather_dma_seq_compl */
         event.__raw = tx_data_event_xfer;
         seqn_inc = (event.source - data_dma_seq_compl) & 0xFFF;
         data_dma_seq_compl += seqn_inc;
 
-        /* Mirror to remote ME TODO! */
-
+        /* Mirror to remote ME */
+        tx_data_reflect_xwrite = data_dma_seq_compl;
+        reflect_data(TX_DATA_DMA_ME,
+                     __xfer_reg_number(&tx_data_reflect_xread,
+                                       TX_DATA_DMA_ME),
+                     __signal_number(&tx_data_reflect_sig, TX_DATA_DMA_ME),
+                     &tx_data_reflect_xwrite,
+                     sizeof tx_data_reflect_xwrite);
         /* Reset autopush */
         event_cls_autopush_filter_reset(
             TX_DATA_EVENT_FILTER,
