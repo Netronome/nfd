@@ -97,7 +97,8 @@ main(void)
     } else {
         /* Worker main loop */
         for (;;) {
-            tmp_advance_tx_r(); /* TEMP */
+//            tmp_advance_tx_r(); /* TEMP */
+            issue_dma();
 
             /* Yield thread */
             ctx_swap();
