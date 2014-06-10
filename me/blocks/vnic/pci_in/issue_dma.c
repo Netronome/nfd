@@ -7,14 +7,29 @@
 
 #include <assert.h>
 #include <nfp.h>
+#include <types.h>
+
+#include <nfp/cls.h>                /* TEMP */
+#include <nfp/mem_ring.h>           /* TEMP */
+
+#include <nfp6000/nfp_cls.h>        /* TEMP */
 
 #include <vnic/pci_in/issue_dma.h>
 
 #include <vnic/pci_in_cfg.h>
+#include <vnic/pci_in/pci_in_internal.h>
 #include <vnic/shared/qc.h>
+#include <vnic/utils/cls_ring.h>
+#include <vnic/utils/nn_ring.h>
+
 
 /* XXX Further data will be required when checking for follow on packets */
 static __shared __lmem unsigned int ring_rids[MAX_TX_QUEUES];
+
+/* XXX use CLS ring API when available */
+__export __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
+    __cls struct nfd_pci_in_issued_desc tx_issued_ring[TX_ISSUED_RING_SZ];
+
 
 void
 issue_dma_setup_shared()
@@ -26,6 +41,8 @@ issue_dma_setup_shared()
 
     ctassert(__is_log2(MAX_VNICS));
     ctassert(__is_log2(MAX_VNIC_QUEUES));
+
+    cls_ring_setup(TX_ISSUED_RING_NUM, tx_issued_ring, sizeof tx_issued_ring);
 
     /*
      * Set requester IDs

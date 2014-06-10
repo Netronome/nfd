@@ -15,6 +15,7 @@
 #include <vnic/pci_in/distr_seqn.h>
 #include <vnic/pci_in/gather.h>
 #include <vnic/pci_in/gather_status.h>
+#include <vnic/pci_in/notify.h>
 #include <vnic/pci_in/service_qc.h>
 #include <vnic/shared/vnic_cfg.h>
 
@@ -53,6 +54,8 @@ main(void)
         init_distr_seqn();
         vnic_cfg_setup();
 
+        notify_setup_shared();
+
         /* TEMP: Mark initialisation complete */
         status |= (1<<STATUS_INIT_DONE_BIT);
         /* TEMP: Trigger user event (easy to look for) */
@@ -60,6 +63,8 @@ main(void)
     } else {
         dummy_init_gather();    /* Should this be strictly after
                                  * dummy_init_gather_shared? */
+
+        notify_setup();
     }
 
     /* Perform general initialisation */
@@ -125,8 +130,10 @@ main(void)
         for (;;) {
             gather();
 
+            notify();
+
             /* Yield thread */
-            ctx_swap();
+            /* ctx_swap(); */
         }
     }
 }

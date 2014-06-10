@@ -11,6 +11,20 @@
 
 #define MAX_TX_BATCH_SZ     4
 #define DESC_BATCH_Q_SZ     128
+#define TX_ISSUED_RING_SZ   128
+#define TX_ISSUED_RING_NUM  15      /* XXX use generic resource allocation */
+
+#ifndef NFD_WQ_SZ
+#define NFD_WQ_SZ           (16 * 1024)
+#endif
+
+#define NFD_NUM_WQS         8
+
+/* XXX use generic resource allocation */
+#define NFD_WQS_NUM_PCIE0   32
+#define NFD_WQS_NUM_PCIE1   40
+#define NFD_WQS_NUM_PCIE2   48
+#define NFD_WQS_NUM_PCIE3   56
 
 #define TXQ_EVENT_START     0
 #define TXQ_START           0
