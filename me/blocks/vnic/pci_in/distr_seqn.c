@@ -86,11 +86,11 @@ init_distr_seqn()
     __cls struct event_cls_filter *tx_gather_event_filter;
     __cls struct event_cls_filter *tx_data_event_filter;
 
-    /* Strict match type, loose match provider (TEMP), match all seqn */
-    unsigned int event_mask = NFP_EVENT_MATCH(0xFC, 0, 0xF);
+    /* Strict match type and provider, match all seqn */
+    unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0, 0xF);
     unsigned int event_match;
     unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
-        meid>>4, NFP_EVENT_PROVIDER_INDEX_CLS); /* TEMP _PCIE);*/
+        meid>>4, NFP_EVENT_PROVIDER_INDEX_PCIE);
 
     tx_gather_reflect_xwrite = 0;
     tx_data_reflect_xwrite = 0;

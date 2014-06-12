@@ -20,6 +20,8 @@
 
 #define NFD_NUM_WQS         8
 
+#define TX_BUF_STORE_SZ     64
+
 /* XXX use generic resource allocation */
 #define NFD_WQS_NUM_PCIE0   32
 #define NFD_WQS_NUM_PCIE1   40
@@ -42,9 +44,13 @@
 /* DMA defines */
 #define TX_GATHER_MAX_IN_FLIGHT 16
 #define TX_DATA_MAX_IN_FLIGHT   32
+#define TX_GATHER_DMA_QUEUE     NFP_PCIE_DMA_FROMPCI_HI
+#define TX_DATA_DMA_QUEUE       NFP_PCIE_DMA_FROMPCI_LO
+
 
 #define TX_GATHER_EVENT_TYPE    5
 #define TX_DATA_EVENT_TYPE      6
+#define TX_DATA_IGN_EVENT_TYPE  7
 /* #define RX_FL_FETCH_EVENT_TYPE  13 */
 /* #define RX_DATA_EVENT_TYPE      14 */
 

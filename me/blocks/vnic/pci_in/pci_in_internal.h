@@ -18,6 +18,18 @@ struct tx_queue_info {
     unsigned int dummy[2];
 };
 
+
+struct tx_dma_state {
+    unsigned int sp0:24;
+    unsigned int rid:8;
+    unsigned int cont:1;
+    unsigned int sp1:2;
+    unsigned int curr_buf:29;
+    unsigned int offset;
+    unsigned int sp2;
+};
+
+
 struct batch_desc {
     union {
         struct {

@@ -21,6 +21,7 @@
  * Temporary header includes
  */
 #include <nfp/cls.h>            /* TEMP */
+#include <nfp/mem_ring.h>       /* TEMP */
 #include <nfp6000/nfp_me.h>     /* TEMP */
 #include <nfp6000/nfp_cls.h>    /* TEMP */
 
@@ -45,6 +46,9 @@ __export __shared __cls __align(DESC_RING_SZ) struct nfd_pci_in_tx_desc
 
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
+__shared __gpr mem_ring_addr_t gather_dmas_addr; /* TEMP */
+MEM_JOURNAL_DECLARE(gather_dmas, 1024); /* TEMP */
+
 
 void
 dummy_init_gather_shared()
@@ -61,6 +65,8 @@ dummy_init_gather_shared()
      */
     desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;
 
+    gather_dmas_addr = MEM_JOURNAL_CONFIGURE(gather_dmas, 1); /* TEMP */
+
     /*
      * Initialise DMA sequence tracking
      */
@@ -70,7 +76,7 @@ dummy_init_gather_shared()
      * Set up TX_GATHER_CFG_REG DMA Config Register
      */
     cfg.__raw = 0;
-    cfg.signal_only = 0;
+    cfg.signal_only = 1; /* TEMP use signal_only for seqn num generation */
     cfg.end_pad     = 0;
     cfg.start_pad   = 0;
     /* Ordering settings? */
@@ -79,22 +85,21 @@ dummy_init_gather_shared()
     pcie_dma_cfg_set_one(PCIE_ISL, TX_GATHER_CFG_REG, cfg);
 }
 
-static __intrinsic void dummy_dma(unsigned int dma_mode, __xwrite void *descr,
-                                  unsigned int cpp_hi, unsigned int cpp_lo)
+static __intrinsic void dummy_dma(unsigned int dma_mode, __xwrite void *descr)
 {
-    SIGNAL write_sig;
-    SIGNAL event_sig;
-    unsigned int event_swap;
-    __xwrite unsigned int evdata;
-    unsigned int evaddr = NFP_CLS_AUTOPUSH_USER_EVENT;
+    SIGNAL_PAIR journal_sig;
+    SIGNAL dma_sig;
 
-    event_swap = ((dma_mode >> 12) & 0xf) | ((dma_mode << 4) & 0xfff0);
-    evdata = event_swap;
+    __mem_ring_journal(1, gather_dmas_addr, descr,
+                       sizeof(struct nfp_pcie_dma_cmd),
+                       sizeof(struct nfp_pcie_dma_cmd),
+                       sig_done, &journal_sig);
 
-    __asm cls[write, *descr, cpp_hi, <<8, cpp_lo, 4], sig_done[write_sig];
-    __asm cls[write, evdata, evaddr, 0, 1], sig_done[event_sig];
+    /* Fake a DMA ... using a DMA (signal only) */
+    __pcie_dma_enq(PCIE_ISL, descr, TX_GATHER_DMA_QUEUE, sig_done, &dma_sig);
 
-    wait_for_all(&write_sig, &event_sig); /* Wait on both writes at once */
+    /* Wait on both writes at once */
+    wait_for_all_single(&journal_sig.even, &dma_sig);
 }
 
 void
@@ -109,8 +114,6 @@ dummy_init_gather()
      */
     descr_tmp.rid_override = 1;
     descr_tmp.trans_class = 0;
-    descr_tmp.mode_sel = 2;
-    descr_tmp.dma_mode = (TX_GATHER_EVENT_TYPE << 12);
     descr_tmp.cpp_token = 0;    /* CLS doesn't offer write swap token */
     descr_tmp.dma_cfg_index = TX_GATHER_CFG_REG;
     descr_tmp.cpp_addr_hi = 0;
@@ -244,8 +247,8 @@ gather()
             descr_tmp.cpp_addr_lo =  desc_ring_base | desc_ring_off;
             descr_tmp.rid = queue_data[queue].requester_id;
             /* Can replace with ld_field instruction if 8bit seqn is enough */
-            descr_tmp.dma_mode = ((TX_GATHER_EVENT_TYPE << 12) |
-                                  (dma_seq_issued & ((1<<12) - 1)));
+            pcie_dma_set_event(&descr_tmp, TX_GATHER_EVENT_TYPE,
+                               dma_seq_issued);
             descr_tmp.length = (tx_r_update_tmp *
                                 sizeof(struct nfd_pci_in_tx_desc));
             descr = descr_tmp;
@@ -263,7 +266,7 @@ gather()
             /* TEMP:
              * write descriptor to the CLS buffer and
              * trigger user event */
-            dummy_dma(descr_tmp.dma_mode, &descr, 0, descr_tmp.cpp_addr_lo);
+            dummy_dma(descr_tmp.dma_mode, &descr);
 
         } else {
             /*
