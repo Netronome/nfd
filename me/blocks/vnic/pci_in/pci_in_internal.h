@@ -48,9 +48,9 @@ struct batch_desc {
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-+-----------+-------------------------+-----+---------------+
- *    0  |E|S|   q_num   |           sp1           |dst_q|  buf_addr_hi  |
+ *    0  |E|S|   q_num   |           sp1           |dst_q|   num_batch   |
  *       +-+-+-----------+-------------------------+-----+---------------+
- *    1  |                          buf_addr_lo                          |
+ *    1  |                           buf_addr                            |
  *       +-+-------------+-------+-------+-------------------------------+
  *    2  |0|  offset     |  sp2  | flags |            data_len           |
  *       +-+-------------+-------+-------+-------------------------------+
@@ -68,8 +68,8 @@ struct nfd_pci_in_issued_desc {
             unsigned int q_num:6;
             unsigned int sp1:13;
             unsigned int dst_q:3;
-            unsigned int buf_addr_hi:8;
-            unsigned int buf_addr_lo:32;
+            unsigned int num_batch:8;
+            unsigned int buf_addr:32;
             unsigned int valid:1;
             unsigned int offset:7;
             unsigned int sp2:4;

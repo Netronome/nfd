@@ -178,7 +178,7 @@ do {                                                                    \
         descr_tmp.cpp_addr_hi = buf_store[0]>>21;                       \
         descr_tmp.cpp_addr_lo = buf_store[0]<<11;                       \
                                                                         \
-        issued_tmp.buf_addr_lo = buf_store[0];                          \
+        issued_tmp.buf_addr = buf_store[0];                             \
                                                                         \
     } else {                                                            \
         if (!queue_info[queue].cont) {                                  \
@@ -196,7 +196,7 @@ do {                                                                    \
         descr_tmp.cpp_addr_lo += queue_info[queue].offset;              \
         queue_info[queue].offset += tx_desc.pkt##_pkt##.dma_len;        \
                                                                         \
-        issued_tmp.buf_addr_lo = queue_info[queue].curr_buf;            \
+        issued_tmp.buf_addr = queue_info[queue].curr_buf;               \
                                                                         \
         if (tx_desc.pkt##_pkt##.eop) {                                  \
             /* Clear continuation data on EOP */                        \
@@ -215,10 +215,8 @@ do {                                                                    \
     /*     EOP is set */                                                \
     issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                           \
     issued_tmp.sp0 = 0;                                                 \
-    issued_tmp.q_num = queue;                                           \
     issued_tmp.sp1 = 0; /* XXX most efficient value to set? */          \
     issued_tmp.dst_q = tx_desc.pkt##_pkt##.dst_q;                       \
-    issued_tmp.buf_addr_hi = 0; /* TEMP pack short addr? */             \
                                                                         \
     batch_out.pkt##_pkt## = issued_tmp;                                 \
     batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];      \
@@ -308,6 +306,9 @@ issue_dma()
         if (data_dma_seq_issued < (TX_DATA_MAX_IN_FLIGHT + data_dma_seq_compl)) {
             queue = batch.queue;
             data_dma_seq_issued++;
+
+            issued_tmp.q_num = queue;
+            issued_tmp.num_batch = batch.num;   /* Only needed in pkt0 */
 
             /* Maybe add "full" bit */
             if (batch.num == 4)

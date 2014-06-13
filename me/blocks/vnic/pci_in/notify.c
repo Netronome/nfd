@@ -87,14 +87,12 @@ do {                                                                    \
         batch_tmp.pkt##_pkt##.intf = PCIE_ISL;                          \
         batch_tmp.pkt##_pkt##.q_num = batch_in.pkt##_pkt##.q_num;       \
         batch_tmp.pkt##_pkt##.sp1 = 0;                                  \
-        batch_tmp.pkt##_pkt##.buf_addr_hi = batch_in.pkt##_pkt##.buf_addr_hi; \
         batch_out = batch_tmp;                                          \
                                                                         \
         batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1]; \
         batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2]; \
         batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3]; \
                                                                         \
-        n_batch++;                                                      \
         __mem_workq_add_work(NFD_WQ_NUM(PCIE_ISL, dst_q), wq_raddr,     \
                              &batch_out.pkt##_pkt, out_msg_sz, out_msg_sz, \
                              sig_done, &wq_sig##_pkt);                  \
@@ -109,7 +107,7 @@ void
 notify()
 {
 
-    unsigned int n_batch = 0;
+    unsigned int n_batch;
     unsigned int q_batch;
     unsigned int qc_queue;
 
@@ -143,6 +141,7 @@ notify()
         /* XXX is an __implicit_read required for QC add to pointer? */
 
         q_batch = batch_in.pkt0.q_num; /* Batches have a least one packet */
+        n_batch = batch_in.pkt0.num_batch;
 
         _NOTIFY_PROC(0);
         _NOTIFY_PROC(1);

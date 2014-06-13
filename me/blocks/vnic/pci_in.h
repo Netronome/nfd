@@ -51,10 +51,10 @@ struct nfd_pci_in_tx_desc {
  * PCI.in Packet descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
- * Word  +----+------------+-----------------------------+---------------+
- *    0  |intf|   q_num    |            sp1              |  buf_addr_hi  |
- *       +----+------------+-----------------------------+---------------+
- *    1  |                          buf_addr_lo                          |
+ * Word  +----+------------+---------------------------------------------+
+ *    0  |intf|   q_num    |                     sp1                     |
+ *       +----+------------+---------------------------------------------+
+ *    1  |                           buf_addr                            |
  *       +-+-------------+-------+-------+-------------------------------+
  *    2  |0|  offset     |  sp2  | flags |            data_len           |
  *       +-+-------------+-------+-------+-------------------------------+
@@ -69,9 +69,8 @@ struct nfd_pci_in_pkt_desc {
         struct {
             unsigned int intf:2;
             unsigned int q_num:6;
-            unsigned int sp1:16;
-            unsigned int buf_addr_hi:8;
-            unsigned int buf_addr_lo:32;
+            unsigned int sp1:24;
+            unsigned int buf_addr:32;
             unsigned int valid:1;
             unsigned int offset:7;
             unsigned int sp2:4;
