@@ -12,6 +12,7 @@
 #define MAX_TX_BATCH_SZ     4
 #define DESC_BATCH_Q_SZ     128
 #define TX_ISSUED_RING_SZ   128
+#define TX_ISSUED_RING_RES  32
 #define TX_ISSUED_RING_NUM  15      /* XXX use generic resource allocation */
 
 #ifndef NFD_WQ_SZ

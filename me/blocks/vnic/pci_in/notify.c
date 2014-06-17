@@ -25,7 +25,7 @@
 
 /* XXX assume this runs on PCI.IN ME0 */
 
-static __shared __gpr unsigned int data_dma_seq_served = 0;
+extern __shared __gpr unsigned int data_dma_seq_served;
 extern __shared __gpr unsigned int data_dma_seq_compl;
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;

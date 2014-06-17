@@ -27,8 +27,9 @@ static volatile __xread unsigned int tx_data_event_xfer;
 static volatile SIGNAL tx_gather_event_sig;
 static volatile SIGNAL tx_data_event_sig;
 
-static __xwrite unsigned int tx_gather_reflect_xwrite;
-static __xwrite unsigned int tx_data_reflect_xwrite;
+static __xwrite unsigned int tx_gather_compl_reflect_xwrite = 0;
+static __xwrite unsigned int tx_data_compl_reflect_xwrite = 0;
+static __xwrite unsigned int tx_data_served_reflect_xwrite = 0;
 
 /*
  * Sequence numbers visible to other code on this ME
@@ -36,11 +37,15 @@ static __xwrite unsigned int tx_data_reflect_xwrite;
  */
 __shared __gpr unsigned int gather_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
+__shared __gpr unsigned int data_dma_seq_served = 0;
+static __gpr unsigned int data_dma_seq_sent = 0;
 
-__remote volatile __xread unsigned int tx_gather_reflect_xread;
-__remote volatile __xread unsigned int tx_data_reflect_xread;
-__remote volatile SIGNAL tx_gather_reflect_sig;
-__remote volatile SIGNAL tx_data_reflect_sig;
+__remote volatile __xread unsigned int tx_gather_compl_reflect_xread;
+__remote volatile __xread unsigned int tx_data_compl_reflect_xread;
+__remote volatile __xread unsigned int tx_data_served_reflect_xread;
+__remote volatile SIGNAL tx_gather_compl_reflect_sig;
+__remote volatile SIGNAL tx_data_compl_reflect_sig;
+__remote volatile SIGNAL tx_data_served_reflect_sig;
 
 
 /* XXX Move to some sort of CT reflect library */
@@ -91,9 +96,6 @@ init_distr_seqn()
     unsigned int event_match;
     unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
         meid>>4, NFP_EVENT_PROVIDER_INDEX_PCIE);
-
-    tx_gather_reflect_xwrite = 0;
-    tx_data_reflect_xwrite = 0;
 
     /*
      * Set filter status.
@@ -148,7 +150,7 @@ distr_seqn()
 
     /* Gather */
     if (signal_test(&tx_gather_event_sig)) {
-        __implicit_read(&tx_gather_reflect_xwrite);
+        __implicit_read(&tx_gather_compl_reflect_xwrite);
 
         /* Compute increase and update gather_dma_seq_compl */
         event.__raw = tx_gather_event_xfer;
@@ -156,13 +158,14 @@ distr_seqn()
         gather_dma_seq_compl += seqn_inc;
 
         /* Mirror to remote ME */
-        tx_gather_reflect_xwrite = gather_dma_seq_compl;
+        tx_gather_compl_reflect_xwrite = gather_dma_seq_compl;
         reflect_data(TX_DATA_DMA_ME,
-                     __xfer_reg_number(&tx_gather_reflect_xread,
+                     __xfer_reg_number(&tx_gather_compl_reflect_xread,
                                        TX_DATA_DMA_ME),
-                     __signal_number(&tx_gather_reflect_sig, TX_DATA_DMA_ME),
-                     &tx_gather_reflect_xwrite,
-                     sizeof tx_gather_reflect_xwrite);
+                     __signal_number(&tx_gather_compl_reflect_sig,
+                                     TX_DATA_DMA_ME),
+                     &tx_gather_compl_reflect_xwrite,
+                     sizeof tx_gather_compl_reflect_xwrite);
 
         /* Reset autopush */
         event_cls_autopush_filter_reset(
@@ -173,7 +176,7 @@ distr_seqn()
 
     /* Data */
     if (signal_test(&tx_data_event_sig)) {
-        __implicit_read(&tx_data_reflect_xwrite);
+        __implicit_read(&tx_data_compl_reflect_xwrite);
 
         /* Compute increase and update gather_dma_seq_compl */
         event.__raw = tx_data_event_xfer;
@@ -181,18 +184,35 @@ distr_seqn()
         data_dma_seq_compl += seqn_inc;
 
         /* Mirror to remote ME */
-        tx_data_reflect_xwrite = data_dma_seq_compl;
+        tx_data_compl_reflect_xwrite = data_dma_seq_compl;
         reflect_data(TX_DATA_DMA_ME,
-                     __xfer_reg_number(&tx_data_reflect_xread,
+                     __xfer_reg_number(&tx_data_compl_reflect_xread,
                                        TX_DATA_DMA_ME),
-                     __signal_number(&tx_data_reflect_sig, TX_DATA_DMA_ME),
-                     &tx_data_reflect_xwrite,
-                     sizeof tx_data_reflect_xwrite);
+                     __signal_number(&tx_data_compl_reflect_sig,
+                                     TX_DATA_DMA_ME),
+                     &tx_data_compl_reflect_xwrite,
+                     sizeof tx_data_compl_reflect_xwrite);
         /* Reset autopush */
         event_cls_autopush_filter_reset(
             TX_DATA_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             TX_DATA_EVENT_FILTER);
+    }
+
+    /* XXX possibly throttle these reflects further */
+    if (data_dma_seq_served != data_dma_seq_sent) {
+        __implicit_read(&tx_data_served_reflect_xwrite);
+
+        data_dma_seq_sent = data_dma_seq_served;
+
+        tx_data_served_reflect_xwrite = data_dma_seq_sent;
+        reflect_data(TX_DATA_DMA_ME,
+                     __xfer_reg_number(&tx_data_served_reflect_xread,
+                                       TX_DATA_DMA_ME),
+                     __signal_number(&tx_data_served_reflect_sig,
+                                     TX_DATA_DMA_ME),
+                     &tx_data_served_reflect_xwrite,
+                     sizeof tx_data_served_reflect_xwrite);
     }
 }
 

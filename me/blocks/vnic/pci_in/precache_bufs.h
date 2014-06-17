@@ -13,6 +13,6 @@ extern void precache_bufs();
 
 __intrinsic unsigned int precache_bufs_use();
 
-unsigned int precache_bufs_avail();
+extern __inline void precache_bufs_compute_seq_safe();
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_PRECACHE_BUFS_H_ */

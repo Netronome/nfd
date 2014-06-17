@@ -69,8 +69,8 @@ static __shared __lmem struct tx_dma_state queue_info[MAX_TX_QUEUES];
 extern __shared __gpr unsigned int gather_dma_seq_compl;
 __shared __gpr unsigned int gather_dma_seq_serv = 0;
 
-extern __shared __gpr unsigned int data_dma_seq_compl;
 __shared __gpr unsigned int data_dma_seq_issued = 0;
+extern __shared __gpr unsigned int data_dma_seq_safe;
 
 /* DMA descriptor template */
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
@@ -82,6 +82,7 @@ static SIGNAL_MASK wait_msk;
 /* TEMP */
 __shared __gpr mem_ring_addr_t data_dmas_addr; /* TEMP */
 MEM_JOURNAL_DECLARE(data_dmas, 1024); /* TEMP */
+
 
 void
 issue_dma_setup_shared()
@@ -296,7 +297,7 @@ issue_dma()
         __implicit_read(&msg_sig);
 
         /* XXX replace with blended test */
-        if (data_dma_seq_issued < (TX_DATA_MAX_IN_FLIGHT + data_dma_seq_compl)) {
+        if (data_dma_seq_issued != data_dma_seq_safe) {
             queue = batch.queue;
             data_dma_seq_issued++;
 
@@ -341,6 +342,8 @@ issue_dma()
                          &msg_sig);
         }
     } else {
+        precache_bufs_compute_seq_safe();
+
         ctx_swap();
     }
 }

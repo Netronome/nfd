@@ -35,6 +35,11 @@ static SIGNAL_PAIR precache_sig;
 static __xread unsigned int bufs_rd[TX_BUF_RECACHE_WM];
 static unsigned int blm_queue_addr;
 
+extern __shared __gpr unsigned int data_dma_seq_compl;
+extern __shared __gpr unsigned int data_dma_seq_served;
+extern __shared __gpr unsigned int data_dma_seq_issued;
+__shared __gpr unsigned int data_dma_seq_safe = 0;
+
 
 /* XXX Why can't this be set to 1? */
 /* _init_csr("mecsr:CtxEnables.LMAddr3Global 1"); */
@@ -59,6 +64,17 @@ static unsigned int blm_queue_addr;
  * number of buffers on hand is periodically used to compute a "safe
  * sequence number" that covers availability of multiple resources.
  */
+
+__inline unsigned int
+_precache_bufs_avail()
+{
+    unsigned int ret;
+
+    ret = local_csr_read(NFP_MECSR_ACTIVE_LM_ADDR_3);
+    ret = ret - buf_store_start - sizeof(unsigned int);
+    ret = ret / sizeof(unsigned int);
+    return ret;
+}
 
 __inline unsigned int
 _precache_buf_bytes_used()
@@ -142,8 +158,9 @@ precache_bufs()
         if (!signal_test(&precache_sig.odd)) {
             /* Fetch succeeded */
             _precache_bufs_copy(TX_BUF_RECACHE_WM);
-
             __implicit_read(bufs_rd, sizeof bufs_rd);
+
+            precache_bufs_compute_seq_safe();
         }
     }
 
@@ -168,13 +185,29 @@ precache_bufs_use()
     return ret;
 }
 
-unsigned int
-precache_bufs_avail()
-{
-    unsigned int ret;
 
-    ret = local_csr_read(NFP_MECSR_ACTIVE_LM_ADDR_3);
-    ret = ret - buf_store_start - sizeof(unsigned int);
-    ret = ret / sizeof(unsigned int);
-    return ret;
+__inline void
+precache_bufs_compute_seq_safe()
+{
+    unsigned int min_bat, buf_bat, dma_bat, ring_bat;
+
+    buf_bat = _precache_bufs_avail() / MAX_TX_BATCH_SZ;
+    dma_bat = (TX_DATA_MAX_IN_FLIGHT / MAX_TX_BATCH_SZ -
+               data_dma_seq_issued + data_dma_seq_compl);
+    ring_bat = ((TX_ISSUED_RING_SZ - TX_ISSUED_RING_RES) / MAX_TX_BATCH_SZ -
+                data_dma_seq_issued + data_dma_seq_served);
+
+    /* Perform min(buf_bat, dma_bat, ring_bat) */
+    min_bat = buf_bat;
+
+    if (dma_bat < min_bat) {
+        min_bat = dma_bat;
+    }
+
+    if (ring_bat < min_bat) {
+        min_bat = ring_bat;
+    }
+
+    /* min_bat batches after data_dma_seq_issued are safe */
+    data_dma_seq_safe = data_dma_seq_issued + min_bat;
 }
