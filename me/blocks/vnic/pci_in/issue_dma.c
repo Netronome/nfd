@@ -21,6 +21,7 @@
 #include <vnic/pci_in.h>
 #include <vnic/pci_in_cfg.h>
 #include <vnic/pci_in/pci_in_internal.h>
+#include <vnic/pci_in/precache_bufs.h>
 #include <vnic/shared/qc.h>
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/pcie.h>
@@ -63,10 +64,6 @@ static __shared __gpr unsigned int desc_ring_base;
 
 /* Storage declarations */
 static __shared __lmem struct tx_dma_state queue_info[MAX_TX_QUEUES];
-
-/* XXX move declaration to caching thread and figure out updating */
-__shared __lmem unsigned int buf_store[TX_BUF_STORE_SZ];
-
 
 /* Sequence number declarations */
 extern __shared __gpr unsigned int gather_dma_seq_compl;
@@ -133,9 +130,6 @@ issue_dma_setup_shared()
     cfg.target_64   = 1;
     cfg.cpp_target  = 7;
     pcie_dma_cfg_set_one(PCIE_ISL, TX_DATA_CFG_REG, cfg);
-
-    /* XXX TEMP */
-    buf_store[0] = 0x195fde01; /* Magically becomes 0xcafef00d00 */
 }
 
 void
@@ -175,17 +169,16 @@ do {                                                                    \
         /* Fast path, use buf_store data */                             \
         __critical_path();                                              \
                                                                         \
-        descr_tmp.cpp_addr_hi = buf_store[0]>>21;                       \
-        descr_tmp.cpp_addr_lo = buf_store[0]<<11;                       \
-                                                                        \
-        issued_tmp.buf_addr = buf_store[0];                             \
+        issued_tmp.buf_addr = precache_bufs_use();                      \
+        descr_tmp.cpp_addr_hi = issued_tmp.buf_addr>>21;                \
+        descr_tmp.cpp_addr_lo = issued_tmp.buf_addr<<11;                \
                                                                         \
     } else {                                                            \
         if (!queue_info[queue].cont) {                                  \
             /* Initialise continuation data */                          \
                                                                         \
-            /* XXX fix buf_store access, and check efficiency */        \
-            queue_info[queue].curr_buf = buf_store[0];                  \
+            /* XXX check efficiency */                                  \
+            queue_info[queue].curr_buf = precache_bufs_use();           \
             queue_info[queue].cont = 1;                                 \
             queue_info[queue].offset = 0;                               \
         }                                                               \

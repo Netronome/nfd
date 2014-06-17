@@ -28,6 +28,11 @@
 #define NFD_WQS_NUM_PCIE2   48
 #define NFD_WQS_NUM_PCIE3   56
 
+/* XXX use BLM generic resource allocation */
+#define TX_BLM_POOL         75
+#define TX_BLM_RADDR        __LoadTimeConstant("__addr_emem0")
+#define TX_BUF_RECACHE_WM   16
+
 #define TXQ_EVENT_START     0
 #define TXQ_START           0
 #define TXQ_EVENT_DATA      (1<<4)

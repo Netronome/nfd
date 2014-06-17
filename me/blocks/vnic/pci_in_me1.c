@@ -13,17 +13,17 @@
 
 #include <vnic/pci_in/gather_seq_recv.h>
 #include <vnic/pci_in/issue_dma.h>
+#include <vnic/pci_in/precache_bufs.h>
 #include <vnic/shared/vnic_cfg.h>
-
 
 int
 main(void)
 {
     /* Perform per ME initialisation  */
     if (ctx() == 0) {
-        /* init_buffer_precache(); */
-
         init_gather_seq_recv();
+
+        precache_bufs_setup();
 
         issue_dma_setup_shared();
 
@@ -40,6 +40,8 @@ main(void)
         /* CTX0 main loop */
         for (;;) {
             gather_seq_recv();
+
+            precache_bufs();
 
             /* Yield thread */
             ctx_swap();
