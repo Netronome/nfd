@@ -15,7 +15,7 @@
 #include <vnic/shared/qc.h>
 
 /**
- * Queue independent state
+ * Gather state
  */
 extern __shared __gpr struct qc_bitmask active_bmsk;
 extern __shared __gpr struct qc_bitmask pending_bmsk;
@@ -28,11 +28,18 @@ extern __shared __gpr unsigned int gather_dma_seq_compl;
 extern __shared __lmem struct tx_queue_info queue_data[64];
 
 /**
+ * Notify state
+ */
+extern __shared __gpr unsigned int data_dma_seq_compl;
+extern __shared __gpr unsigned int data_dma_seq_served;
+
+/**
  * Xfers to display state
  */
 static __xread unsigned int status_queue_sel = 0;
-static __xwrite struct tx_queue_info status_queue_info;
-static __xwrite struct tx_gather_status status_queue_indep;
+static __xwrite struct tx_queue_info status_queue;
+static __xwrite struct tx_gather_status status_gather;
+static __xwrite struct tx_notify_status status_notify;
 
 
 
@@ -40,20 +47,25 @@ void
 init_gather_status()
 {
     __gpr struct tx_queue_info info_tmp;
-    __gpr struct tx_gather_status indep_temp;
+    __gpr struct tx_gather_status gather_tmp;
+    __gpr struct tx_notify_status notify_tmp;
+
+    /* Fix the transfer registers used */
+    __assign_relative_register(&status_gather, STATUS_GATHER_START);
+    __assign_relative_register(&status_queue, STATUS_QUEUE_START);
+    __assign_relative_register(&status_notify, STATUS_NOTIFY_START);
+    __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
 
     __implicit_write(&status_queue_sel);
 
-    /* Fix the transfer registers used */
-    __assign_relative_register(&status_queue_indep, STATUS_Q_INDEP_START);
-    __assign_relative_register(&status_queue_info, STATUS_Q_INFO_START);
-    __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
-
     reg_zero(&info_tmp, sizeof info_tmp);
-    status_queue_info = info_tmp;
+    status_queue = info_tmp;
 
-    reg_zero(&indep_temp, sizeof indep_temp);
-    status_queue_indep = indep_temp;
+    reg_zero(&gather_tmp, sizeof gather_tmp);
+    status_gather = gather_tmp;
+
+    reg_zero(&notify_tmp, sizeof notify_tmp);
+    status_notify = notify_tmp;
 }
 
 
@@ -62,8 +74,9 @@ gather_status()
 {
     unsigned int bmsk_queue;
 
-    __implicit_read(&status_queue_info, sizeof status_queue_info);
-    __implicit_read(&status_queue_indep, sizeof status_queue_indep);
+    __implicit_read(&status_gather, sizeof status_gather);
+    __implicit_read(&status_queue, sizeof status_queue);
+    __implicit_read(&status_notify, sizeof status_notify);
 
     /*
      * Convert the natural queue number in the request
@@ -75,17 +88,23 @@ gather_status()
     /*
      * Collect the independent data from various sources
      */
-    status_queue_indep.actv_bmsk_hi = active_bmsk.bmsk_hi;
-    status_queue_indep.actv_bmsk_lo = active_bmsk.bmsk_lo;
-    status_queue_indep.actv_bmsk_proc = active_bmsk.proc;
-    status_queue_indep.pend_bmsk_hi = pending_bmsk.bmsk_hi;
-    status_queue_indep.pend_bmsk_lo = pending_bmsk.bmsk_lo;
-    status_queue_indep.pend_bmsk_proc = pending_bmsk.proc;
-    status_queue_indep.dma_issued = dma_seq_issued;
-    status_queue_indep.dma_compl = gather_dma_seq_compl;
+    status_gather.actv_bmsk_hi = active_bmsk.bmsk_hi;
+    status_gather.actv_bmsk_lo = active_bmsk.bmsk_lo;
+    status_gather.actv_bmsk_proc = active_bmsk.proc;
+    status_gather.pend_bmsk_hi = pending_bmsk.bmsk_hi;
+    status_gather.pend_bmsk_lo = pending_bmsk.bmsk_lo;
+    status_gather.pend_bmsk_proc = pending_bmsk.proc;
+    status_gather.dma_issued = dma_seq_issued;
+    status_gather.dma_compl = gather_dma_seq_compl;
 
     /*
      * Copy the queue info from LM into the status struct
      */
-    status_queue_info = queue_data[bmsk_queue];
+    status_queue = queue_data[bmsk_queue];
+
+    /*
+     * Collect the notify state from various sources
+     */
+    status_notify.dma_compl = data_dma_seq_compl;
+    status_notify.dma_served = data_dma_seq_served;
 }
