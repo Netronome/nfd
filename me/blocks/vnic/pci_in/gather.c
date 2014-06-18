@@ -160,7 +160,7 @@ dummy_gather_vnic_setup(void *cfg_msg_in, unsigned int queue_size)
     }
 
     init_qc_queues(PCIE_ISL, &txq, TXQ_START + start_queue * 2, 2,
-                   MAX_VNIC_QUEUES, ctx_swap);
+                   MAX_VNIC_QUEUES);
 
     /* Indicate completion */
     cfg_msg->msg_valid = 0;

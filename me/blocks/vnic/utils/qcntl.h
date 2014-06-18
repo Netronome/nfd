@@ -46,15 +46,18 @@ enum qc_ptr_type {
  * @param pcie_isl      which PCIe island to address (0..3)
  * @param queue         which QC queue to address
  * @param ptr           which pointer to read
+ * @param value         read transfer register for output data
  * @param sync          type of synchronisation (sig_done or ctx_swap)
  * @param sig           signal to use
  *
  * The read pointer is contained in ConfigStatusLow, and the write pointer is
- * contained in ConfigStatusHigh.
+ * contained in ConfigStatusHigh.  To use the output, 'value' can be allocated
+ * to the '__raw' entry in the appropriate struct, or cast to the desired type.
  */
-__intrinsic unsigned int __qc_read(unsigned char pcie_isl, unsigned char queue,
-                                   enum qc_ptr_type ptr, sync_t sync,
-                                   SIGNAL *sig);
+__intrinsic void  __qc_read(unsigned char pcie_isl, unsigned char queue,
+                            enum qc_ptr_type ptr,
+                            __xread unsigned int *value,
+                            sync_t sync, SIGNAL *sig);
 
 /**
  * Write QC configuration and status, or pointer only, for one queue
@@ -79,19 +82,12 @@ __intrinsic void __qc_write(unsigned char pcie_isl, unsigned char queue,
  * @param queue         which QC queue to address
  * @param cfg           a struct containing configuration settings, ideally
  *                      all compile time constants
- * @param sync          type of synchronisation (sig_done or ctx_swap)
- * @param s1            signal used when writing ConfigStatusLow
- * @param s2            signal used when writing ConfigStatusHigh
  *
  * This method rewrites the queue configuration for a given PCIe island and
  * queue ConfigStatusLow and ConfigStatusHigh are written in parallel, using
- * separate signals for each write.  If the synchronisation is ctx_swap, one
- * ctx_arb is issued to wait on both signals.
+ * separate signals for each write.  The method swaps on these signals
+ * before returning.
  */
-__intrinsic void __qc_init_queue(unsigned char pcie_isl, unsigned char queue,
-                                 struct qc_queue_config *cfg, sync_t sync,
-                                 SIGNAL *s1, SIGNAL *s2);
-
 __intrinsic void qc_init_queue(unsigned char pcie_isl, unsigned char queue,
                                struct qc_queue_config *cfg);
 
@@ -101,6 +97,7 @@ __intrinsic void qc_init_queue(unsigned char pcie_isl, unsigned char queue,
  * @param queue         which QC queue to address
  * @param event_data    6 bits of data to include in events.
  * @param event_type    when to generate events for this queue
+ * @param xfer          transfer register to use for the ping
  * @param sync          type of synchronisation (sig_done or ctx_swap)
  * @param sig           signal to use
  *
@@ -115,6 +112,7 @@ __intrinsic void qc_init_queue(unsigned char pcie_isl, unsigned char queue,
 __intrinsic void __qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
                                  unsigned int event_data,
                                  enum pcie_qc_event event_type,
+                                 __xwrite unsigned int *xfer,
                                  sync_t sync, SIGNAL *sig);
 
 __intrinsic void qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
@@ -127,6 +125,7 @@ __intrinsic void qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
  * @param queue         which QC queue to address
  * @param ptr           specify read or write pointer (QC_RPTR or QC_WPTR)
  * @param value         the value to add to the pointer
+ * @param xfer          transfer register to use for the write
  * @param sync          type of synchronisation (sig_done or ctx_swap)
  * @param sig           signal to use
  *
@@ -136,6 +135,7 @@ __intrinsic void qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
  */
 __intrinsic void __qc_add_to_ptr(unsigned char pcie_isl, unsigned char queue,
                                  enum qc_ptr_type ptr,unsigned int value,
+                                 __xwrite unsigned int *xfer,
                                  sync_t sync, SIGNAL *sig);
 
 __intrinsic void qc_add_to_ptr(unsigned char pcie_isl, unsigned char queue,

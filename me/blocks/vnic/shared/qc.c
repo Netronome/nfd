@@ -87,13 +87,11 @@ clear_queue(unsigned int queue, __shared __gpr struct qc_bitmask *bmsk)
 __intrinsic void
 init_qc_queues(unsigned char pcie_isl, struct qc_queue_config *cfg,
                unsigned char start_queue, unsigned char stride,
-               unsigned char num_queues, sync_t sync)
+               unsigned char num_queues)
 {
-    SIGNAL s1, s2;
     __gpr unsigned char queue;
     unsigned char end_queue;
 
-    ctassert(__is_ct_const(sync));
     /* ctassert(__is_ct_const(start_queue)); */
     ctassert(__is_ct_const(stride));
     ctassert(__is_ct_const(num_queues));
@@ -102,13 +100,7 @@ init_qc_queues(unsigned char pcie_isl, struct qc_queue_config *cfg,
 
     /* Loop over queue range calling initialisation method */
     for (queue = start_queue; queue <= end_queue; queue += stride) {
-        __qc_init_queue(pcie_isl, queue, cfg, sync, &s1, &s2);
-
-        if (sync == sig_done) {
-            /* Busy wait on signals */
-            while (!signal_test(&s1));
-            while (!signal_test(&s2));
-        }
+        qc_init_queue(pcie_isl, queue, cfg);
     }
 }
 
@@ -215,6 +207,7 @@ check_queues(void *queue_info_struct,
     int     retry;
     unsigned int qc_queue;
     __gpr   unsigned int queue_base_addr;
+    __xread unsigned int wptr_raw;
     struct nfp_qc_sts_hi wptr;
     SIGNAL  qc_sig;
     __gpr unsigned int ptr_inc;
@@ -262,7 +255,8 @@ check_queues(void *queue_info_struct,
      * This is not necessary if wptr - sptr > n * MAX_BATCH_SIZE!
      */
     qc_queue = (map_bitmask_to_natural(queue) << 1) + c->base_queue_num;
-    wptr.__raw = __qc_read(c->pcie_isl, qc_queue, QC_WPTR, ctx_swap, &qc_sig);
+    __qc_read(c->pcie_isl, qc_queue, QC_WPTR, &wptr_raw, ctx_swap, &qc_sig);
+    wptr.__raw = wptr_raw;
 
     /*
      * Update queues[queue].wptr, stored as a unsigned int for efficient

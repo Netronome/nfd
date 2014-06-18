@@ -25,19 +25,6 @@
 
 /* XXX assume this runs on PCI.IN ME0 */
 
-extern __shared __gpr unsigned int data_dma_seq_served;
-extern __shared __gpr unsigned int data_dma_seq_compl;
-
-static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
-static SIGNAL msg_sig, qc_sig;
-static SIGNAL_MASK wait_msk;
-
-/* XXX use CLS ring API when available */
-__export __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
-    __cls struct nfd_pci_in_issued_desc tx_issued_ring[TX_ISSUED_RING_SZ];
-
-/* XXX declare dst_q counters in LM */
-
 struct _issued_pkt_batch {
     struct nfd_pci_in_issued_desc pkt0;
     struct nfd_pci_in_issued_desc pkt1;
@@ -51,6 +38,22 @@ struct _pkt_desc_batch {
     struct nfd_pci_in_pkt_desc pkt2;
     struct nfd_pci_in_pkt_desc pkt3;
 };
+
+extern __shared __gpr unsigned int data_dma_seq_served;
+extern __shared __gpr unsigned int data_dma_seq_compl;
+
+static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
+static SIGNAL msg_sig, qc_sig;
+static SIGNAL_MASK wait_msk;
+
+__xwrite struct _pkt_desc_batch batch_out;
+__xwrite unsigned int qc_xfer;
+
+/* XXX use CLS ring API when available */
+__export __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
+    __cls struct nfd_pci_in_issued_desc tx_issued_ring[TX_ISSUED_RING_SZ];
+
+/* XXX declare dst_q counters in LM */
 
 NFD_WQS_DECLARE(PCIE_ISL);
 static __shared mem_ring_addr_t wq_raddr;
@@ -83,12 +86,7 @@ do {                                                                    \
         __critical_path();                                              \
         dst_q = NFD_WQ_NUM(PCIE_ISL, batch_in.pkt##_pkt##.dst_q);       \
                                                                         \
-        /* XXX check copying evaluates to one instructing  */           \
-        batch_tmp.pkt##_pkt##.intf = PCIE_ISL;                          \
-        batch_tmp.pkt##_pkt##.q_num = batch_in.pkt##_pkt##.q_num;       \
-        batch_tmp.pkt##_pkt##.sp1 = 0;                                  \
-        batch_out = batch_tmp;                                          \
-                                                                        \
+        batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];         \
         batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1]; \
         batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2]; \
         batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3]; \
@@ -116,7 +114,8 @@ notify()
 
     __xread struct _issued_pkt_batch batch_in;
     struct _pkt_desc_batch batch_tmp;
-    __xwrite struct _pkt_desc_batch batch_out;
+    struct nfd_pci_in_pkt_desc pkt_desc_tmp;
+
 
     /* Is there a batch to process
      * XXX assume that issue_dma only inc's dma seq for final dma in batch */
@@ -137,11 +136,20 @@ notify()
 
         wait_msk = __signals(&wq_sig0, &wq_sig1, &wq_sig2, &wq_sig3,
                              &qc_sig, &msg_sig);
-        __implicit_read(&batch_out, sizeof batch_out);
-        /* XXX is an __implicit_read required for QC add to pointer? */
+        __implicit_read(&wq_sig0);
+        __implicit_read(&wq_sig1);
+        __implicit_read(&wq_sig2);
+        __implicit_read(&wq_sig3);
+        __implicit_read(&qc_sig);
+        __implicit_read(&msg_sig);
 
         q_batch = batch_in.pkt0.q_num; /* Batches have a least one packet */
         n_batch = batch_in.pkt0.num_batch;
+
+        /* Interface and queue info are the same for all packets in batch */
+        pkt_desc_tmp.intf = PCIE_ISL;
+        pkt_desc_tmp.q_num = q_batch;
+        pkt_desc_tmp.sp1 = 0;
 
         _NOTIFY_PROC(0);
         _NOTIFY_PROC(1);
@@ -151,7 +159,7 @@ notify()
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
         qc_queue = map_bitmask_to_natural(q_batch) << 1;
-        __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
+        __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
                         sig_done, &qc_sig);
     } else {
         ctx_swap();

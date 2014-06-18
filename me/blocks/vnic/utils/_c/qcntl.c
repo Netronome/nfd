@@ -13,14 +13,13 @@
 #include <vnic/utils/qcntl.h>
 
 /* XXX This method could possibly be generalised and moved to libnfp.h */
-__intrinsic unsigned int
+__intrinsic void
 __qc_read(unsigned char pcie_isl, unsigned char queue, enum qc_ptr_type ptr,
-          sync_t sync, SIGNAL *sig)
+          __xread unsigned int *value, sync_t sync, SIGNAL *sig)
 {
     __gpr unsigned int addr_hi = pcie_isl << 30;
     unsigned int queue_base_addr;
     unsigned int offset;
-    __xread unsigned int value;
 
     ctassert(__is_ct_const(sync));
     ctassert(sync == sig_done || sync == ctx_swap);
@@ -34,24 +33,20 @@ __qc_read(unsigned char pcie_isl, unsigned char queue, enum qc_ptr_type ptr,
 
     queue_base_addr = NFP_PCIE_QUEUE(queue) | offset;
 
-    __intrinsic_begin();
     if (sync == sig_done) {
-        __asm pcie[read_pci, value, addr_hi, <<8, queue_base_addr, 1],  \
+        __asm pcie[read_pci, *value, addr_hi, <<8, queue_base_addr, 1], \
             sig_done[*sig];
     } else {
-        __asm pcie[read_pci, value, addr_hi, <<8, queue_base_addr, 1],  \
+        __asm pcie[read_pci, *value, addr_hi, <<8, queue_base_addr, 1], \
             ctx_swap[*sig];
     }
-    __intrinsic_end();
-
-    return value;
 }
 
 /* XXX This method could possibly be generalised and moved to libnfp.h */
 __intrinsic void
 __qc_write(unsigned char pcie_isl, unsigned char queue,
-           __xwrite unsigned int *value, unsigned int offset, sync_t sync,
-           SIGNAL *sig)
+           __xwrite unsigned int *value, unsigned int offset,
+           sync_t sync, SIGNAL *sig)
 {
     __gpr unsigned int addr_hi = pcie_isl << 30;
     unsigned int queue_base_addr;
@@ -61,7 +56,6 @@ __qc_write(unsigned char pcie_isl, unsigned char queue,
 
     queue_base_addr = NFP_PCIE_QUEUE(queue) | offset;
 
-    __intrinsic_begin();
     if (sync == sig_done) {
         __asm pcie[write_pci, *value, addr_hi, <<8, queue_base_addr, 1], \
             sig_done[*sig];
@@ -69,23 +63,19 @@ __qc_write(unsigned char pcie_isl, unsigned char queue,
         __asm pcie[write_pci, *value, addr_hi, <<8, queue_base_addr, 1], \
             ctx_swap[*sig];
     }
-    __intrinsic_end();
 }
 
 
 __intrinsic void
-__qc_init_queue(unsigned char pcie_isl, unsigned char queue,
-                struct qc_queue_config *cfg, sync_t sync, SIGNAL *s1,
-                SIGNAL *s2)
+qc_init_queue(unsigned char pcie_isl, unsigned char queue,
+              struct qc_queue_config *cfg)
 {
     __gpr    unsigned int queue_base_addr;
     __gpr    struct nfp_qc_sts_hi config_hi_tmp;
     __xwrite struct nfp_qc_sts_hi config_hi;
     __gpr    struct nfp_qc_sts_lo config_lo_tmp;
     __xwrite struct nfp_qc_sts_lo config_lo;
-
-    ctassert(__is_ct_const(sync));
-    ctassert(sync == sig_done || sync == ctx_swap);
+    SIGNAL s1, s2;
 
     /* Initialise variables */
     config_hi_tmp.__raw = 0;
@@ -107,31 +97,19 @@ __qc_init_queue(unsigned char pcie_isl, unsigned char queue,
 
     /* Write settings to the queue
      * config_lo must be written before config_hi if ECC is enabled. */
-    __qc_write(pcie_isl, queue, &config_lo.__raw, NFP_QC_STS_LO, sig_done, s1);
-    __qc_write(pcie_isl, queue, &config_hi.__raw, NFP_QC_STS_HI, sig_done, s2);
+    __qc_write(pcie_isl, queue, &config_lo.__raw, NFP_QC_STS_LO, sig_done, &s1);
+    __qc_write(pcie_isl, queue, &config_hi.__raw, NFP_QC_STS_HI, sig_done, &s2);
 
-    if (sync == ctx_swap) {
-        __wait_for_all(s1, s2);
-    }
-}
-
-__intrinsic void
-qc_init_queue(unsigned char pcie_isl, unsigned char queue,
-              struct qc_queue_config *cfg)
-{
-    SIGNAL s1, s2;
-
-    __qc_init_queue(pcie_isl, queue, cfg, ctx_swap, &s1, &s2);
+    __wait_for_all(&s1, &s2);
 }
 
 
 __intrinsic void
 __qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
                 unsigned int event_data, enum pcie_qc_event event_type,
-                sync_t sync, SIGNAL *sig)
+                __xwrite unsigned int *xfer, sync_t sync, SIGNAL *sig)
 {
     __gpr    struct nfp_qc_sts_lo config_lo_tmp;
-    __xwrite struct nfp_qc_sts_lo config_lo;
 
     ctassert(__is_ct_const(sync));
     ctassert(sync == sig_done || sync == ctx_swap);
@@ -140,28 +118,29 @@ __qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
     config_lo_tmp.__raw = 0;
     config_lo_tmp.event_data = event_data;
     config_lo_tmp.event_type = event_type;
-    config_lo = config_lo_tmp;
+    *xfer = config_lo_tmp.__raw;
 
     /* Write data to NFP_QC_STS_LO to initiate ping */
-    __qc_write(pcie_isl, queue, &config_lo.__raw, NFP_QC_STS_LO, sync, sig);
+    __qc_write(pcie_isl, queue, xfer, NFP_QC_STS_LO, sync, sig);
 }
 
 __intrinsic void
 qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
               unsigned int event_data, enum pcie_qc_event event_type)
 {
+    __xwrite unsigned int xfer;
     SIGNAL sig;
 
-    __qc_ping_queue(pcie_isl, queue, event_data, event_type, ctx_swap, &sig);
+    __qc_ping_queue(pcie_isl, queue, event_data, event_type, &xfer,
+                    ctx_swap, &sig);
 }
 
 
 __intrinsic void
 __qc_add_to_ptr(unsigned char pcie_isl, unsigned char queue,
-                enum qc_ptr_type ptr, unsigned int value, sync_t sync,
-                SIGNAL *sig)
+                enum qc_ptr_type ptr, unsigned int value,
+                __xwrite unsigned int *xfer, sync_t sync, SIGNAL *sig)
 {
-    __xwrite unsigned int data;
     struct nfp_qc_add_rptr val_str;
     unsigned int ptr_offset;
 
@@ -178,18 +157,19 @@ __qc_add_to_ptr(unsigned char pcie_isl, unsigned char queue,
      * the count field in the same bits */
     val_str.__raw = 0;
     val_str.val = value;
-    data = val_str.__raw;
+    *xfer = val_str.__raw;
 
     /* Write data to specified address to initiate add */
-    __qc_write(pcie_isl, queue, &data, ptr_offset, sync, sig);
+    __qc_write(pcie_isl, queue, xfer, ptr_offset, sync, sig);
 }
 
 __intrinsic void
 qc_add_to_ptr(unsigned char pcie_isl, unsigned char queue,
               enum qc_ptr_type ptr, unsigned int value)
 {
+    __xwrite unsigned int xfer;
     SIGNAL sig;
 
-    __qc_add_to_ptr(pcie_isl, queue, ptr, value, ctx_swap, &sig);
+    __qc_add_to_ptr(pcie_isl, queue, ptr, value, &xfer, ctx_swap, &sig);
 }
 

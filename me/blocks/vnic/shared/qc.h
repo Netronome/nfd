@@ -125,18 +125,14 @@ __intrinsic void clear_queue(unsigned int queue,
  * @param start_queue   First queue to configure
  * @param stride        Value to increment queue number by each step
  * @param num_queues    Number of queues to configure
- * @param sync          Type of synchronisation.
  *
- * If 'sync' is set to  ctx_swap, yield thread between queues; if sig_done,
- * busy wait between queues.
  * Configuring 64 queues takes approximately 4000 cycles.
  */
 __intrinsic void init_qc_queues(unsigned char pcie_isl,
                                 struct qc_queue_config *cfg,
                                 unsigned char start_queue,
                                 unsigned char stride,
-                                unsigned char num_queues,
-                                sync_t sync);
+                                unsigned char num_queues);
 
 /**
  * Configure a set of CLS event filters to monitor queue controller queues

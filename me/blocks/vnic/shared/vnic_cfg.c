@@ -219,7 +219,7 @@ _vnic_cfg_queue_setup()
     vnic_cfg_queue.ptr        = 0;
 
     init_qc_queues(PCIE_ISL, &vnic_cfg_queue, VNIC_CFG_QUEUE,
-                   2 * MAX_VNIC_QUEUES, MAX_VNICS, ctx_swap);
+                   2 * MAX_VNIC_QUEUES, MAX_VNICS);
 
     /* Setup the Event filter and autopush */
     __implicit_write(&cfg_ap_sig);
