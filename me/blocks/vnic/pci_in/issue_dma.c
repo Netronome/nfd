@@ -75,8 +75,13 @@ extern __shared __gpr unsigned int data_dma_seq_safe;
 /* DMA descriptor template */
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
+/* Output transfer registers */
+static __xwrite struct _dma_desc_batch dma_out;
+static __xwrite struct _issued_pkt_batch batch_out;
+
 /* Signalling */
-static SIGNAL tx_desc_sig;
+static SIGNAL tx_desc_sig, msg_sig;
+static SIGNAL dma_sig0, dma_sig1, dma_sig2, dma_sig3;
 static SIGNAL_MASK wait_msk;
 
 /* TEMP */
@@ -242,9 +247,6 @@ void
 issue_dma()
 {
     static __xread struct _tx_desc_batch tx_desc;
-    static __xwrite struct _dma_desc_batch dma_out;
-    static __xwrite struct _issued_pkt_batch batch_out;
-    static SIGNAL msg_sig, dma_sig0, dma_sig1, dma_sig2, dma_sig3;
 
     static SIGNAL_PAIR jsig0, jsig1, jsig2, jsig3; /* TEMP */
 
@@ -289,14 +291,13 @@ issue_dma()
          * (__signals takes odd and even...) */
         wait_msk = __signals(&dma_sig0, &dma_sig1, &dma_sig2, &dma_sig3,
                              &tx_desc_sig, &msg_sig);
-        __implicit_read(&batch_out, sizeof batch_out);
         __implicit_read(&dma_sig0);
         __implicit_read(&dma_sig1);
         __implicit_read(&dma_sig2);
         __implicit_read(&dma_sig3);
         __implicit_read(&msg_sig);
+        __implicit_read(&tx_desc_sig);
 
-        /* XXX replace with blended test */
         if (data_dma_seq_issued != data_dma_seq_safe) {
             queue = batch.queue;
             data_dma_seq_issued++;
