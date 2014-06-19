@@ -11,6 +11,7 @@
 
 #include <vnic/pci_in/gather_status.h>
 
+#include <vnic/pci_in_cfg.h>
 #include <vnic/pci_in/pci_in_internal.h>
 #include <vnic/shared/qc.h>
 
@@ -25,7 +26,7 @@ extern __shared __gpr unsigned int gather_dma_seq_compl;
 /**
  * Per queue state to show
  */
-extern __shared __lmem struct tx_queue_info queue_data[64];
+extern __shared __lmem struct tx_queue_info queue_data[MAX_TX_QUEUES];
 
 /**
  * Notify state

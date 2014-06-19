@@ -13,6 +13,7 @@
 
 #include <vnic/pci_in/gather_seq_recv.h>
 #include <vnic/pci_in/issue_dma.h>
+#include <vnic/pci_in/issue_dma_status.h>
 #include <vnic/pci_in/precache_bufs.h>
 #include <vnic/shared/vnic_cfg.h>
 
@@ -24,6 +25,8 @@ main(void)
         init_gather_seq_recv();
 
         precache_bufs_setup();
+
+        issue_dma_status_setup();
 
         issue_dma_setup_shared();
 
@@ -42,6 +45,8 @@ main(void)
             gather_seq_recv();
 
             precache_bufs();
+
+            issue_dma_status();
 
             /* Yield thread */
             ctx_swap();

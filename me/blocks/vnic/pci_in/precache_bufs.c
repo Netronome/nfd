@@ -65,16 +65,6 @@ __shared __gpr unsigned int data_dma_seq_safe = 0;
  * sequence number" that covers availability of multiple resources.
  */
 
-__inline unsigned int
-_precache_bufs_avail()
-{
-    unsigned int ret;
-
-    ret = local_csr_read(NFP_MECSR_ACTIVE_LM_ADDR_3);
-    ret = ret - buf_store_start - sizeof(unsigned int);
-    ret = ret / sizeof(unsigned int);
-    return ret;
-}
 
 __inline unsigned int
 _precache_buf_bytes_used()
@@ -85,6 +75,7 @@ _precache_buf_bytes_used()
     ret = (sizeof(unsigned int) * TX_BUF_STORE_SZ) - (ret - buf_store_start);
     return ret;
 }
+
 
 __intrinsic void
 _precache_bufs_copy(unsigned int num)
@@ -122,6 +113,7 @@ _precache_bufs_copy(unsigned int num)
     __asm alu[--, --, b, TX_BUF_STORE_PTR--];
 }
 
+
 void
 precache_bufs_setup()
 {
@@ -141,6 +133,7 @@ precache_bufs_setup()
      * used and will help to identify buf_store underflows */
     buf_store[0] = 0x195fde01; /* Magically becomes 0xcafef00800 */
 }
+
 
 void
 precache_bufs()
@@ -176,6 +169,7 @@ precache_bufs()
     }
 }
 
+
 __intrinsic unsigned int
 precache_bufs_use()
 {
@@ -186,12 +180,24 @@ precache_bufs_use()
 }
 
 
+__inline unsigned int
+precache_bufs_avail()
+{
+    unsigned int ret;
+
+    ret = local_csr_read(NFP_MECSR_ACTIVE_LM_ADDR_3);
+    ret = ret - buf_store_start;
+    ret = ret / sizeof(unsigned int);
+    return ret;
+}
+
+
 __inline void
 precache_bufs_compute_seq_safe()
 {
     unsigned int min_bat, buf_bat, dma_bat, ring_bat;
 
-    buf_bat = _precache_bufs_avail() / MAX_TX_BATCH_SZ;
+    buf_bat = precache_bufs_avail() / MAX_TX_BATCH_SZ;
     dma_bat = (TX_DATA_MAX_IN_FLIGHT / MAX_TX_BATCH_SZ -
                data_dma_seq_issued + data_dma_seq_compl);
     ring_bat = ((TX_ISSUED_RING_SZ - TX_ISSUED_RING_RES) / MAX_TX_BATCH_SZ -

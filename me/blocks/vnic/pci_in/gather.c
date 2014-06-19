@@ -31,7 +31,7 @@
  */
 /* XXX who should conceptually own the pending_bmsk? service_qc or gather? */
 extern __shared __gpr struct qc_bitmask pending_bmsk;
-extern __shared __lmem struct tx_queue_info queue_data[64]; /* XXX use #define*/
+extern __shared __lmem struct tx_queue_info queue_data[MAX_TX_QUEUES];
 
 /* XXX assume hi bits 0 to DMA into CLS */
 static __shared __gpr unsigned int desc_ring_base;

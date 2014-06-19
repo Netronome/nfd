@@ -29,7 +29,7 @@ static volatile SIGNAL tx_ap_s3;
 __shared __gpr struct qc_bitmask active_bmsk;
 __shared __gpr struct qc_bitmask pending_bmsk;
 
-__shared __lmem struct tx_queue_info queue_data[64];
+__shared __lmem struct tx_queue_info queue_data[MAX_TX_QUEUES];
 
 /**
  * Initialise the PCI.IN queue controller queues

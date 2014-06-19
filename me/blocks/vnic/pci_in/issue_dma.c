@@ -63,7 +63,7 @@ static __shared __gpr unsigned int desc_ring_base;
 
 
 /* Storage declarations */
-static __shared __lmem struct tx_dma_state queue_info[MAX_TX_QUEUES];
+__shared __lmem struct tx_dma_state queue_data[MAX_TX_QUEUES];
 
 /* Sequence number declarations */
 extern __shared __gpr unsigned int gather_dma_seq_compl;
@@ -121,7 +121,7 @@ issue_dma_setup_shared()
             unsigned int bmsk_queue;
 
             bmsk_queue = map_natural_to_bitmask(queue);
-            queue_info[bmsk_queue].rid = vnic;
+            queue_data[bmsk_queue].rid = vnic;
         }
     }
 
@@ -171,7 +171,7 @@ static __intrinsic void dummy_dma(__xwrite void *descr,
 
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
-    if (tx_desc.pkt##_pkt##.eop && !queue_info[queue].cont) {           \
+    if (tx_desc.pkt##_pkt##.eop && !queue_data[queue].cont) {           \
         /* Fast path, use buf_store data */                             \
         __critical_path();                                              \
                                                                         \
@@ -180,31 +180,31 @@ do {                                                                    \
         descr_tmp.cpp_addr_lo = issued_tmp.buf_addr<<11;                \
                                                                         \
     } else {                                                            \
-        if (!queue_info[queue].cont) {                                  \
+        if (!queue_data[queue].cont) {                                  \
             /* Initialise continuation data */                          \
                                                                         \
             /* XXX check efficiency */                                  \
-            queue_info[queue].curr_buf = precache_bufs_use();           \
-            queue_info[queue].cont = 1;                                 \
-            queue_info[queue].offset = 0;                               \
+            queue_data[queue].curr_buf = precache_bufs_use();           \
+            queue_data[queue].cont = 1;                                 \
+            queue_data[queue].offset = 0;                               \
         }                                                               \
                                                                         \
         /* Use continuation data */                                     \
-        descr_tmp.cpp_addr_hi = queue_info[queue].curr_buf>>21;         \
-        descr_tmp.cpp_addr_lo = queue_info[queue].curr_buf<<11;         \
-        descr_tmp.cpp_addr_lo += queue_info[queue].offset;              \
-        queue_info[queue].offset += tx_desc.pkt##_pkt##.dma_len;        \
+        descr_tmp.cpp_addr_hi = queue_data[queue].curr_buf>>21;         \
+        descr_tmp.cpp_addr_lo = queue_data[queue].curr_buf<<11;         \
+        descr_tmp.cpp_addr_lo += queue_data[queue].offset;              \
+        queue_data[queue].offset += tx_desc.pkt##_pkt##.dma_len;        \
                                                                         \
-        issued_tmp.buf_addr = queue_info[queue].curr_buf;               \
+        issued_tmp.buf_addr = queue_data[queue].curr_buf;               \
                                                                         \
         if (tx_desc.pkt##_pkt##.eop) {                                  \
             /* Clear continuation data on EOP */                        \
                                                                         \
             /* XXX check this is done in to cycles */                   \
-            queue_info[queue].cont = 0;                                 \
-            queue_info[queue].sp1 = 0;                                  \
-            queue_info[queue].curr_buf = 0;                             \
-            queue_info[queue].offset = 0;                               \
+            queue_data[queue].cont = 0;                                 \
+            queue_data[queue].sp1 = 0;                                  \
+            queue_data[queue].curr_buf = 0;                             \
+            queue_data[queue].offset = 0;                               \
         }                                                               \
     }                                                                   \
                                                                         \
@@ -224,7 +224,7 @@ do {                                                                    \
     descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;           \
     descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;           \
                                                                         \
-    descr_tmp.rid = queue_info[queue].rid;                              \
+    descr_tmp.rid = queue_data[queue].rid;                              \
     pcie_dma_set_event(&descr_tmp, _type, _src);                        \
     descr_tmp.length = tx_desc.pkt##_pkt##.dma_len;                     \
     dma_out.pkt##_pkt## = descr_tmp;                                    \
