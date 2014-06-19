@@ -18,10 +18,14 @@ __visible SIGNAL vnic_cfg_sig_app_master1;
 struct vnic_cfg_msg cfg_msg;
 
 /* Fake BLM */
+#define BUF_SZ  (10 * 1024)
+#define BUF_NUM 128
 __export __emem_n(0) __align(4096 * 4) unsigned int fake_blm_q[4096];
 __shared __gpr int ring_wait = 0;
 __xwrite unsigned int fake_bufs[8];
 __shared __gpr mem_ring_addr_t fake_blm_addr;
+__export __emem __align2M char bufs_array[BUF_NUM * BUF_SZ];
+
 
 
 int
@@ -35,15 +39,23 @@ main(void)
 
         vnic_cfg_init_cfg_msg(&vnic_cfg_sig_app_master1, &cfg_msg);
     } else {
+        unsigned int buf_base;
+        unsigned int ctx_of;
+
+        ctassert(SZ_2M > (BUF_NUM * BUF_SZ));
+
+        buf_base = ((unsigned long long) bufs_array>>11) & 0xffffffff;
+        ctx_of = ctx() * 8 * (BUF_SZ >> 11);
+
         /* TEMP */
-        fake_bufs[0] = 0x195fc000 | (ctx() << 1);
-        fake_bufs[1] = 0x195fc200 | (ctx() << 1);
-        fake_bufs[2] = 0x195fc400 | (ctx() << 1);
-        fake_bufs[3] = 0x195fc600 | (ctx() << 1);
-        fake_bufs[4] = 0x195fc800 | (ctx() << 1);
-        fake_bufs[5] = 0x195fca00 | (ctx() << 1);
-        fake_bufs[6] = 0x195fcc00 | (ctx() << 1);
-        fake_bufs[7] = 0x195fce00 | (ctx() << 1);
+        fake_bufs[0] = buf_base | ctx_of | 0 * (BUF_SZ >> 11);
+        fake_bufs[1] = buf_base | ctx_of | 1 * (BUF_SZ >> 11);
+        fake_bufs[2] = buf_base | ctx_of | 2 * (BUF_SZ >> 11);
+        fake_bufs[3] = buf_base | ctx_of | 3 * (BUF_SZ >> 11);
+        fake_bufs[4] = buf_base | ctx_of | 4 * (BUF_SZ >> 11);
+        fake_bufs[5] = buf_base | ctx_of | 5 * (BUF_SZ >> 11);
+        fake_bufs[6] = buf_base | ctx_of | 6 * (BUF_SZ >> 11);
+        fake_bufs[7] = buf_base | ctx_of | 7 * (BUF_SZ >> 11);
 
         while (ring_wait == 0) {
             ctx_swap();
