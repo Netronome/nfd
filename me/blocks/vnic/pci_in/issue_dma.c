@@ -10,6 +10,7 @@
 #include <types.h>
 
 #include <nfp/cls.h>                /* TEMP */
+#include <nfp/me.h>
 #include <nfp/mem_ring.h>           /* TEMP */
 #include <std/reg_utils.h>
 
@@ -26,6 +27,7 @@
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/pcie.h>
 #include <vnic/utils/nn_ring.h>
+#include <vnic/utils/ordering.h>
 
 
 struct _tx_desc_batch {
@@ -80,7 +82,7 @@ static __xwrite struct _dma_desc_batch dma_out;
 static __xwrite struct _issued_pkt_batch batch_out;
 
 /* Signalling */
-static SIGNAL tx_desc_sig, msg_sig;
+static SIGNAL tx_desc_sig, msg_sig, desc_order_sig, dma_order_sig;
 static SIGNAL dma_sig0, dma_sig1, dma_sig2, dma_sig3;
 static SIGNAL_MASK wait_msk;
 
@@ -136,6 +138,10 @@ issue_dma_setup_shared()
     cfg.target_64   = 1;
     cfg.cpp_target  = 7;
     pcie_dma_cfg_set_one(PCIE_ISL, TX_DATA_CFG_REG, cfg);
+
+    /* Kick off ordering */
+    reorder_start(TX_ISSUE_START_CTX, &desc_order_sig);
+    reorder_start(TX_ISSUE_START_CTX, &dma_order_sig);
 }
 
 void
@@ -247,105 +253,116 @@ void
 issue_dma()
 {
     static __xread struct _tx_desc_batch tx_desc;
+    __cls void *desc_ring_addr;
+    unsigned int desc_ring_off;
+
+    __gpr struct nfd_pci_in_issued_desc issued_tmp;
+
+    struct batch_desc batch;
+    unsigned int queue;
 
     static SIGNAL_PAIR jsig0, jsig1, jsig2, jsig3; /* TEMP */
 
-    unsigned int queue;
-    unsigned int desc_ring_off;
 
-    __cls void *desc_ring_addr;
-    __gpr struct nfd_pci_in_issued_desc issued_tmp;
-
-
-    /* XXX Reorder! */
+    reorder_test_swap(&desc_order_sig);
 
     /* Check "DMA" completed and we can read the batch
-     * If so, the NN ring MUST have a batch descriptor for us */
-    if (gather_dma_seq_compl != gather_dma_seq_serv) {
-        struct batch_desc batch;
-
-        if (nn_ring_empty()) {
-            halt();          /* A serious error has occurred */
-        }
-
-        /*
-         * Increment gather_dma_seq_serv upfront to avoid
-         * ambiguity about sequence number zero
-         */
-        gather_dma_seq_serv++;
-
-        /* Read the batch */
-        batch.__raw = nn_ring_get();
-        desc_ring_off = ((gather_dma_seq_serv * sizeof(tx_desc)) &
-                         (DESC_RING_SZ - 1));
-        desc_ring_addr = (__cls void *) (desc_ring_base | desc_ring_off);
-        __cls_read(&tx_desc, desc_ring_addr, sizeof tx_desc, sizeof tx_desc,
-                   sig_done, &tx_desc_sig);
-
-        __asm {
-            ctx_arb[--], defer[1];
-            local_csr_wr[NFP_MECSR_ACTIVE_CTX_WAKEUP_EVENTS>>2, wait_msk];
-        }
-
-        /* XXX live dangerously: don't wait on journal sigs
-         * (__signals takes odd and even...) */
-        wait_msk = __signals(&dma_sig0, &dma_sig1, &dma_sig2, &dma_sig3,
-                             &tx_desc_sig, &msg_sig);
-        __implicit_read(&dma_sig0);
-        __implicit_read(&dma_sig1);
-        __implicit_read(&dma_sig2);
-        __implicit_read(&dma_sig3);
-        __implicit_read(&msg_sig);
-        __implicit_read(&tx_desc_sig);
-
-        if (data_dma_seq_issued != data_dma_seq_safe) {
-            queue = batch.queue;
-            data_dma_seq_issued++;
-
-            issued_tmp.q_num = queue;
-            issued_tmp.num_batch = batch.num;   /* Only needed in pkt0 */
-
-            /* Maybe add "full" bit */
-            if (batch.num == 4)
-            {
-                /* Full batches are the critical path */
-                /* XXX maybe tricks with an extra tx_dma_state
-                 * struct would convince nfcc to use one set LM index? */
-                __critical_path();
-                _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
-                _ISSUE_PROC(1, TX_DATA_IGN_EVENT_TYPE, 0);
-                _ISSUE_PROC(2, TX_DATA_IGN_EVENT_TYPE, 0);
-                _ISSUE_PROC(3, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
-            } else {
-                /* Off the critical path, handle non-full batches */
-                if (batch.num == 3) {
-                    _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
-                    _ISSUE_PROC(1, TX_DATA_IGN_EVENT_TYPE, 0);
-                    _ISSUE_PROC(2, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-                    _ISSUE_CLR(3);
-                } else if (batch.num == 2) {
-                    _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
-                    _ISSUE_PROC(1, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-                    _ISSUE_CLR(2);
-                    _ISSUE_CLR(3);
-                } else {
-                    _ISSUE_PROC(0, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-                    _ISSUE_CLR(1);
-                    _ISSUE_CLR(2);
-                    _ISSUE_CLR(3);
-                }
-            }
-
-            cls_ring_put(TX_ISSUED_RING_NUM, &batch_out, sizeof batch_out,
-                         &msg_sig);
-        }
-    } else {
-        precache_bufs_compute_seq_safe();
-
-        ctx_swap();
+     * If so, the NN ring MUST have a batch descriptor for us
+     * NB: only one ctx can execute this at any given time */
+    while (gather_dma_seq_compl == gather_dma_seq_serv) {
+        ctx_swap(); /* Yield while waiting for work */
     }
-}
 
+    reorder_done(TX_ISSUE_START_CTX, &desc_order_sig);
+
+    if (nn_ring_empty()) {
+        halt();          /* A serious error has occurred */
+    }
+
+    /*
+     * Increment gather_dma_seq_serv upfront to avoid ambiguity
+     * about sequence number zero
+     */
+    gather_dma_seq_serv++;
+
+    /* Read the batch */
+    batch.__raw = nn_ring_get();
+    desc_ring_off = ((gather_dma_seq_serv * sizeof(tx_desc)) &
+                     (DESC_RING_SZ - 1));
+    desc_ring_addr = (__cls void *) (desc_ring_base | desc_ring_off);
+    __cls_read(&tx_desc, desc_ring_addr, sizeof tx_desc, sizeof tx_desc,
+               sig_done, &tx_desc_sig);
+
+
+    /* Start of dma_order_sig reorder stage */
+    __asm {
+        ctx_arb[--], defer[1];
+        local_csr_wr[NFP_MECSR_ACTIVE_CTX_WAKEUP_EVENTS>>2, wait_msk];
+    }
+
+    /* XXX live dangerously: don't wait on journal sigs
+     * (__signals takes odd and even...) */
+    wait_msk = __signals(&dma_sig0, &dma_sig1, &dma_sig2, &dma_sig3,
+                         &tx_desc_sig, &msg_sig, &dma_order_sig);
+    __implicit_read(&dma_sig0);
+    __implicit_read(&dma_sig1);
+    __implicit_read(&dma_sig2);
+    __implicit_read(&dma_sig3);
+    __implicit_read(&msg_sig);
+    __implicit_read(&tx_desc_sig);
+    __implicit_read(&dma_order_sig);
+
+    while (data_dma_seq_issued == data_dma_seq_safe) {
+        /* We can't process this batch yet.
+         * Swap then recompute seq_safe.
+         * NB: only one ctx can execute this at any given time */
+        ctx_swap();
+        precache_bufs_compute_seq_safe();
+    }
+
+    /* We can process this batch, allow next CTX go too */
+    reorder_done(TX_ISSUE_START_CTX, &dma_order_sig);
+
+    queue = batch.queue;
+    data_dma_seq_issued++;
+
+    issued_tmp.q_num = queue;
+    issued_tmp.num_batch = batch.num;   /* Only needed in pkt0 */
+
+    /* Maybe add "full" bit */
+    if (batch.num == 4)
+    {
+        /* Full batches are the critical path */
+        /* XXX maybe tricks with an extra tx_dma_state
+         * struct would convince nfcc to use one set LM index? */
+        __critical_path();
+        _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(1, TX_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(2, TX_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(3, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+    } else {
+        /* Off the critical path, handle non-full batches */
+        if (batch.num == 3) {
+            _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, TX_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(2, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+            _ISSUE_CLR(3);
+        } else if (batch.num == 2) {
+            _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+            _ISSUE_CLR(2);
+            _ISSUE_CLR(3);
+        } else {
+            _ISSUE_PROC(0, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+            _ISSUE_CLR(1);
+            _ISSUE_CLR(2);
+            _ISSUE_CLR(3);
+        }
+    }
+
+    cls_ring_put(TX_ISSUED_RING_NUM, &batch_out, sizeof batch_out,
+                 &msg_sig);
+}

@@ -38,14 +38,17 @@
 #define TXQ_START           0
 #define TXQ_EVENT_DATA      (1<<4)
 
+#define TX_ISSUE_START_CTX  1
+
 /* Additional check queue constants */
 #define TX_MAX_RETRIES      5
 #define TX_BATCH_SZ         4
 #define TX_PENDING_TEST     0
 
 /* DMAConfigReg index allocations */
-#define TX_DATA_CFG_REG     0
-#define TX_GATHER_CFG_REG   1
+#define TX_GATHER_CFG_REG   0
+#define TX_DATA_CFG_REG     2
+
 
 /* DMA defines */
 #define TX_GATHER_MAX_IN_FLIGHT 16

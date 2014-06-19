@@ -53,11 +53,10 @@ main(void)
         }
     } else {
         /* Worker main loop */
+
         for (;;) {
             issue_dma();
 
-            /* /\* Yield thread *\/ */
-            /* ctx_swap(); */
         }
     }
 }

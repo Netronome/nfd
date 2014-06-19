@@ -15,6 +15,7 @@
 #include "_c/cls_ring.c"
 #include "_c/mem_bulk32.c"
 #include "_c/nn_ring.c"
+#include "_c/ordering.c"
 #include "_c/pcie.c"
 #include "_c/qcntl.c"
 
