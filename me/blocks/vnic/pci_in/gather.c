@@ -17,14 +17,6 @@
 #include <vnic/utils/pcie.h>
 #include <vnic/utils/nn_ring.h>
 
-/*
- * Temporary header includes
- */
-#include <nfp/cls.h>            /* TEMP */
-#include <nfp/mem_ring.h>       /* TEMP */
-#include <nfp6000/nfp_me.h>     /* TEMP */
-#include <nfp6000/nfp_cls.h>    /* TEMP */
-
 
 /*
  * State variables for PCI.IN gather
@@ -46,9 +38,6 @@ __export __shared __cls __align(DESC_RING_SZ) struct nfd_pci_in_tx_desc
 
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
-__shared __gpr mem_ring_addr_t gather_dmas_addr; /* TEMP */
-MEM_JOURNAL_DECLARE(gather_dmas, 1024); /* TEMP */
-
 
 void
 dummy_init_gather_shared()
@@ -65,8 +54,6 @@ dummy_init_gather_shared()
      */
     desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;
 
-    gather_dmas_addr = MEM_JOURNAL_CONFIGURE(gather_dmas, 1); /* TEMP */
-
     /*
      * Initialise DMA sequence tracking
      */
@@ -76,30 +63,19 @@ dummy_init_gather_shared()
      * Set up TX_GATHER_CFG_REG DMA Config Register
      */
     cfg.__raw = 0;
-    cfg.signal_only = 1; /* TEMP use signal_only for seqn num generation */
+#ifdef NFD_VNIC_NO_HOST
+    /* Use signal_only for seqn num generation
+     * Don't actually DMA data */
+    cfg.signal_only = 1;
+#else
+    cfg.signal_only = 0;
+#endif
     cfg.end_pad     = 0;
     cfg.start_pad   = 0;
     /* Ordering settings? */
     cfg.target_64   = 0;
     cfg.cpp_target  = 15;
     pcie_dma_cfg_set_one(PCIE_ISL, TX_GATHER_CFG_REG, cfg);
-}
-
-static __intrinsic void dummy_dma(unsigned int dma_mode, __xwrite void *descr)
-{
-    SIGNAL_PAIR journal_sig;
-    SIGNAL dma_sig;
-
-    __mem_ring_journal(1, gather_dmas_addr, descr,
-                       sizeof(struct nfp_pcie_dma_cmd),
-                       sizeof(struct nfp_pcie_dma_cmd),
-                       sig_done, &journal_sig);
-
-    /* Fake a DMA ... using a DMA (signal only) */
-    __pcie_dma_enq(PCIE_ISL, descr, TX_GATHER_DMA_QUEUE, sig_done, &dma_sig);
-
-    /* Wait on both writes at once */
-    wait_for_all_single(&journal_sig.even, &dma_sig);
 }
 
 void
@@ -249,8 +225,8 @@ gather()
             /* Can replace with ld_field instruction if 8bit seqn is enough */
             pcie_dma_set_event(&descr_tmp, TX_GATHER_EVENT_TYPE,
                                dma_seq_issued);
-            descr_tmp.length = (tx_r_update_tmp *
-                                sizeof(struct nfd_pci_in_tx_desc));
+            descr_tmp.length = ((tx_r_update_tmp *
+                                 sizeof(struct nfd_pci_in_tx_desc)) - 1);
             descr = descr_tmp;
 
             /*
@@ -259,14 +235,9 @@ gather()
             queue_data[queue].tx_s += tx_r_update_tmp;
 
             /*
-             * Issue the DMA TEMP: out until DMAs available
+             * Issue the DMA
              */
-            /* pcie_dma_enq(PCIE_ISL, &descr, NFP_PCIE_DMA_FROMPCI_HI); */
-
-            /* TEMP:
-             * write descriptor to the CLS buffer and
-             * trigger user event */
-            dummy_dma(descr_tmp.dma_mode, &descr);
+            pcie_dma_enq(PCIE_ISL, &descr, TX_GATHER_DMA_QUEUE);
 
         } else {
             /*

@@ -9,13 +9,11 @@
 #include <nfp.h>
 #include <types.h>
 
-#include <nfp/cls.h>                /* TEMP */
+#include <nfp/cls.h>
 #include <nfp/me.h>
-#include <nfp/mem_ring.h>           /* TEMP */
 #include <std/reg_utils.h>
 
 #include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_cls.h>        /* TEMP */
 
 #include <vnic/pci_in/issue_dma.h>
 
@@ -86,10 +84,6 @@ static SIGNAL tx_desc_sig, msg_sig, desc_order_sig, dma_order_sig;
 static SIGNAL dma_sig0, dma_sig1, dma_sig2, dma_sig3;
 static SIGNAL_MASK wait_msk;
 
-/* TEMP */
-__shared __gpr mem_ring_addr_t data_dmas_addr; /* TEMP */
-MEM_JOURNAL_DECLARE(data_dmas, 1024); /* TEMP */
-
 
 void
 issue_dma_setup_shared()
@@ -113,8 +107,6 @@ issue_dma_setup_shared()
      */
     desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;
 
-    data_dmas_addr = MEM_JOURNAL_CONFIGURE(data_dmas, 0); /* TEMP */
-
     /*
      * Set requester IDs
      */
@@ -131,7 +123,13 @@ issue_dma_setup_shared()
      * Set up TX_DATA_CFG_REG DMA Config Register
      */
     cfg.__raw = 0;
-    cfg.signal_only = 1; /* TEMP use DMAs for event seqn only */
+#ifdef NFD_VNIC_NO_HOST
+    /* Use signal_only for seqn num generation
+     * Don't actually DMA data */
+    cfg.signal_only = 1;
+#else
+    cfg.signal_only = 0;
+#endif
     cfg.end_pad     = 0;
     cfg.start_pad   = 0;
     /* Ordering settings? */
@@ -159,19 +157,6 @@ issue_dma_setup()
 
     /* Initialise wait_msk to wait on msg_sig only */
     wait_msk = __signals(&tx_desc_sig);
-}
-
-
-static __intrinsic void dummy_dma(__xwrite void *descr,
-                                  SIGNAL_PAIR *jsig, SIGNAL *dsig)
-{
-    __mem_ring_journal(0, data_dmas_addr, descr,
-                       sizeof(struct nfp_pcie_dma_cmd),
-                       sizeof(struct nfp_pcie_dma_cmd),
-                       sig_done, jsig);
-
-    /* Fake a DMA ... using a DMA (signal only) */
-    __pcie_dma_enq(PCIE_ISL, descr, TX_DATA_DMA_QUEUE, sig_done, dsig);
 }
 
 
@@ -232,10 +217,11 @@ do {                                                                    \
                                                                         \
     descr_tmp.rid = queue_data[queue].rid;                              \
     pcie_dma_set_event(&descr_tmp, _type, _src);                        \
-    descr_tmp.length = tx_desc.pkt##_pkt##.dma_len;                     \
+    descr_tmp.length = tx_desc.pkt##_pkt##.dma_len - 1;                 \
     dma_out.pkt##_pkt## = descr_tmp;                                    \
                                                                         \
-    dummy_dma(&dma_out.pkt##_pkt##, &jsig##_pkt##, &dma_sig##_pkt##);   \
+    __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##, TX_DATA_DMA_QUEUE,   \
+                   sig_done, &dma_sig##_pkt##);                         \
 } while (0)
 
 
@@ -260,8 +246,6 @@ issue_dma()
 
     struct batch_desc batch;
     unsigned int queue;
-
-    static SIGNAL_PAIR jsig0, jsig1, jsig2, jsig3; /* TEMP */
 
 
     reorder_test_swap(&desc_order_sig);
@@ -300,8 +284,6 @@ issue_dma()
         local_csr_wr[NFP_MECSR_ACTIVE_CTX_WAKEUP_EVENTS>>2, wait_msk];
     }
 
-    /* XXX live dangerously: don't wait on journal sigs
-     * (__signals takes odd and even...) */
     wait_msk = __signals(&dma_sig0, &dma_sig1, &dma_sig2, &dma_sig3,
                          &tx_desc_sig, &msg_sig, &dma_order_sig);
     __implicit_read(&dma_sig0);
