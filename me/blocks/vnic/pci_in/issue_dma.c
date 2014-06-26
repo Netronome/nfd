@@ -169,6 +169,8 @@ do {                                                                    \
         issued_tmp.buf_addr = precache_bufs_use();                      \
         descr_tmp.cpp_addr_hi = issued_tmp.buf_addr>>21;                \
         descr_tmp.cpp_addr_lo = issued_tmp.buf_addr<<11;                \
+        descr_tmp.cpp_addr_lo += TX_DATA_OFFSET;                        \
+        descr_tmp.cpp_addr_lo -= tx_desc.pkt##_pkt##.offset;            \
                                                                         \
     } else {                                                            \
         if (!queue_data[queue].cont) {                                  \
@@ -177,7 +179,8 @@ do {                                                                    \
             /* XXX check efficiency */                                  \
             queue_data[queue].curr_buf = precache_bufs_use();           \
             queue_data[queue].cont = 1;                                 \
-            queue_data[queue].offset = 0;                               \
+            queue_data[queue].offset = TX_DATA_OFFSET;                  \
+            queue_data[queue].offset -= tx_desc.pkt##_pkt##.offset;     \
         }                                                               \
                                                                         \
         /* Use continuation data */                                     \
