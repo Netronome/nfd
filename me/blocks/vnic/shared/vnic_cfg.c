@@ -71,7 +71,12 @@ __export __emem __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS) char
 
 static unsigned int cfg_ring_enables[2] = {0, 0};
 __xread unsigned int cfg_ring_addr[2] = {0, 0};
-__xread char cfg_ring_sizes[4] = {0, 0, 0, 0};
+/* cfg_ring_sizes is treated as a char[4] array
+ * but it is managed by hand because:
+ * (1) the desired ordering of entries is opposite to NFCC ordering, and
+ * (2) char[] arrays with non-const index trigger the use of the
+ * T-INDEX in NFCC, which is unnecessary in this case. */
+__xread unsigned int  cfg_ring_sizes = 0;
 
 /* XXX move to some sort of CT library */
 __intrinsic void
@@ -118,16 +123,16 @@ ffs(unsigned int data)
  * gives us more control over the code generated than trying to use a 64bit
  * type and regular c instructions. */
 __intrinsic int
-_ring_enables_test(unsigned int queue)
+_ring_enables_test(struct vnic_cfg_msg *cfg_msg)
 {
     /* XXX handle a few special cases efficiently: <= 32 queues, and 1 queue */
     /* 32 bits per unsigned int */
-    unsigned int mod_queue = queue & (32-1);
+    unsigned int mod_queue = cfg_msg->queue & (32-1);
     int ret;
 
     /* Test which unsigned int bitmask the queue is stored in,
      * then do a test on that bitmask. */
-    if (queue & 32) {
+    if (cfg_msg->queue & 32) {
         ret = (1 & (cfg_ring_enables[1] >> mod_queue));
     } else {
         ret = (1 & (cfg_ring_enables[0] >> mod_queue));
@@ -135,6 +140,26 @@ _ring_enables_test(unsigned int queue)
 
     return ret;
 }
+
+
+/*
+ * @param cfg_msg   vnic_cfg_msg to extract queue from
+ *
+ * cfg_ring_sizes holds size data for 4 rings, starting from base_q
+ * where base_q % 4 = 0.
+ * The data is stored as [base_q + 3, base_q + 2, base_q + 1, base_q].
+ * This method extracts data from the correct offset within the 32bit
+ * word.  The correct 32bit word must have been read previously. */
+__intrinsic unsigned char
+_get_ring_sz(struct vnic_cfg_msg *cfg_msg)
+{
+    unsigned char ring_sz;
+    unsigned int offset = ((cfg_msg->queue & 3) * 8);
+
+    ring_sz = (unsigned char) (cfg_ring_sizes >> offset);
+    return ring_sz;
+}
+
 
 /* XXX TEMP compute BAR address fields for PF */
 __intrinsic void
@@ -554,7 +579,7 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
         mem_read64(&cfg_ring_addr,
                    VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + addr_off,
                    sizeof(cfg_ring_addr));
-        mem_read32(cfg_ring_sizes,
+        mem_read32(&cfg_ring_sizes,
                    VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + sz_off,
                    sizeof(cfg_ring_sizes));
     } else {
@@ -585,11 +610,11 @@ vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
     *queue = cfg_msg->queue;
 
     /* Set up values for current queue */
-    if (_ring_enables_test(*queue)) {
+    if (_ring_enables_test(cfg_msg)) {
         cfg_msg->up_bit = 1;
         ring_base[0] = cfg_ring_addr[0];
         ring_base[1] = cfg_ring_addr[1];
-        *ring_sz = cfg_ring_sizes[*queue & 3];
+        *ring_sz = _get_ring_sz(cfg_msg);
     } else {
         cfg_msg->up_bit = 0;
     }
@@ -612,7 +637,7 @@ vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
 
     /* We only use the address if the ring is enabled.
      * Otherwise suppress read to save CPP bandwidth. */
-    if (_ring_enables_test(cfg_msg->queue)) {
+    if (_ring_enables_test(cfg_msg)) {
         mem_read64(&cfg_ring_addr,
                    VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_addr_off,
                    sizeof(cfg_ring_addr));
@@ -620,8 +645,9 @@ vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
 
     /* Sizes packed 4 per register, so reread every 4th queue */
     if ((cfg_msg->queue & 3) == 0) {
-        mem_read32(cfg_ring_sizes,
+        mem_read32(&cfg_ring_sizes,
                    VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_sz_off,
                    sizeof(cfg_ring_sizes));
     }
+
 }
