@@ -152,7 +152,7 @@ issue_dma_setup()
      */
     descr_tmp.rid_override = 1;
     descr_tmp.trans_class = 0;
-    descr_tmp.cpp_token = 0;    /* XXX Token required TBD */
+    descr_tmp.cpp_token = TX_DATA_DMA_TOKEN;
     descr_tmp.dma_cfg_index = TX_DATA_CFG_REG;
 
     /* Initialise wait_msk to wait on msg_sig only */
