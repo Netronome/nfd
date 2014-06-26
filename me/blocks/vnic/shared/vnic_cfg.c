@@ -619,7 +619,7 @@ vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
     }
 
     /* Sizes packed 4 per register, so reread every 4th queue */
-    if (cfg_msg->queue & 3 == 0) {
+    if ((cfg_msg->queue & 3) == 0) {
         mem_read32(cfg_ring_sizes,
                    VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_sz_off,
                    sizeof(cfg_ring_sizes));
