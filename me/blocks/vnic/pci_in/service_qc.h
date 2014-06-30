@@ -13,7 +13,7 @@
 /**
  * Initialise the PCI.IN queue controller queues
  */
-extern void init_service_qc();
+extern void service_qc_setup();
 
 /**
  * Change the configuration of the queues and rings associated with a vNIC

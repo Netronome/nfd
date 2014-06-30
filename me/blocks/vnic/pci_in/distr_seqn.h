@@ -21,7 +21,7 @@
  * This method sets up the shared transfer registers and autopushes
  * necessary for monitoring and distributing DMA sequence numbers.
  */
-extern void init_distr_seqn();
+extern void distr_seqn_setup();
 
 /**
  * Distribute DMA sequence numbers

@@ -45,7 +45,7 @@ static __xwrite struct tx_notify_status status_notify;
 
 
 void
-init_gather_status()
+gather_status_setup()
 {
     __gpr struct tx_queue_info info_tmp;
     __gpr struct tx_gather_status gather_tmp;

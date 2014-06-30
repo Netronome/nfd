@@ -28,7 +28,7 @@ extern __shared __lmem struct tx_queue_info queue_data[MAX_TX_QUEUES];
 /* XXX assume hi bits 0 to DMA into CLS */
 static __shared __gpr unsigned int desc_ring_base;
 
-__shared __gpr unsigned int dma_seq_issued;
+__shared __gpr unsigned int dma_seq_issued = 0;
 extern __shared __gpr unsigned int gather_dma_seq_compl;
 
 #define DESC_RING_SZ (MAX_TX_BATCH_SZ * DESC_BATCH_Q_SZ *       \
@@ -39,9 +39,8 @@ __export __shared __cls __align(DESC_RING_SZ) struct nfd_pci_in_tx_desc
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
 
-/* XXX clean up naming and intialise value with declaration */
 void
-dummy_init_gather_shared()
+gather_setup_shared()
 {
     struct pcie_dma_cfg_one cfg;
 
@@ -54,11 +53,6 @@ dummy_init_gather_shared()
      * Initialise the CLS TX descriptor ring
      */
     desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;
-
-    /*
-     * Initialise DMA sequence tracking
-     */
-    dma_seq_issued = 0;
 
     /*
      * Set up TX_GATHER_CFG_REG DMA Config Register
@@ -79,9 +73,9 @@ dummy_init_gather_shared()
     pcie_dma_cfg_set_one(PCIE_ISL, TX_GATHER_CFG_REG, cfg);
 }
 
-/* XXX clean up function naming */
+
 void
-dummy_init_gather()
+gather_setup()
 {
     /*
      * Initialise a DMA descriptor template
@@ -97,54 +91,6 @@ dummy_init_gather()
     descr_tmp.cpp_addr_hi = 0;
 }
 
-
-/* XXX unused. Remove. */
-__intrinsic void
-dummy_gather_vnic_setup(void *cfg_msg_in, unsigned int queue_size)
-{
-    struct pci_in_cfg_msg *cfg_msg;
-    struct qc_queue_config txq;
-
-    /* XXX make this code maintain state and re-enter
-     * to support case where data is read from emem */
-    unsigned int start_queue;
-    unsigned int end_queue;
-    unsigned int queue;
-
-    ctassert(__is_log2(MAX_VNICS));
-    ctassert(__is_log2(MAX_VNIC_QUEUES));
-
-    txq.watermark    = PCIE_QC_WM_4;
-    txq.size         = queue_size - 8; /* XXX add define for size shift */
-    txq.event_data   = TXQ_EVENT_DATA;
-    txq.event_type   = PCIE_QC_EVENT_NOT_EMPTY;
-    txq.ptr          = 0;
-
-    cfg_msg = cfg_msg_in;
-    start_queue = cfg_msg->vnic * MAX_VNIC_QUEUES;
-    end_queue = start_queue + MAX_VNIC_QUEUES;
-
-    /*
-     * XXX Set up per queue data to dummy values
-     */
-    for (queue = start_queue; queue < end_queue; queue++) {
-        unsigned int bmsk_queue = map_natural_to_bitmask(queue);
-
-        queue_data[bmsk_queue].tx_w = 0;
-        queue_data[bmsk_queue].tx_s = 0;
-        queue_data[bmsk_queue].ring_sz_msk = ((1 << queue_size) - 1);
-        queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
-        /* TEMP */
-        queue_data[bmsk_queue].ring_base_hi = 0;
-        queue_data[bmsk_queue].ring_base_lo = (0x47<<24) | (queue<<16);
-    }
-
-    init_qc_queues(PCIE_ISL, &txq, TXQ_START + start_queue * 2, 2,
-                   MAX_VNIC_QUEUES);
-
-    /* Indicate completion */
-    cfg_msg->msg_valid = 0;
-}
 
 int
 gather()

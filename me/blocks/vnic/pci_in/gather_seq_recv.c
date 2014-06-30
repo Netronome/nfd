@@ -32,13 +32,6 @@ __shared __gpr unsigned int data_dma_seq_served = 0;
 static struct seq_recv_state state = {0, 0};
 
 
-/* XXX rename or remove */
-void
-init_gather_seq_recv()
-{
-
-}
-
 void
 gather_seq_recv()
 {

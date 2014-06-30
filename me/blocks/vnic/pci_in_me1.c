@@ -22,8 +22,6 @@ main(void)
 {
     /* Perform per ME initialisation  */
     if (ctx() == 0) {
-        init_gather_seq_recv();
-
         precache_bufs_setup();
 
         issue_dma_status_setup();

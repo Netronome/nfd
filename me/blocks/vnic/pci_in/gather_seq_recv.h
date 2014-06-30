@@ -8,9 +8,6 @@
 #define _BLOCKS__VNIC_PCI_IN_GATHER_SEQ_RECV_H_
 
 
-/* XXX rename or remove */
-extern void init_gather_seq_recv();
-
 /**
  * Check for sequence number reflects from "distr_seqn" and copy to shared
  * registers.  Recompute data_dma_seq_safe if necessary.

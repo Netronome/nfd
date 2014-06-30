@@ -84,7 +84,7 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 }
 
 void
-init_distr_seqn()
+distr_seqn_setup()
 {
     /* XXX this code would probably be much more efficient if ctx and meid
      * are known at compile time. */

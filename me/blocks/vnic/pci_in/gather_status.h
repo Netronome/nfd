@@ -33,7 +33,7 @@ struct tx_notify_status {
 /**
  * Initialise the gather and notify status output
  */
-extern void init_gather_status();
+extern void gather_status_setup();
 
 /**
  * Show gather and notify status in transfer registers

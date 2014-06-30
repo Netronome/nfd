@@ -44,14 +44,14 @@ main(void)
 
         /* Initialisation that does not swap */
         vnic_cfg_init_cfg_msg(&vnic_cfg_sig_pci_out, &cfg_msg);
-        dummy_init_gather_shared();
-        init_gather_status();
+        gather_setup_shared();
+        gather_status_setup();
 
         /* Initialisation that swaps and takes longer */
         vnic_cfg_setup_pf();
 
-        init_service_qc();
-        init_distr_seqn();
+        service_qc_setup();
+        distr_seqn_setup();
         vnic_cfg_setup();
 
         notify_setup_shared();
@@ -61,8 +61,7 @@ main(void)
         /* TEMP: Trigger user event (easy to look for) */
         event_cls_user_event(0x1234);
     } else {
-        dummy_init_gather();    /* Should this be strictly after
-                                 * dummy_init_gather_shared? */
+        gather_setup();
 
         notify_setup();
     }

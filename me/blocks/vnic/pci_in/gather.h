@@ -11,16 +11,14 @@
 /**
  * Perform shared initialisation of the gather block.
  */
-extern void  dummy_init_gather_shared();
+extern void  gather_setup_shared();
 
 
 /**
  * Perform per context initialisation (for CTX 1 to 7)
  */
-extern void dummy_init_gather();
+extern void gather_setup();
 
-__intrinsic void dummy_gather_vnic_setup(void *cfg_msg_in,
-                                         unsigned int queue_size);
 
 /**
  * Examine pending bitmasks and queue state to determine whether there are

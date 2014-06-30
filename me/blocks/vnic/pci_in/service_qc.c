@@ -33,7 +33,7 @@ __shared __lmem struct tx_queue_info queue_data[MAX_TX_QUEUES];
 
 /* XXX rename */
 void
-init_service_qc ()
+service_qc_setup ()
 {
     struct nfp_em_filter_status tmp_status;
     __cls struct event_cls_filter *tmp_event_filter;
