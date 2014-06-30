@@ -148,6 +148,8 @@ gather()
     int ret;
     __gpr unsigned int queue = 0;
     __gpr unsigned int tx_r_update_tmp;
+    __gpr unsigned int tx_s_cp;
+    __gpr int tx_r_correction;
 
     /*
      * Before looking for a batch of work, we need to be able to issue a DMA
@@ -164,11 +166,21 @@ gather()
         }
 
         /*
-         * Compute increase.
+         * Compute increase, strategy:
+         * Round tx_s up to the next MAX_TX_BATCH_SZ multiple (64B multiple)
+         * Compute the batch size that would produce this tx_s
+         * Subtract this tx_s from tx_w. If positive or zero, leave batch size
+         * unchanged.  If negative, correct tx_s and batch size by adding the
+         * negative error.
          */
-        tx_r_update_tmp = queue_data[queue].tx_w - queue_data[queue].tx_s;
-        if (tx_r_update_tmp > MAX_TX_BATCH_SZ) {
-            tx_r_update_tmp = MAX_TX_BATCH_SZ;
+        ctassert(__is_log2(MAX_TX_BATCH_SZ));
+        tx_s_cp = MAX_TX_BATCH_SZ + queue_data[queue].tx_s;
+        tx_s_cp &= ~(MAX_TX_BATCH_SZ - 1);
+        tx_r_correction = queue_data[queue].tx_w - tx_s_cp;
+        tx_r_update_tmp = (MAX_TX_BATCH_SZ -
+                           (queue_data[queue].tx_s & (MAX_TX_BATCH_SZ - 1)));
+        if (tx_r_correction < 0) {
+            tx_r_update_tmp += tx_r_correction;
         }
 
         /*
