@@ -26,7 +26,9 @@ extern void init_service_qc();
  */
 __intrinsic void service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg);
 
-/** Parameters list to be filled out as extended */
+/**
+ * Use API provided by shared/qc to update queue state
+ */
 extern void service_qc();
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_SERVICE_QC_H_ */

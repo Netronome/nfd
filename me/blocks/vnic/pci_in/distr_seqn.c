@@ -22,11 +22,13 @@
 #include <nfp/me.h>             /* TEMP */
 #include <nfp6000/nfp_me.h>     /* TEMP */
 
+/* Signals and transfer registers for receiving DMA events */
 static volatile __xread unsigned int tx_gather_event_xfer;
 static volatile __xread unsigned int tx_data_event_xfer;
 static volatile SIGNAL tx_gather_event_sig;
 static volatile SIGNAL tx_data_event_sig;
 
+/* Transfer registers to use for reflects */
 static __xwrite unsigned int tx_gather_compl_reflect_xwrite = 0;
 static __xwrite unsigned int tx_data_compl_reflect_xwrite = 0;
 static __xwrite unsigned int tx_data_served_reflect_xwrite = 0;
@@ -40,6 +42,7 @@ __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
 static __gpr unsigned int data_dma_seq_sent = 0;
 
+/* Remote transfer registers and signals to use for reflects */
 __remote volatile __xread unsigned int tx_gather_compl_reflect_xread;
 __remote volatile __xread unsigned int tx_data_compl_reflect_xread;
 __remote volatile __xread unsigned int tx_data_served_reflect_xread;

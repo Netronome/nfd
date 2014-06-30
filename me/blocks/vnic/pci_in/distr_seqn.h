@@ -8,6 +8,14 @@
 #define _BLOCKS__VNIC_PCI_IN_DISTR_SEQN_H_
 
 /**
+ * The distr_seqn block declares three sequence numbers: "gather_dma_seq_compl",
+ * "data_dma_seq_compl", and "data_dma_seq_served".  The "compl" sequence
+ * numbers are reconstructed from DMA events in this block.  The "served"
+ * sequence number is taken from the "notify" block.  It is pushed if it has
+ * changed.
+ */
+
+/**
  * Initialise DMA sequence number distribution state
  *
  * This method sets up the shared transfer registers and autopushes

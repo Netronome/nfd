@@ -31,13 +31,7 @@ __shared __gpr struct qc_bitmask pending_bmsk;
 
 __shared __lmem struct tx_queue_info queue_data[MAX_TX_QUEUES];
 
-/**
- * Initialise the PCI.IN queue controller queues
- * @param max_vnics         Maximum number of VNICs that will be exposed
- * @param max_vnic_queues   Maximum number of queues provided per VNIC
- * @param queue_size        Preferred size of queue controller queues
- *
- * */
+/* XXX rename */
 void
 init_service_qc ()
 {

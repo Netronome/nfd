@@ -22,8 +22,14 @@ struct tx_issue_dma_status {
     unsigned int data_dma_seq_safe;
 };
 
+/**
+ * Initialise the issue_dma status output
+ */
 extern void issue_dma_status_setup();
 
+/**
+ * Show issue_dma status in transfer registers
+ */
 extern void issue_dma_status();
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_ISSUE_DMA_STATUS_H_ */

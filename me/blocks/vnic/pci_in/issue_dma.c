@@ -237,7 +237,6 @@ do {                                                                    \
 } while (0)
 
 
-/** Parameters list to be filled out as extended */
 void
 issue_dma()
 {

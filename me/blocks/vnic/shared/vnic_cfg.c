@@ -269,7 +269,7 @@ _vnic_cfg_queue_setup()
 }
 
 void
-vnic_cfg_write_cap(unsigned int vnic)
+_vnic_cfg_write_cap(unsigned int vnic)
 {
     __xwrite unsigned int cfg[] = {VNIC_CFG_VERSION, 0, VNIC_CFG_CAP,
                                    MAX_VNIC_QUEUES, MAX_VNIC_QUEUES,
@@ -301,7 +301,7 @@ vnic_cfg_setup()
      */
 
     for (vnic = 0; vnic < MAX_VNICS; vnic++) {
-        vnic_cfg_write_cap(vnic);
+        _vnic_cfg_write_cap(vnic);
     }
 }
 

@@ -102,35 +102,90 @@ enum vnic_cfg_component {
     VNIC_CFG_APP_MASTER
 };
 
+
+/**
+ * Perform per PCIe island vnic_cfg initialisation
+ */
+extern void vnic_cfg_setup();
+
+/**
+ * XXX formalise setup_pf and setup_vf methods
+ * Configure the PF for use with NFD
+ */
 __intrinsic void vnic_cfg_setup_pf();
 
-void nfd_ctrl_write_max_qs(unsigned int vnic);
-
-void vnic_cfg_setup();
-
+/**
+ * Perform shared configuration on "cfg_msg" and "cfg_sig".
+ * @param cfg_sig       signal set to indicate that a message is ready
+ * @param cfg_msg       current configuration message and state
+ */
 __intrinsic void vnic_cfg_init_cfg_msg(SIGNAL *cfg_sig,
                                        struct vnic_cfg_msg *cfg_msg);
 
+/**
+ * Look for notification of configuration events
+ */
 void vnic_cfg_check_cfg_ap();
 
+/**
+ * Find next vNIC to process configuration messages from. Negative return
+ * values show no vNIC found.
+ */
 int vnic_cfg_next_vnic();
 
+/**
+ * Add a cfg_msg to the start of the ring pipeline
+ * @param cfg_msg           message to add
+ * @param cfg_sig_remote    remote signal to set on success
+ * @param next_me           ME to signal on success
+ * @param rnum              ring number to use for the ring put
+ * @param rbase             base address of the ring to use
+ */
 __intrinsic void vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                                         __remote SIGNAL *cfg_sig_remote,
                                         unsigned int next_me, unsigned int rnum,
                                         __dram void *rbase);
 
+/**
+ * Check for a cfg_msg on the app ME master
+ * @param cfg_sig           signal to check for messages
+ * @param rnum              ring number to fetch messages from
+ * @param rbase             base address of the ring to use
+ */
 __intrinsic void vnic_cfg_app_check_cfg_msg(SIGNAL *cfg_sig, unsigned int rnum,
                                         __dram void *rbase);
 
+
+/**
+ * Check for a cfg_msg  on a NFD ME
+ * @param cfg_msg           message struct to fill
+ * @param cfg_sig           signal to check for messages
+ * @param rnum              ring number to fetch messages from
+ * @param rbase             base address of the ring to use
+ */
 __intrinsic void vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                                         SIGNAL *cfg_sig,
                                         unsigned int rnum,
                                         __dram void *rbase);
 
+/**
+ * Notify the host that a cfg_msg has been processed
+ * @param cfg_msg       message listing the queue that has been configured
+ */
 __intrinsic void vnic_cfg_app_complete_cfg_msg(
     __xread struct vnic_cfg_msg *cfg_msg);
 
+
+/**
+ * Pass this message to the next stage, and check for a new message
+ * @param cfg_msg           completed message, refilled with new message
+ * @param cfg_sig_remote    signal to set for next recipient
+ * @param next_me           ME to signal
+ * @param rnum_out          output ring number
+ * @param rbase_out         output ring address
+ * @param rnum_in           input ring number
+ * @param rbase_in          input ring address
+ */
 __intrinsic void vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                                            __remote SIGNAL *cfg_sig_remote,
                                            unsigned int next_me,

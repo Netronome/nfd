@@ -26,10 +26,23 @@
 
 #define NFD_WQS_DECLARE(_isl) NFD_WQS_DECLARE_IND(_isl)
 
+/**
+ * Perform shared configuration for notify
+ */
 extern void notify_setup_shared();
 
+/**
+ * Perform per context initialisation (for CTX 1 to 7)
+ */
 extern void notify_setup();
 
+/**
+ * Dequeue a batch of "issue_dma" messages and process that batch, incrementing
+ * TX.R for the queue and adding an output message to one of the PCI.IN work
+ * queueus.  An output message is only sent for the final message for a packet
+ * (EOP bit set).  A count of the total number of descriptors in the batch is
+ * added by the "issue_dma" block.
+ */
 extern void notify();
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_NOTIFY_H_ */

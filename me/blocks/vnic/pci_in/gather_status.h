@@ -30,8 +30,14 @@ struct tx_notify_status {
     unsigned int dma_served;
 };
 
+/**
+ * Initialise the gather and notify status output
+ */
 extern void init_gather_status();
 
+/**
+ * Show gather and notify status in transfer registers
+ */
 extern void gather_status();
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_GATHER_STATUS_H_ */

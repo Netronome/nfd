@@ -39,6 +39,7 @@ __export __shared __cls __align(DESC_RING_SZ) struct nfd_pci_in_tx_desc
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
 
+/* XXX clean up naming and intialise value with declaration */
 void
 dummy_init_gather_shared()
 {
@@ -78,6 +79,7 @@ dummy_init_gather_shared()
     pcie_dma_cfg_set_one(PCIE_ISL, TX_GATHER_CFG_REG, cfg);
 }
 
+/* XXX clean up function naming */
 void
 dummy_init_gather()
 {
@@ -95,6 +97,8 @@ dummy_init_gather()
     descr_tmp.cpp_addr_hi = 0;
 }
 
+
+/* XXX unused. Remove. */
 __intrinsic void
 dummy_gather_vnic_setup(void *cfg_msg_in, unsigned int queue_size)
 {
