@@ -28,7 +28,7 @@ struct precache_state {
 
 
 __shared __lmem unsigned int buf_store[TX_BUF_STORE_SZ];
-static unsigned int buf_store_start; /* Units: bytes */
+static __shared unsigned int buf_store_start; /* Units: bytes */
 static struct precache_state state = {0, 0};
 static SIGNAL_PAIR precache_sig;
 
@@ -106,11 +106,8 @@ _precache_bufs_copy(unsigned int num)
         __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
         __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
         __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[TX_BUF_STORE_PTR, --, b, *$index];
     }
-
-    /* Return to last filled slot */
-    __asm alu[--, --, b, TX_BUF_STORE_PTR--];
 }
 
 
