@@ -10,28 +10,31 @@
 #include <nfp.h>
 #include <nfp/me.h>
 
-/**
- * Configure CTX enables to put to next neighbour or self
- * @param self          use own next neighbour registers
- *
- * If self tests true, configure ring to the same ME, else configure ring
- * to the next neighbour.  This method must be called from the ME that
- * will put onto ring.
- */
-__intrinsic void nn_ring_init_send(unsigned int self);
 
 /**
- * Configure next neighbour ring behaviour
- * @param self          use own next neighbour registers
- * @param empty_assert  threshold for the NN_EMPTY status signal
- *
- * If self tests true, configure ring to the same ME, else configure ring
- * to the next neighbour.  The NN_put and NN_get CSRs are also reset to zero.
- * This method must be called from the ME that will get from the ring.  See
- * the data book for possible 'empty_assert' values.
+ * The desired NN ring mode (CtxEnables:NNreceiveConfig) must be known
+ * at compile time by NFCC to generate correct delays between ring accesses.
+ * Therefore, the commandline option "-Qnn_mode" should be used to configure
+ * the desired mode rather than "_init_csr" or code that modifies "CtxEnables"
+ * directly.
  */
-__intrinsic void nn_ring_init_receive(unsigned int self,
-                                      unsigned int empty_assert);
+
+/**
+ * Configure NN put and get pointers at init time.
+ * The pointers on the receiving ME determine the behaviour of the NN ring.
+ */
+#define NN_RING_ZERO_PTRS       \
+    _init_csr("mecsr:NNPut 0"); \
+    _init_csr("mecsr:NNGet 0")
+
+/**
+ * Configure the NN ring empty assert setting in CtxEnables.  This should
+ * be set on the receiving ME.
+ * See the databook for a description of possible values.
+ */
+#define NN_RING_EMPTY_ASSERT_SET(_x)                        \
+    _init_csr("mecsr:CtxEnables.NextNeighborEmptyAssert " #_x)
+
 
 /**
  * Test NN_EMPTY status signal

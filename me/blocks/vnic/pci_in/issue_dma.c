@@ -84,6 +84,10 @@ static SIGNAL tx_desc_sig, msg_sig, desc_order_sig, dma_order_sig;
 static SIGNAL dma_sig0, dma_sig1, dma_sig2, dma_sig3;
 static SIGNAL_MASK wait_msk;
 
+/* Configure the NN ring */
+NN_RING_ZERO_PTRS;
+NN_RING_EMPTY_ASSERT_SET(0);
+
 
 void
 issue_dma_setup_shared()
@@ -97,8 +101,6 @@ issue_dma_setup_shared()
 
     ctassert(__is_log2(MAX_VNICS));
     ctassert(__is_log2(MAX_VNIC_QUEUES));
-
-    nn_ring_init_receive(0, 0);             /* TEMP */
 
     cls_ring_setup(TX_ISSUED_RING_NUM, tx_issued_ring, sizeof tx_issued_ring);
 

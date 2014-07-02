@@ -45,11 +45,6 @@ gather_setup_shared()
     struct pcie_dma_cfg_one cfg;
 
     /*
-     * Initialise the NN ring
-     */
-    nn_ring_init_send(0);
-
-    /*
      * Initialise the CLS TX descriptor ring
      */
     desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;

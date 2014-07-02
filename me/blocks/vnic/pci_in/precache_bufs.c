@@ -19,7 +19,10 @@
 #include <vnic/pci_in/precache_bufs.h>
 
 
+/* Configure *l$index3 to be a global pointer, and
+ * set up a convenience define */
 #define TX_BUF_STORE_PTR *l$index3
+_init_csr("mecsr:CtxEnables.LMAddr3Global 1");
 
 struct precache_state {
     unsigned int pending_fetch:1;
@@ -39,10 +42,6 @@ extern __shared __gpr unsigned int data_dma_seq_compl;
 extern __shared __gpr unsigned int data_dma_seq_served;
 extern __shared __gpr unsigned int data_dma_seq_issued;
 __shared __gpr unsigned int data_dma_seq_safe = 0;
-
-
-/* XXX Why can't this be set to 1? */
-/* _init_csr("mecsr:CtxEnables.LMAddr3Global 1"); */
 
 
 /*
