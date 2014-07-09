@@ -16,7 +16,7 @@
 
 /* XXX probably best to incorporate rx_w into rx_queue_info in 2ME firmwares */
 struct send_desc_info {
-    unsigned int rx_w;
+    unsigned int fl_u;
     unsigned int ring_sz_msk;
     unsigned int requester_id;
     unsigned int ring_base_hi;
@@ -37,8 +37,6 @@ send_desc_vnic_setup(void *cfg_msg_in, unsigned int queue_size)
 {
     struct pci_out_cfg_msg *cfg_msg;
 
-    /* XXX make this code maintain state and re-enter
-     * to support case where data is read from emem */
     unsigned int start_queue;
     unsigned int end_queue;
     unsigned int queue;
@@ -61,7 +59,7 @@ send_desc_vnic_setup(void *cfg_msg_in, unsigned int queue_size)
         queue_data[bmsk_queue].spare0 = 0;
         queue_data[bmsk_queue].ring_base_hi = 0;
         queue_data[bmsk_queue].ring_base_lo = (0x56<<24) | (queue<<16);
-        queue_data[bmsk_queue].rx_w = 0;
+        queue_data[bmsk_queue].fl_u = 0;
     }
 
     /* Indicate completion */

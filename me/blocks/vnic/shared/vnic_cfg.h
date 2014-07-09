@@ -222,7 +222,7 @@ __intrinsic void vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg,
  * If the queue must be "up'ed", 'ring_sz' and 'ring_base' will also be valid.
  */
 __intrinsic void vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg,
-                                   unsigned char *queue, unsigned char *ring_sz,
+                                   unsigned int *queue, unsigned char *ring_sz,
                                    unsigned int ring_base[2],
                                    enum vnic_cfg_component comp);
 

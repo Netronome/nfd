@@ -58,17 +58,12 @@
 #define TX_DATA_DMA_TOKEN       2
 #define TX_DATA_OFFSET          64
 
-
 #define TX_GATHER_EVENT_TYPE    5
 #define TX_DATA_EVENT_TYPE      6
 #define TX_DATA_IGN_EVENT_TYPE  7
-/* #define RX_FL_FETCH_EVENT_TYPE  13 */
-/* #define RX_DATA_EVENT_TYPE      14 */
 
 #define TX_GATHER_EVENT_FILTER          9
 #define TX_DATA_EVENT_FILTER            10
-/* #define RX_FL_FETCH_EVENT_FILTER        11 */
-/* #define RX_DATA_EVENT_FILTER            12 */
 
 #define VNIC_CFG_PCI_OUT(_x)    __nfp_idstr2meid("pcie##_x##.me0")
 

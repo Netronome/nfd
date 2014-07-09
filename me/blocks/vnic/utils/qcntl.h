@@ -54,7 +54,7 @@ enum qc_ptr_type {
  * contained in ConfigStatusHigh.  To use the output, 'value' can be allocated
  * to the '__raw' entry in the appropriate struct, or cast to the desired type.
  */
-__intrinsic void  __qc_read(unsigned char pcie_isl, unsigned char queue,
+__intrinsic void  __qc_read(unsigned char pcie_isl, unsigned int queue,
                             enum qc_ptr_type ptr,
                             __xread unsigned int *value,
                             sync_t sync, SIGNAL *sig);
@@ -72,7 +72,7 @@ __intrinsic void  __qc_read(unsigned char pcie_isl, unsigned char queue,
  * pointer or the configuration is written.  See the data book for more
  * information.
  */
-__intrinsic void __qc_write(unsigned char pcie_isl, unsigned char queue,
+__intrinsic void __qc_write(unsigned char pcie_isl, unsigned int queue,
                             __xwrite unsigned int *value,
                             unsigned int offset, sync_t sync, SIGNAL *sig);
 
@@ -88,7 +88,7 @@ __intrinsic void __qc_write(unsigned char pcie_isl, unsigned char queue,
  * separate signals for each write.  The method swaps on these signals
  * before returning.
  */
-__intrinsic void qc_init_queue(unsigned char pcie_isl, unsigned char queue,
+__intrinsic void qc_init_queue(unsigned char pcie_isl, unsigned int queue,
                                struct qc_queue_config *cfg);
 
 /**
@@ -109,13 +109,13 @@ __intrinsic void qc_init_queue(unsigned char pcie_isl, unsigned char queue,
  * the event bus.  Depending on the queue controller configuration, either
  * all 6 'event_data' bits are included, or just the top 4 bits are included.
  */
-__intrinsic void __qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
+__intrinsic void __qc_ping_queue(unsigned char pcie_isl, unsigned int queue,
                                  unsigned int event_data,
                                  enum pcie_qc_event event_type,
                                  __xwrite unsigned int *xfer,
                                  sync_t sync, SIGNAL *sig);
 
-__intrinsic void qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
+__intrinsic void qc_ping_queue(unsigned char pcie_isl, unsigned int queue,
                                unsigned int event_data,
                                enum pcie_qc_event event_type);
 
@@ -133,12 +133,12 @@ __intrinsic void qc_ping_queue(unsigned char pcie_isl, unsigned char queue,
  * the event bus depending on the state of the queue flags after the add, and
  * the queue configuration.
  */
-__intrinsic void __qc_add_to_ptr(unsigned char pcie_isl, unsigned char queue,
+__intrinsic void __qc_add_to_ptr(unsigned char pcie_isl, unsigned int queue,
                                  enum qc_ptr_type ptr,unsigned int value,
                                  __xwrite unsigned int *xfer,
                                  sync_t sync, SIGNAL *sig);
 
-__intrinsic void qc_add_to_ptr(unsigned char pcie_isl, unsigned char queue,
+__intrinsic void qc_add_to_ptr(unsigned char pcie_isl, unsigned int queue,
                                enum qc_ptr_type ptr, unsigned int value);
 
 #endif /* !_BLOCKS__VNIC_UTILS_QCNTL_H_ */

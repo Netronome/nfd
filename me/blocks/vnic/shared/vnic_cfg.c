@@ -590,7 +590,7 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
 }
 
 __intrinsic void
-vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned char *queue,
+vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned int *queue,
                   unsigned char *ring_sz, unsigned int ring_base[2],
                   enum vnic_cfg_component comp)
 {

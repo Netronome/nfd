@@ -9,6 +9,8 @@
 #include <assert.h>
 #include <nfp.h>
 
+#include <nfp6000/nfp_event.h>
+
 #include <vnic/pci_in/service_qc.h>
 
 #include <vnic/pci_in_cfg.h>
@@ -48,7 +50,9 @@ service_qc_setup ()
 
     /* Configure TXQ autopush filters */
     init_bitmask_filters(&tx_ap_xfers, &tx_ap_s0, &tx_ap_s1, &tx_ap_s2,
-                         &tx_ap_s3,(TXQ_EVENT_DATA<<6), TXQ_EVENT_START);
+                         &tx_ap_s3,(TXQ_EVENT_DATA<<6) | TXQ_START,
+                         NFP_EVENT_TYPE_FIFO_NOT_EMPTY,
+                         TXQ_EVENT_START);
 
 
     /* XXX temporarily setup a general last event filter to see what events
@@ -66,9 +70,10 @@ __intrinsic void
 service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
 {
     struct qc_queue_config txq;
-    unsigned char queue, ring_sz;
+    unsigned int queue;
+    unsigned char ring_sz;
     unsigned int ring_base[2];
-    unsigned int bmsk_queue;
+    __gpr unsigned int bmsk_queue;
 
     vnic_cfg_proc_msg(cfg_msg, &queue, &ring_sz, ring_base, VNIC_CFG_PCI_IN);
 
@@ -79,7 +84,7 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
     queue += cfg_msg->vnic * MAX_VNIC_QUEUES;
     bmsk_queue = map_natural_to_bitmask(queue);
 
-    txq.watermark    = PCIE_QC_WM_4;
+    txq.watermark    = NFP_QC_STS_HI_WATERMARK_4;
     txq.event_data   = TXQ_EVENT_DATA;
     txq.ptr          = 0;
 
@@ -96,9 +101,9 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;
         queue_data[bmsk_queue].ring_base_lo = ring_base[0];
 
-        txq.event_type   = PCIE_QC_EVENT_NOT_EMPTY;
+        txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY;
         txq.size         = ring_sz - 8; /* XXX add define for size shift */
-        qc_init_queue(PCIE_ISL, queue<<1 + TXQ_START, &txq);
+        qc_init_queue(PCIE_ISL, (queue<<1) | TXQ_START, &txq);
     } else {
         /* Down the queue:
          * - Prevent it issuing events
@@ -109,17 +114,17 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
          * - Try to count pending packets? Host responsibility? */
 
         /* Clear active and pending bitmask bits */
-        clear_queue(bmsk_queue, &active_bmsk);
-        clear_queue(bmsk_queue, &pending_bmsk);
+        clear_queue(&bmsk_queue, &active_bmsk);
+        clear_queue(&bmsk_queue, &pending_bmsk);
 
         /* Clear queue LM state */
         queue_data[bmsk_queue].tx_w = 0;
         queue_data[bmsk_queue].tx_s = 0;
 
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
-        txq.event_type   = PCIE_QC_EVENT_NO_EVENT;
+        txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
         txq.size         = 0;
-        qc_init_queue(PCIE_ISL, queue<<1 + TXQ_START, &txq);
+        qc_init_queue(PCIE_ISL, (queue<<1) | TXQ_START, &txq);
     }
 }
 

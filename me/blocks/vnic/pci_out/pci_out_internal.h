@@ -15,8 +15,8 @@ struct rx_queue_info {
     unsigned int spare0:24;
     unsigned int ring_base_hi:8;
     unsigned int ring_base_lo;
-    unsigned int rx_w;
-    unsigned int dummy[1];
+    unsigned int fl_a;
+    unsigned int fl_u;
 };
 
 /* NB: this struct must be compatible with vnic_cfg_msg */

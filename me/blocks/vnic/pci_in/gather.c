@@ -153,6 +153,7 @@ gather()
              * queue. desc_ring offset depends on the batches processed, each
              * batch having it's own slot in the ring.
              */
+            /* XXX DMA command size is not needed, TX desc size is! */
             dma_cmd_sz = sizeof(struct nfp_pcie_dma_cmd);
             pcie_addr_off = (queue_data[queue].tx_s &
                              queue_data[queue].ring_sz_msk);
@@ -202,7 +203,7 @@ gather()
              * Clear pending_bmsk so we don't check it again
              * unless something resets the bitmask
              */
-            clear_queue(queue, &pending_bmsk);
+            clear_queue(&queue, &pending_bmsk);
         }
     }
 

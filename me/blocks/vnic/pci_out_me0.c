@@ -46,17 +46,22 @@ main(void)
     if (ctx() == 0) {
         /* CTX0 main loop */
         for (;;) {
+            cache_desc();
+
             cache_desc_status();
 
+            /* Either check for a message, or perform one tick of processing
+             * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
                 vnic_cfg_check_cfg_msg(&cfg_msg, &vnic_cfg_sig_pci_out,
                                        VNIC_CFG_RING_NUM(PCIE_ISL, 0),
                                        &VNIC_CFG_RING_ADDR(PCIE_ISL, 0));
-            }
 
-            if (cfg_msg.msg_valid) {
-
-                cache_desc_vnic_setup((void *) &cfg_msg, PCIE_QC_SZ_8k + 8);
+                if (cfg_msg.msg_valid) {
+                    vnic_cfg_parse_msg((void *) &cfg_msg, VNIC_CFG_PCI_OUT);
+                }
+            } else {
+                cache_desc_vnic_setup((void *) &cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
                     vnic_cfg_complete_cfg_msg(&cfg_msg,

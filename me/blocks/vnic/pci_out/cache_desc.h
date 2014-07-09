@@ -7,10 +7,13 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_CACHE_DESC_H_
 #define _BLOCKS__VNIC_PCI_OUT_CACHE_DESC_H_
 
+#include <vnic/shared/vnic_cfg.h>
+
 extern void cache_desc_setup_shared();
 
-__intrinsic void cache_desc_vnic_setup(void *cfg_msg_in,
-                                       unsigned int queue_size);
+__intrinsic void cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg_in);
+
+extern void cache_desc();
 
 #endif /* !_BLOCKS__VNIC_PCI_OUT_CACHE_DESC_H_ */
 

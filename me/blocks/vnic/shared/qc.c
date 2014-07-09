@@ -75,12 +75,12 @@ select_queue(__gpr unsigned int *queue, __shared __gpr struct qc_bitmask *bmsk)
 }
 
 __intrinsic void
-clear_queue(unsigned int queue, __shared __gpr struct qc_bitmask *bmsk)
+clear_queue(__gpr unsigned int *queue, __shared __gpr struct qc_bitmask *bmsk)
 {
-    if (queue & 32) {
-        bmsk->bmsk_hi &= ~(1 << (queue & 31));
+    if (*queue & 32) {
+        bmsk->bmsk_hi &= ~(1 << (*queue & 31));
     } else {
-        bmsk->bmsk_lo &= ~(1 << queue);
+        bmsk->bmsk_lo &= ~(1 << *queue);
     }
 }
 
@@ -89,7 +89,7 @@ init_qc_queues(unsigned char pcie_isl, struct qc_queue_config *cfg,
                unsigned char start_queue, unsigned char stride,
                unsigned char num_queues)
 {
-    __gpr unsigned char queue;
+    __gpr unsigned int queue;
     unsigned char end_queue;
 
     /* ctassert(__is_ct_const(start_queue)); */
@@ -126,7 +126,8 @@ __intrinsic void
 init_bitmask_filters(__xread struct qc_xfers *xfers,
                      volatile SIGNAL *s0, volatile SIGNAL *s1,
                      volatile SIGNAL *s2, volatile SIGNAL *s3,
-                     unsigned int event_data, unsigned int start_handle)
+                     unsigned int event_data, unsigned int event_type,
+                     unsigned int start_handle)
 {
     __cls struct event_cls_filter *event_filter;
     struct nfp_em_filter_status status;
@@ -141,7 +142,7 @@ init_bitmask_filters(__xread struct qc_xfers *xfers,
     ctassert(start_handle + 4 < 16);
 
     status.__raw = 0; /* bitmask32 requires no further settings */
-    event_match = NFP_EVENT_MATCH(pcie_provider, event_data, 0);
+    event_match = NFP_EVENT_MATCH(pcie_provider, event_data, event_type);
 
     _INIT_ONE_FILTER(0, start_handle);
     _INIT_ONE_FILTER(1, start_handle + 1);
@@ -218,7 +219,7 @@ check_queues(void *queue_info_struct,
      * confirm it using __is_ct_const in this case.
      */
 
-    ctassert(c->event_type == NFP_QC_STS_LO_EVENT_TYPE_LO_WATERMARK ||
+    ctassert(c->event_type == NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK ||
              c->event_type == NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY);
 
     ctassert(__is_in_lmem(queue_info_struct));
@@ -243,6 +244,8 @@ check_queues(void *queue_info_struct,
         }
 
         /* Test remaining work on the queue */
+        /* XXX the factor of 7 is probably about right for PCI.IN but a bit
+         * large for PCI.OUT. */
         if ((queues[queue].wptr - queues[queue].sptr) < (7 * c->batch_sz)) {
             /* We have found a queue to poll.
              * Break and reread wptr */
@@ -300,7 +303,7 @@ check_queues(void *queue_info_struct,
      * Set the queue to not active and ping the queue to generate
      * an event for outstanding pointer writes
      */
-    clear_queue(queue, active_bmsk);
+    clear_queue(&queue, active_bmsk);
     qc_ping_queue(PCIE_ISL, qc_queue, c->event_data, c->event_type);
 
     return 0;
