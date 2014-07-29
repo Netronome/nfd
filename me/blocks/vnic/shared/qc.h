@@ -118,6 +118,16 @@ __intrinsic void clear_queue(__gpr unsigned int *queue,
                              __shared __gpr struct qc_bitmask *bmsk);
 
 /**
+ * Set the bit for a queue in the bitmask provided
+ *
+ * @param queue         The queue bit to set
+ * @param bmsk          The bitmask to work on
+ */
+__intrinsic void set_queue(__gpr unsigned int *queue,
+                           __shared __gpr struct qc_bitmask *bmsk);
+
+
+/**
  * Configure a group of queue controller queues
  *
  * @param pcie_isl      PCIe Island to configure

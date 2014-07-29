@@ -85,6 +85,16 @@ clear_queue(__gpr unsigned int *queue, __shared __gpr struct qc_bitmask *bmsk)
 }
 
 __intrinsic void
+set_queue(__gpr unsigned int *queue, __shared __gpr struct qc_bitmask *bmsk)
+{
+    if (*queue & 32) {
+        bmsk->bmsk_hi |= (1 << (*queue & 31));
+    } else {
+        bmsk->bmsk_lo |= (1 << *queue);
+    }
+}
+
+__intrinsic void
 init_qc_queues(unsigned char pcie_isl, struct qc_queue_config *cfg,
                unsigned char start_queue, unsigned char stride,
                unsigned char num_queues)

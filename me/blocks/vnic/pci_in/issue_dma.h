@@ -32,4 +32,3 @@ void issue_dma();
 
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_ISSUE_DMA_H_ */
-

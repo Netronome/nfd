@@ -11,7 +11,12 @@
 
 extern void cache_desc_setup_shared();
 
+extern void cache_desc_setup();
+
 __intrinsic void cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg_in);
+
+__intrinsic unsigned int cache_desc_compute_fl_addr(__gpr unsigned int *queue,
+                                                    unsigned int seq);
 
 extern void cache_desc();
 

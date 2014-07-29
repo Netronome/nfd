@@ -32,7 +32,7 @@
 
 /* XXX move to a shared file */
 #define RX_FL_CACHE_SZ_PER_QUEUE   \
-    (RX_FL_CACHE_BUFS_PER_QUEUE * sizeof(struct nfd_pci_out_rx_desc))
+    (RX_FL_CACHE_BUFS_PER_QUEUE * sizeof(struct nfd_pci_out_fl_desc))
 
 /**
  * State variables for PCI.OUT queue controller accesses
@@ -50,7 +50,7 @@ __shared __gpr struct qc_bitmask urgent_bmsk;
 __shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
 
 __export __ctm __align(MAX_RX_QUEUES * RX_FL_CACHE_SZ_PER_QUEUE)
-    struct nfd_pci_out_rx_desc
+    struct nfd_pci_out_fl_desc
     fl_cache[MAX_RX_QUEUES][RX_FL_CACHE_BUFS_PER_QUEUE];
 
 /* NB: MAX_RX_QUEUES * sizeof(unsigned int) <= 256 */
@@ -61,11 +61,11 @@ static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 static __gpr unsigned int fl_cache_addr_lo;
 static __gpr unsigned int fl_cache_credits_base = 0;
 
-static unsigned int fl_cache_dma_seq_issued = 0;
-static unsigned int fl_cache_dma_seq_compl = 0;
-static unsigned int fl_cache_dma_seq_served = 0;
+static __gpr unsigned int fl_cache_dma_seq_issued = 0;
+static __gpr unsigned int fl_cache_dma_seq_compl = 0;
+static __gpr unsigned int fl_cache_dma_seq_served = 0;
 static volatile __xread unsigned int fl_cache_event_xfer;
-static volatile SIGNAL fl_cache_event_sig;
+static SIGNAL fl_cache_event_sig;
 
 static __shared __lmem unsigned int fl_cache_pending[RX_FL_FETCH_MAX_IN_FLIGHT];
 
@@ -102,6 +102,7 @@ _complete_fetch()
             RX_FL_FETCH_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             RX_FL_FETCH_EVENT_FILTER);
+        __implicit_write(&fl_cache_event_sig);
 
         /* XXX how many updates can we receive at once? Do we need to
          * throttle this? */
@@ -162,7 +163,7 @@ cache_desc_setup_shared()
     cfg.end_pad     = 0;
     cfg.start_pad   = 0;
     /* Ordering settings? */
-    cfg.target_64   = 0;
+    cfg.target_64   = 1;
     cfg.cpp_target  = 7;
     pcie_dma_cfg_set_one(PCIE_ISL, RX_FL_CFG_REG, cfg);
 
@@ -174,7 +175,7 @@ cache_desc_setup_shared()
      * For dma_mode, we technically only want to overwrite the "source"
      * field, i.e. 12 of the 16 bits.
      */
-    descr_tmp.length = RX_FL_BATCH_SZ * sizeof(struct nfd_pci_out_rx_desc) - 1;
+    descr_tmp.length = RX_FL_BATCH_SZ * sizeof(struct nfd_pci_out_fl_desc) - 1;
     descr_tmp.rid_override = 1;
     descr_tmp.trans_class = 0;
     descr_tmp.cpp_token = 0;
@@ -184,6 +185,13 @@ cache_desc_setup_shared()
     fl_cache_addr_lo = ((unsigned long long) fl_cache & 0xffffffff);
     fl_cache_credits_base = (((unsigned long long) nfd_pci_out_credits >> 8) &
                              0xffffffff);
+}
+
+
+void
+cache_desc_setup()
+{
+    fl_cache_addr_lo = ((unsigned long long) fl_cache & 0xffffffff);
 }
 
 
@@ -219,10 +227,14 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
         queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
         queue_data[bmsk_queue].spare0 = 0;
+        queue_data[bmsk_queue].up = 1;
         queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;
         queue_data[bmsk_queue].ring_base_lo = ring_base[0];
         queue_data[bmsk_queue].fl_a = 0;
         queue_data[bmsk_queue].fl_u = 0;
+        queue_data[bmsk_queue].rx_w = 0;
+
+        /* XXX reset credits */
 
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK;
         rxq.size         = ring_sz - 8; /* XXX add define for size shift */
@@ -246,6 +258,12 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         /* XXX check what is required for recycling host buffers */
         queue_data[bmsk_queue].fl_w = 0;
         queue_data[bmsk_queue].fl_s = 0;
+        queue_data[bmsk_queue].up = 0;
+        queue_data[bmsk_queue].fl_a = 0;
+        queue_data[bmsk_queue].fl_u = 0;
+        queue_data[bmsk_queue].rx_w = 0;
+
+        /* XXX reset credits */
 
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
@@ -321,19 +339,15 @@ _fetch_fl(__gpr unsigned int *queue)
         /* Compute DMA address offsets */
         pcie_addr_off = (queue_data[*queue].fl_s &
                          queue_data[*queue].ring_sz_msk);
-        pcie_addr_off = pcie_addr_off * sizeof(struct nfd_pci_out_rx_desc);
-        fl_cache_off = (queue_data[*queue].fl_s &
-                        (RX_FL_CACHE_BUFS_PER_QUEUE - 1));
-        fl_cache_off = fl_cache_off * sizeof(struct nfd_pci_out_rx_desc);
+        pcie_addr_off = pcie_addr_off * sizeof(struct nfd_pci_out_fl_desc);
 
         /* Complete descriptor */
         descr_tmp.pcie_addr_hi = queue_data[*queue].ring_base_hi;
         descr_tmp.pcie_addr_lo = (queue_data[*queue].ring_base_lo |
                                   pcie_addr_off);
-        /* How to manage this struct? */
-        descr_tmp.cpp_addr_lo =  (fl_cache_addr_lo |
-                                  (*queue * RX_FL_CACHE_SZ_PER_QUEUE ) |
-                                  fl_cache_off);
+
+        descr_tmp.cpp_addr_lo =
+            cache_desc_compute_fl_addr(queue, queue_data[*queue].fl_s);
         descr_tmp.rid = queue_data[*queue].requester_id;
         /* Can replace with ld_field instruction if 8bit seqn is enough */
         pcie_dma_set_event(&descr_tmp, RX_FL_FETCH_EVENT_TYPE,
@@ -361,6 +375,20 @@ _fetch_fl(__gpr unsigned int *queue)
 
     /* Indicate no work done on queue */
     return -1;
+}
+
+
+__intrinsic unsigned int
+cache_desc_compute_fl_addr(__gpr unsigned int *queue, unsigned int seq)
+{
+    unsigned int ret;
+
+    ret = seq & (RX_FL_CACHE_BUFS_PER_QUEUE - 1);
+    ret *= sizeof(struct nfd_pci_out_fl_desc);
+    ret |= (*queue * RX_FL_CACHE_SZ_PER_QUEUE );
+    ret |= fl_cache_addr_lo;
+
+    return ret;
 }
 
 

@@ -24,7 +24,13 @@ reorder_start(unsigned int start_ctx, SIGNAL *sig)
     val= (NFP_MECSR_SAME_ME_SIGNAL_SIG_NO(__signal_number(sig)) |
           NFP_MECSR_SAME_ME_SIGNAL_CTX(start_ctx));
     local_csr_write(NFP_MECSR_SAME_ME_SIGNAL, val);
+
+    /* This method is only called from one CTX, which might not even
+     * participate in the ordering, so we do not issue an
+     * __implicit_write on sig.  The signal is possibly unused on this CTX.
+     * The user can issue the __implicit_write if required. */
 }
+
 
 __intrinsic void
 reorder_done(unsigned int start_ctx, SIGNAL *sig)
@@ -45,7 +51,13 @@ reorder_done(unsigned int start_ctx, SIGNAL *sig)
     }
 
     local_csr_write(NFP_MECSR_SAME_ME_SIGNAL, val);
+
+    /* Although another thread receives this particular signal, that thread
+     * should return the same signal later, so allowing the next context to go
+     * implicitly causes sig to become set in this context. */
+    __implicit_write(sig);
 }
+
 
 __intrinsic void
 reorder_self(SIGNAL *sig)
@@ -57,6 +69,21 @@ reorder_self(SIGNAL *sig)
            NFP_MECSR_SAME_ME_SIGNAL_CTX(ctx));
 
     local_csr_write(NFP_MECSR_SAME_ME_SIGNAL, val);
+    __implicit_write(sig);
+}
+
+
+__intrinsic void
+reorder_future_sig(SIGNAL *sig, unsigned int cycles)
+{
+    unsigned sig_num, tslo;
+
+    sig_num = __signal_number(sig);
+    tslo = local_csr_read(NFP_MECSR_TIMESTAMP_LOW);
+    tslo += cycles >> 4;
+    local_csr_write(NFP_MECSR_ACTIVE_CTX_FUTURE_COUNT, tslo);
+    local_csr_write(NFP_MECSR_ACTIVE_FUTURE_COUNT_SIGNAL, sig_num);
+    __implicit_write(sig);
 }
 
 

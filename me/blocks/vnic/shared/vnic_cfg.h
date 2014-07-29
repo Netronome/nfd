@@ -10,6 +10,9 @@
 #include <nfp/mem_ring.h>
 #include <ns_vnic_ctrl.h>
 
+
+/* _declare_resource("clsrings island 16") */
+
 /* XXX Magic number currently
  * Set to official version number before release */
 #define VNIC_CFG_VERSION 0x1248
@@ -38,7 +41,7 @@
 
 #define VNIC_CFG_QUEUE          1
 #define VNIC_CFG_EVENT_DATA     (2<<4)
-#define VNIC_CFG_EVENT_FILTER   13
+#define VNIC_CFG_EVENT_FILTER   14
 
 #define VNIC_CFG_DECLARE(_sig, _next_sig) \
     __visible SIGNAL _sig;                \

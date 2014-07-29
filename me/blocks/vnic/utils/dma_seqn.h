@@ -26,7 +26,7 @@
 __intrinsic void dma_seqn_ap_setup(unsigned int filter_num, unsigned int ap_num,
                                    unsigned int type,
                                    volatile __xread unsigned int *xfer,
-                                   volatile SIGNAL *sig);
+                                   SIGNAL *sig);
 
 
 /**
@@ -35,7 +35,7 @@ __intrinsic void dma_seqn_ap_setup(unsigned int filter_num, unsigned int ap_num,
  * @param compl         "completed" sequence number to update
  */
 __intrinsic void dma_seqn_advance(volatile __xread unsigned int *xfer,
-                                  unsigned int *compl);
+                                  __gpr unsigned int *compl);
 
 #endif /* !_BLOCKS__VNIC_UTILS_DMA_SEQN_H_ */
 

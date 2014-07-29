@@ -19,7 +19,7 @@
 __intrinsic void
 dma_seqn_ap_setup(unsigned int filter_num, unsigned int ap_num,
                   unsigned int type, volatile __xread unsigned int *xfer,
-                  volatile SIGNAL *sig)
+                  SIGNAL *sig)
 {
     unsigned int ctx = ctx();
     unsigned int meid = __MEID;
@@ -58,11 +58,14 @@ dma_seqn_ap_setup(unsigned int filter_num, unsigned int ap_num,
         ap_num,
         NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
         ap_num);
+
+    /* Mark the signal used on this thread. */
+    __implicit_write(sig);
 }
 
 
 __intrinsic void
-dma_seqn_advance(volatile __xread unsigned int *xfer, unsigned int *compl)
+dma_seqn_advance(volatile __xread unsigned int *xfer, __gpr unsigned int *compl)
 {
     unsigned int seqn_inc;
     struct nfp_event_match event;

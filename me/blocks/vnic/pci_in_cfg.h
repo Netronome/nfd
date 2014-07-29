@@ -9,29 +9,24 @@
 
 #define MAX_TX_QUEUES       64
 
+#define TX_PCIE0_WQ_EMEM    0
+#define TX_PCIE1_WQ_EMEM    0
+#define TX_PCIE2_WQ_EMEM    1
+#define TX_PCIE3_WQ_EMEM    1
+
 #define MAX_TX_BATCH_SZ     4
 #define DESC_BATCH_Q_SZ     128
 #define TX_ISSUED_RING_SZ   128
 #define TX_ISSUED_RING_RES  32
 #define TX_ISSUED_RING_NUM  15      /* XXX use generic resource allocation */
 
-#ifndef NFD_WQ_SZ
-#define NFD_WQ_SZ           (16 * 1024)
-#endif
-
-#define NFD_NUM_WQS         8
 
 #define TX_BUF_STORE_SZ     64
 
-/* XXX use generic resource allocation */
-#define NFD_WQS_NUM_PCIE0   32
-#define NFD_WQS_NUM_PCIE1   40
-#define NFD_WQS_NUM_PCIE2   48
-#define NFD_WQS_NUM_PCIE3   56
 
 /* XXX use BLM generic resource allocation */
 #define TX_BLM_POOL         75
-#define TX_BLM_RADDR        __LoadTimeConstant("__addr_emem0")
+#define TX_BLM_RADDR        __LoadTimeConstant("__addr_emem1")
 #define TX_BUF_RECACHE_WM   16
 
 #define TXQ_EVENT_START     0

@@ -20,7 +20,7 @@ struct vnic_cfg_msg cfg_msg;
 /* Fake BLM */
 #define BUF_SZ  (10 * 1024)
 #define BUF_NUM 128
-__export __emem_n(0) __align(4096 * 4) unsigned int fake_blm_q[4096];
+__export __emem_n(1) __align(4096 * 4) unsigned int fake_blm_q[4096];
 __shared __gpr int ring_wait = 0;
 __xwrite unsigned int fake_bufs[8];
 __shared __gpr mem_ring_addr_t fake_blm_addr;

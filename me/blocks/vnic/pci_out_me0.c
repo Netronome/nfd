@@ -14,7 +14,7 @@
 
 #include <vnic/pci_out/cache_desc.h>
 #include <vnic/pci_out/cache_desc_status.h>
-#include <vnic/pci_out/send_desc.h>
+#include <vnic/pci_out/stage_batch.h>
 #include <vnic/shared/vnic_cfg.h>
 
 VNIC_CFG_DECLARE(vnic_cfg_sig_pci_out, VNIC_CFG_SIG_NEXT_ME);
@@ -30,14 +30,31 @@ main(void)
 
         vnic_cfg_init_cfg_msg(&vnic_cfg_sig_pci_out, &cfg_msg);
 
-        cache_desc_setup_shared();
+        /* Ensure rings are safe to use ASAP */
+        stage_batch_setup_rings();
 
-        send_desc_setup_shared();
+        /* Must run before PCI.OUT host interaction, and before stage_batch */
+        cache_desc_setup_shared();
 
         cache_desc_status_setup();
 
-    } else {
+        /* This method must complete before stage_batch may run.
+         * (stage_batch permits issue_dma and send_desc to go.) */
+        distr_seqn_setup_shared();
 
+        send_desc_setup_shared();
+
+        /* CTX 1-7 will stall until this starts ordering stages */
+        stage_batch_setup_shared();
+
+    } else {
+        /* These methods do not have dependencies on the
+         * setup_shared() methods. */
+        cache_desc_setup();
+
+        stage_batch_setup();
+
+        send_desc_setup();
     }
 
     /*
@@ -49,6 +66,8 @@ main(void)
             cache_desc();
 
             cache_desc_status();
+
+            distr_seqn();
 
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */
@@ -80,9 +99,16 @@ main(void)
     } else {
         /* Worker main loop */
         for (;;) {
+            /* This method will stall until stage_batch_setup_shared
+             * has completed. */
+            stage_batch();
 
-            /* Yield thread */
-            ctx_swap();
+            /* This method won't start until stage_batch has
+             * processed a batch. */
+            send_desc();
+
+            /* /\* Yield thread *\/ */
+            /* ctx_swap(); */
         }
     }
 }

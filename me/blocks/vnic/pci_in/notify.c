@@ -19,6 +19,7 @@
 #include <vnic/pci_in.h>
 #include <vnic/pci_in_cfg.h>
 #include <vnic/pci_in/pci_in_internal.h>
+#include <vnic/shared/nfd_shared.h>
 #include <vnic/shared/qc.h>
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/qcntl.h>
@@ -55,21 +56,24 @@ __export __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
 
 /* XXX declare dst_q counters in LM */
 
-NFD_WQS_DECLARE(PCIE_ISL);
+NFD_RING_DECLARE(PCIE_ISL, pci_in, NFD_NUM_WQS * NFD_WQ_SZ);
 static __shared mem_ring_addr_t wq_raddr;
+static __shared unsigned int wq_num_base;
 
 void
 notify_setup_shared()
 {
     unsigned int wq;
-    size_t wq_size = (sizeof(struct nfd_pci_in_issued_desc) /
-                      sizeof(unsigned int) * NFD_WQ_SZ);
+    wq_num_base = NFD_RING_ALLOC(PCIE_ISL, pci_in, NFD_NUM_WQS);
 
     for (wq = 0; wq < NFD_NUM_WQS; wq++) {
-        wq_raddr = mem_workq_setup(NFD_WQ_NUM(PCIE_ISL, wq),
-                                   &NFD_WQ_BASE(PCIE_ISL)[wq],
-                                   wq_size);
+        mem_workq_setup((wq_num_base | wq),
+                        &NFD_RING_BASE(PCIE_ISL, pci_in)[wq * NFD_WQ_SZ /
+                                                         sizeof(unsigned int)],
+                        NFD_WQ_SZ);
     }
+
+    wq_raddr = (unsigned long long) NFD_EMEM(PCIE_ISL) >> 8;
 }
 
 void
@@ -84,16 +88,15 @@ notify_setup()
 do {                                                                    \
     if (batch_in.pkt##_pkt##.eop) {                                     \
         __critical_path();                                              \
-        dst_q = NFD_WQ_NUM(PCIE_ISL, batch_in.pkt##_pkt##.dst_q);       \
+        dst_q = batch_in.pkt##_pkt##.dst_q | wq_num_base;               \
                                                                         \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];         \
         batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1]; \
         batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2]; \
         batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3]; \
                                                                         \
-        __mem_workq_add_work(NFD_WQ_NUM(PCIE_ISL, dst_q), wq_raddr,     \
-                             &batch_out.pkt##_pkt, out_msg_sz, out_msg_sz, \
-                             sig_done, &wq_sig##_pkt);                  \
+        __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,     \
+                             out_msg_sz, out_msg_sz, sig_done, &wq_sig##_pkt); \
     } else {                                                            \
         /* Remove the wq signal from the wait mask */                   \
         wait_msk &= ~__signals(&wq_sig##_pkt);                          \

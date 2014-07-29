@@ -15,6 +15,8 @@ __intrinsic void reorder_done(unsigned int start_ctx, SIGNAL *sig);
 
 __intrinsic void reorder_self(SIGNAL *sig);
 
+__intrinsic void reorder_future_sig(SIGNAL *sig, unsigned int cycles);
+
 __intrinsic void reorder_test_swap(SIGNAL *sig);
 
 #endif /* !_BLOCKS__VNIC_UTILS_ORDERING_H_ */
