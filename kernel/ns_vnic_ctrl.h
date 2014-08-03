@@ -35,7 +35,8 @@
  * @NS_VNIC_CFG_RXRS_ENABLE: Bitmask of enabled RX rings
  * @NS_VNIC_CFG_MTU:         Set MTU size
  * @NS_VNIC_CFG_FLBUFSZ:     Set freelist buffer size (must be larger than MTU)
- * @NS_VNIC_CFG_EXVEC:       MSI-X vector for exceptions
+ * @NS_VNIC_CFG_LSC:         MSI-X table entry for link state changes
+ * @NS_VNIC_CFG_EXN:         MSI-X table entry for exceptions
  * @NS_VNIC_CFG_MACADDR:     MAC address
  *
  * TODO:
@@ -70,6 +71,7 @@
 #define NS_VNIC_CFG_MTU			0x0018
 #define NS_VNIC_CFG_FLBUFSZ		0x001c
 #define NS_VNIC_CFG_LSC			0x0020
+#define NS_VNIC_CFG_EXN			0x0021
 #define NS_VNIC_CFG_MACADDR		0x0024
 
 
@@ -124,7 +126,7 @@
  * @NS_VNIC_CFG_TXR_ADDR:    Offset of host address for TX ring _x
  * @NS_VNIC_CFG_TXR_WB_ADDR: Offset of host addr for TX ring _x ptr write back
  * @NS_VNIC_CFG_TXR_SZ:      Offset to configure size for ring _x
- * @NS_VNIC_CFG_TXR_VEC:     Offset to set MSI-X vector for ring _x
+ * @NS_VNIC_CFG_TXR_VEC:     Offset to set MSI-X table entry for ring _x
  * @NS_VNIC_CFG_TXR_PRIO:    Offset to set per TX ring priorities for ring _x.
  */
 #define NS_VNIC_CFG_TXR_BASE		0x0200
@@ -141,7 +143,7 @@
  * @NS_VNIC_CFG_RXR_BASE:    Base offset for RX ring configuration
  * @NS_VNIC_CFG_RXR_ADDR:    Offset of host address for RX ring _x
  * @NS_VNIC_CFG_RXR_SZ:      Offset to configure size for ring _x
- * @NS_VNIC_CFG_RXR_VEC:     Offset to set MSI-X vector for ring _x
+ * @NS_VNIC_CFG_RXR_VEC:     Offset to set MSI-X table entry for ring _x
  * @NS_VNIC_CFG_TXR_PRIO:    Offset to set per RX ring priorities for ring _x.
  */
 #define NS_VNIC_CFG_RXR_BASE		0x0800
