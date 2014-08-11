@@ -40,6 +40,7 @@ main(void)
         /* Worker main loop */
         for (;;) {
             issue_dma();
+            free_buf();
 
             /* Yield thread */
             ctx_swap();

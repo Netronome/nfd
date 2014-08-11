@@ -33,6 +33,15 @@ struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt3;
 };
 
+
+struct _cpp_desc_batch {
+    struct nfd_pci_out_cpp_desc pkt0;
+    struct nfd_pci_out_cpp_desc pkt1;
+    struct nfd_pci_out_cpp_desc pkt2;
+    struct nfd_pci_out_cpp_desc pkt3;
+};
+
+
 /* XXX Further data will be required when checking for follow on packets
  * volatile set temporarily */
 volatile __shared __lmem unsigned int ring_rids[MAX_RX_QUEUES];
@@ -54,6 +63,11 @@ static SIGNAL_MASK data_wait_msk = 0;
 static SIGNAL fl_sig0,  fl_sig1,  fl_sig2,  fl_sig3;
 
 static __xread struct nfd_pci_out_fl_desc fl_entries[4];
+
+
+static __shared __lmem struct _cpp_desc_batch
+    cpp_desc_ring[RX_CPP_BATCH_RING_BAT];
+
 
 NN_RING_ZERO_PTRS;
 NN_RING_EMPTY_ASSERT_SET(0);
@@ -78,6 +92,18 @@ _get_ctm_addr(__gpr struct nfp_pcie_dma_cmd *descr,
     descr->cpp_addr_hi = 0x80 | info->cpp.isl;
     descr->cpp_addr_lo = ((1 << 31) | (info->cpp.pktnum << 16) |
                           (info->cpp.offset & ((1<<11) - 1)));
+}
+
+
+__intrinsic void
+_free_ctm_addr(struct nfd_pci_out_cpp_desc *cpp)
+{
+    unsigned int addr_hi, addr_lo;
+
+    /* Construct address >>8 in single register */
+    addr_hi = (1<<31) | (cpp->isl << 24);
+    addr_lo = cpp->pktnum;
+    __asm mem[packet_free, --, addr_hi, <<8, addr_lo];
 }
 
 
@@ -328,12 +354,17 @@ do {                                                                    \
                            sig_done, &data_sig##_pkt);                  \
         }                                                               \
     }                                                                   \
+                                                                        \
+    /* Pass CPP descriptor on to next block */                          \
+    cpp_desc_ring[data_dma_seq_issued].pkt##_pkt = in_batch.pkt##_pkt##.cpp; \
 } while (0)
 
 
-#define _ISSUE_CLR(_pkt)                             \
-do {                                                 \
-    data_wait_msk &= ~__signals(&data_sig##_pkt);    \
+#define _ISSUE_CLR(_pkt)                                         \
+do {                                                             \
+    data_wait_msk &= ~__signals(&data_sig##_pkt);                \
+    cpp_desc_ring[data_dma_seq_issued].pkt##_pkt##.__raw[0] = 0; \
+    cpp_desc_ring[data_dma_seq_issued].pkt##_pkt##.__raw[1] = 0; \
 } while (0)
 
 
@@ -439,3 +470,32 @@ issue_dma()
     }
 }
 
+
+#define _FREE_BUF(_pkt)                             \
+do {                                                \
+    /* Only free for EOP */                         \
+    if (in_batch.pkt##_pkt.eop) {                   \
+        _free_ctm_addr(&in_batch.pkt##_pkt);        \
+    }                                               \
+} while (0)
+
+
+void
+free_buf()
+{
+    struct _cpp_desc_batch in_batch;
+
+    if (data_dma_seq_served != data_dma_seq_compl) {
+        /*
+         * Increment data_dma_seq_served upfront to avoid ambiguity about
+         * sequence number zero
+         */
+        data_dma_seq_served++;
+        in_batch = cpp_desc_ring[data_dma_seq_served];
+
+        _FREE_BUF(0);
+        _FREE_BUF(1);
+        _FREE_BUF(2);
+        _FREE_BUF(3);
+    }
+}

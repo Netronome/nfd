@@ -57,6 +57,7 @@
 /* XXX should _SZ always indicate a byte size? */
 #define RX_DESC_BATCH_RING_BAT          32
 #define RX_DATA_BATCH_RING_PKTS         256
+#define RX_CPP_BATCH_RING_BAT           32
 #define RX_DATA_BATCH_RING_NUM  14  /* XXX use generic resource allocation */
 
 
