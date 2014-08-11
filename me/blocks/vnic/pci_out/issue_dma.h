@@ -17,6 +17,8 @@ extern void issue_dma_check_compl();
 /** Parameters list to be filled out as extended */
 extern void issue_dma();
 
+extern void free_buf_setup();
+
 extern void free_buf();
 
 #endif /* !_BLOCKS__VNIC_PCI_OUT_ISSUE_DMA_H_ */

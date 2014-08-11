@@ -23,6 +23,7 @@ main(void)
 
     } else {
         issue_dma_setup();
+        free_buf_setup();
     }
 
     /*

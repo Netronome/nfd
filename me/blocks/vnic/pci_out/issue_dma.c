@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <nfp.h>
 
+#include <nfp/mem_ring.h>
 #include <pkt/pkt.h>
 
 #include <nfp6000/nfp_me.h>
@@ -20,6 +21,7 @@
 #include <vnic/pci_out.h>
 #include <vnic/pci_out_cfg.h>
 #include <vnic/pci_out/pci_out_internal.h>
+#include <vnic/shared/nfd_shared.h>
 #include <vnic/shared/qc.h>
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/nn_ring.h>
@@ -67,6 +69,8 @@ static __xread struct nfd_pci_out_fl_desc fl_entries[4];
 
 static __shared __lmem struct _cpp_desc_batch
     cpp_desc_ring[RX_CPP_BATCH_RING_BAT];
+static __gpr unsigned int blm_raddr;
+static __gpr unsigned int blm_rnum_start;
 
 
 NN_RING_ZERO_PTRS;
@@ -471,12 +475,22 @@ issue_dma()
 }
 
 
-#define _FREE_BUF(_pkt)                             \
-do {                                                \
-    /* Only free for EOP */                         \
-    if (in_batch.pkt##_pkt.eop) {                   \
-        _free_ctm_addr(&in_batch.pkt##_pkt);        \
-    }                                               \
+void
+free_buf_setup()
+{
+    blm_raddr = ((unsigned long long) RX_BLM_RADDR >> 8);
+    blm_rnum_start = NFD_BLM_Q_ALLOC(RX_BLM_POOL_START);
+}
+
+
+#define _FREE_BUF(_pkt)                                                 \
+    do {                                                                \
+    /* Only free for EOP */                                             \
+    if (in_batch.pkt##_pkt.eop) {                                       \
+        _free_ctm_addr(&in_batch.pkt##_pkt);                            \
+        rnum += in_batch.pkt##_pkt.bls;                                 \
+        mem_ring_journal_fast(rnum, blm_raddr, in_batch.pkt##_pkt.mu_addr); \
+    }                                                                   \
 } while (0)
 
 
@@ -484,6 +498,7 @@ void
 free_buf()
 {
     struct _cpp_desc_batch in_batch;
+    unsigned int rnum = blm_rnum_start;
 
     if (data_dma_seq_served != data_dma_seq_compl) {
         /*

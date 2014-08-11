@@ -11,6 +11,7 @@
 
 #define MAX_RX_BATCH_SZ     4
 
+#define RX_BLM_POOL_START   BLM_NBI8_BLQ0_EMU_QID
 #define RX_BLM_RADDR        __LoadTimeConstant("__addr_emem1")
 
 #define RXQ_EVENT_START     4
