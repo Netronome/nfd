@@ -15,6 +15,8 @@
 #include <std/reg_utils.h>
 
 #include <vnic/pci_out.h>
+#include <vnic/utils/ordering.h>
+
 
 #ifndef PKT_NBI_OFFSET
 #warning "PKT_NBI_OFFSET not #defined: assuming 64"
@@ -31,6 +33,13 @@
 __shared int nrecv = 0;
 __shared int nsent = 0;
 __shared int nfail = 0;
+
+/* Ordering  */
+#define _START_CTX      0
+static SIGNAL get_order_sig;
+static SIGNAL get_sig;
+static SIGNAL wait_order_sig;
+
 
 
 void main(void)
@@ -49,6 +58,9 @@ void main(void)
     SIGNAL sig;
 
     if (ctx() == 0) {
+        reorder_start(_START_CTX, &get_order_sig);
+        reorder_start(_START_CTX, &wait_order_sig);
+
         local_csr_write(NFP_MECSR_MAILBOX_0, 0);
         local_csr_write(NFP_MECSR_MAILBOX_1, 0);
         local_csr_write(NFP_MECSR_MAILBOX_2, 0);
@@ -56,7 +68,12 @@ void main(void)
 
 
     for (;;) {
-        pkt_nbi_recv(&nbi_meta, sizeof(nbi_meta));
+        reorder_test_swap(&get_order_sig);
+        __pkt_nbi_recv(&nbi_meta, sizeof(nbi_meta), sig_done, &get_sig);
+        reorder_done(_START_CTX, &get_order_sig);
+
+        wait_for_all(&get_sig, &wait_order_sig);
+        reorder_done(_START_CTX, &wait_order_sig);
 
         nrecv++;
         local_csr_write(NFP_MECSR_MAILBOX_0, nrecv);
