@@ -52,6 +52,9 @@ _alloc_resource(_name emem##_emem##_queues global _num _num)
     MEM_RING_CONFIGURE(_comp##_ring_isl##_isl##, in_ring_num)
 #define NFD_RING_CONFIGURE(_isl, _comp) NFD_RING_CONFIGURE_IND(_isl, _comp)
 
-unsigned long long __alloc_resource(const char *argstr);
+/* XXX can provide an extra _pool parameter here if required */
+#define NFD_BLM_Q_ALLOC_IND(_name)                  \
+    _alloc_resource(_name BLQ_EMU_RINGS global 1)
+#define NFD_BLM_Q_ALLOC(_name) NFD_BLM_Q_ALLOC_IND(_name)
 
 #endif /* !_BLOCKS__VNIC_SHARED_NFD_SHARED_H_ */

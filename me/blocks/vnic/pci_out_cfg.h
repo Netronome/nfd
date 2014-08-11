@@ -11,6 +11,8 @@
 
 #define MAX_RX_BATCH_SZ     4
 
+#define RX_BLM_RADDR        __LoadTimeConstant("__addr_emem1")
+
 #define RXQ_EVENT_START     4
 #define RXQ_START           128
 #define RXQ_EVENT_DATA      (3<<4)

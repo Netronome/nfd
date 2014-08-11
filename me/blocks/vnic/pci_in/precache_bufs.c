@@ -5,6 +5,7 @@
  * @brief         Fill the local (LM) cache of MU buffers
  */
 
+#include <nfcc_chipres.h>
 #include <nfp.h>
 #include <assert.h>
 
@@ -15,8 +16,8 @@
 #include <nfp6000/nfp_me.h>
 
 #include <vnic/pci_in_cfg.h>
-
 #include <vnic/pci_in/precache_bufs.h>
+#include <vnic/shared/nfd_shared.h>
 
 
 /* Configure *l$index3 to be a global pointer, and
@@ -37,6 +38,7 @@ static SIGNAL_PAIR precache_sig;
 
 static __xread unsigned int bufs_rd[TX_BUF_RECACHE_WM];
 static unsigned int blm_queue_addr;
+static unsigned int blm_queue_num;
 
 extern __shared __gpr unsigned int data_dma_seq_compl;
 extern __shared __gpr unsigned int data_dma_seq_served;
@@ -121,6 +123,7 @@ precache_bufs_setup()
     local_csr_write(NFP_MECSR_CTX_ENABLES, cfg.__raw);
 
     blm_queue_addr = ((unsigned long long) TX_BLM_RADDR >> 8);
+    blm_queue_num = NFD_BLM_Q_ALLOC(TX_BLM_POOL);
 
     buf_store_start = (unsigned int) &buf_store;
     local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, buf_store_start);
@@ -157,7 +160,7 @@ precache_bufs()
         if (_precache_buf_bytes_used() >
             (sizeof (unsigned int) * TX_BUF_RECACHE_WM)) {
             /* Issue the fetch */
-            __mem_ring_get(TX_BLM_POOL, blm_queue_addr, bufs_rd,
+            __mem_ring_get(blm_queue_num, blm_queue_addr, bufs_rd,
                            sizeof bufs_rd, sizeof bufs_rd,
                            sig_done, &precache_sig);
             state.pending_fetch = 1;

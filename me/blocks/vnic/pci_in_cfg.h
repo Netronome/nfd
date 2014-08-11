@@ -25,7 +25,7 @@
 
 
 /* XXX use BLM generic resource allocation */
-#define TX_BLM_POOL         75
+#define TX_BLM_POOL         BLM_NBI8_BLQ0_EMU_QID
 #define TX_BLM_RADDR        __LoadTimeConstant("__addr_emem1")
 #define TX_BUF_RECACHE_WM   16
 
