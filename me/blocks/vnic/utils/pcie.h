@@ -91,6 +91,8 @@ __intrinsic void pcie_write(__xwrite void *data,
  * Interface to the DMA engines
  */
 
+#define PCIE_DMA_MAX_SZ     4096
+
 /**
  * Structure of a  DMADescrConfig register
  *
@@ -205,6 +207,10 @@ __intrinsic void __pcie_dma_enq(unsigned char pcie_isl,
 __intrinsic void pcie_dma_enq(unsigned char pcie_isl,
                               __xwrite struct nfp_pcie_dma_cmd *cmd,
                               unsigned int queue);
+
+__intrinsic void pcie_dma_enq_no_sig(unsigned char pcie_isl,
+                                     __xwrite struct nfp_pcie_dma_cmd *cmd,
+                                     unsigned int queue);
 
 #endif /* _BLOCKS__VNIC_UTILS_PCIE_H_ */
 

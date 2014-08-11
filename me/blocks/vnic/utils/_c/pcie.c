@@ -308,3 +308,15 @@ pcie_dma_enq(unsigned char pcie_isl, __xwrite struct nfp_pcie_dma_cmd *cmd,
     SIGNAL sig;
     __pcie_dma_enq(pcie_isl, cmd, queue, ctx_swap, &sig);
 }
+
+__intrinsic void pcie_dma_enq_no_sig(unsigned char pcie_isl,
+                                     __xwrite struct nfp_pcie_dma_cmd *cmd,
+                                     unsigned int queue)
+{
+    unsigned int count = (sizeof(struct nfp_pcie_dma_cmd) >> 2);
+    __gpr unsigned int addr_hi = pcie_isl << 30;
+
+    ctassert(__is_write_reg(cmd));
+
+    __asm pcie[write_pci, *cmd, addr_hi, <<8, queue, __ct_const_val(count)];
+}
