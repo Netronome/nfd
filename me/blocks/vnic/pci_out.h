@@ -40,12 +40,13 @@ struct nfd_pci_out_cpp_desc {
             unsigned int isl:6;
             unsigned int down:1;
             unsigned int pktnum:9;
+            unsigned int bls:2;
             unsigned int sop:1;
             unsigned int eop:1;
-            unsigned int offset:14;
+            unsigned int offset:12;
 
             unsigned int split:2;
-            unsigned int sp1:1;
+            unsigned int nbi:1;
             unsigned int mu_addr:29;
         };
         unsigned int __raw[2];
@@ -68,11 +69,13 @@ extern unsigned int pci_out_get_credit(unsigned int bmsk_queue,
 
 __intrinsic void pci_out_fill_addr(__gpr struct nfd_pci_out_input *desc,
                                    unsigned int isl, unsigned int pktnum,
-                                   unsigned int mu_addr);
+                                   unsigned int mu_addr, unsigned int nbi,
+                                   unsigned int bls);
 
 
 __intrinsic void pci_out_fill_addr_mu_only(__gpr struct nfd_pci_out_input *desc,
-                                           unsigned int mu_addr);
+                                           unsigned int mu_addr,
+                                           unsigned int nbi, unsigned int bls);
 
 
 __intrinsic void pci_out_fill_size(__gpr struct nfd_pci_out_input *desc,

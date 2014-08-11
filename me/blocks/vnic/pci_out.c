@@ -55,21 +55,27 @@ pci_out_get_credit(unsigned int bmsk_queue, unsigned int num)
 
 __intrinsic void
 pci_out_fill_addr(__gpr struct nfd_pci_out_input *desc,
-                  unsigned int isl, unsigned int pktnum, unsigned int mu_addr)
+                  unsigned int isl, unsigned int pktnum, unsigned int mu_addr,
+                  unsigned int nbi, unsigned int bls)
 {
     desc->cpp.isl = isl;
     desc->cpp.pktnum = pktnum;
     desc->cpp.mu_addr = mu_addr;
+    desc->cpp.nbi = nbi;
+    desc->cpp.bls = bls;
 }
 
 
 __intrinsic void
 pci_out_fill_addr_mu_only(__gpr struct nfd_pci_out_input *desc,
-                          unsigned int mu_addr)
+                          unsigned int mu_addr, unsigned int nbi,
+                          unsigned int bls)
 {
     desc->cpp.isl = 0;
     desc->cpp.pktnum = 0;
     desc->cpp.mu_addr = mu_addr;
+    desc->cpp.nbi = nbi;
+    desc->cpp.bls = bls;
 }
 
 
