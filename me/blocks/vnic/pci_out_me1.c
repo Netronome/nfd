@@ -31,6 +31,7 @@ main(void)
     if (ctx() == 0) {
         /* CTX0 main loop */
         for (;;) {
+            issue_dma_check_compl();
 
             /* Yield thread */
             ctx_swap();

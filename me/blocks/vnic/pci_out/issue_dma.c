@@ -40,7 +40,7 @@ __shared __gpr unsigned int data_dma_seq_issued = 0;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
 
-__visible volatile __xread unsigned int rx_data_compl_reflect_xread;
+__visible volatile __xread unsigned int rx_data_compl_reflect_xread = 0;
 __visible volatile SIGNAL rx_data_compl_reflect_sig;
 
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
@@ -118,6 +118,16 @@ issue_dma_setup()
     descr_tmp.cpp_token = RX_DATA_DMA_TOKEN;
     descr_tmp.dma_cfg_index = RX_DATA_CFG_REG;
 }
+
+
+void
+issue_dma_check_compl()
+{
+    if (signal_test(&rx_data_compl_reflect_sig)) {
+        data_dma_seq_compl = rx_data_compl_reflect_xread;
+    }
+}
+
 
 /** Parameters list to be filled out as extended */
 void
