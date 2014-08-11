@@ -10,10 +10,10 @@
 
 extern void issue_dma_setup_shared();
 
-void issue_dma_setup();
+extern void issue_dma_setup();
 
 /** Parameters list to be filled out as extended */
-int issue_dma();
+extern void issue_dma();
 
 
 #endif /* !_BLOCKS__VNIC_PCI_OUT_ISSUE_DMA_H_ */

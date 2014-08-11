@@ -28,7 +28,7 @@
 #define RX_DESC_CFG_REG                 8
 
 #define RX_DATA_CFG_REG                 6
-#define RX_DATA_NO_SIG_CFG_REG          7
+#define RX_DATA_CFG_REG_SIG_ONLY        7
 
 /* DMA defines */
 #define RX_FL_FETCH_MAX_IN_FLIGHT       16

@@ -32,6 +32,7 @@
 #include <vnic/utils/pcie.h>
 
 
+/* XXX move somewhere shared? */
 struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt0;
     struct nfp_pcie_dma_cmd pkt1;
@@ -60,6 +61,11 @@ static volatile __xread unsigned int data_dma_event_xfer;
 static volatile __xread unsigned int desc_dma_event_xfer;
 static SIGNAL data_dma_event_sig;
 static SIGNAL desc_dma_event_sig;
+
+static __xwrite unsigned int rx_data_compl_reflect_xwrite = 0;
+__remote volatile __xread unsigned int rx_data_compl_reflect_xread;
+__remote volatile SIGNAL rx_data_compl_reflect_sig;
+
 
 static __xwrite struct _dma_desc_batch dma_out;
 static SIGNAL desc_sig0, desc_sig1, desc_sig2, desc_sig3;
@@ -96,6 +102,39 @@ SIGNAL get_order_sig, put_order_sig, may_poll;
 static SIGNAL_MASK stage_wait_msk = 0;
 
 extern __shared __gpr struct qc_bitmask urgent_bmsk;
+
+
+/* XXX Move to some sort of CT reflect library */
+__intrinsic void
+reflect_data(unsigned int dst_me, unsigned int dst_xfer,
+             unsigned int sig_no, volatile __xwrite void *src_xfer,
+             size_t size)
+{
+    #define OV_SIG_NUM 13
+
+    unsigned int addr;
+    unsigned int count = (size >> 2);
+    struct nfp_mecsr_cmd_indirect_ref_0 indirect;
+
+    /* ctassert(__is_write_reg(src_xfer)); */ /* TEMP, avoid volatile warnings */
+    ctassert(__is_ct_const(size));
+
+    /* Generic address computation.
+     * Could be expensive if dst_me, or dst_xfer
+     * not compile time constants */
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
+
+    indirect.__raw = 0;
+    indirect.signal_num = sig_no;
+    local_csr_write(NFP_MECSR_CMD_INDIRECT_REF_0, indirect.__raw);
+
+    /* Currently just support reflect_write_sig_remote */
+    __asm {
+        alu[--, --, b, 1, <<OV_SIG_NUM];
+        ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
+           __ct_const_val(count)], indirect_ref;
+    };
+}
 
 
 /* XXX remove when THSDK-886 resolved */
@@ -204,14 +243,17 @@ do {                                                                    \
     eop = in_batch.pkt##_pkt##.cpp.eop;                                 \
     eop &= up;                                                          \
                                                                         \
-    out_batch.pkt##_pkt##.fl_cache_index =                              \
+    data_batch_tmp.fl_cache_index =                                     \
         cache_desc_compute_fl_addr(&queue, queue_data[queue].fl_u);     \
     queue_data[queue].fl_u += eop;                                      \
+    data_batch_tmp.rid = queue_data[queue].requester_id;                \
+    data_batch_tmp.data_len = in_batch.pkt##_pkt##.rxd.data_len;        \
+    data_batch_tmp.spare = 0;                                           \
                                                                         \
-    cpp_desc_tmp = in_batch.pkt##_pkt##.cpp;                            \
-    cpp_desc_tmp.sop &= up;                                             \
-    cpp_desc_tmp.down = ~up;                                            \
-    out_batch.pkt##_pkt##.cpp = cpp_desc_tmp;                           \
+    data_batch_tmp.cpp = in_batch.pkt##_pkt##.cpp;                      \
+    data_batch_tmp.cpp.sop &= up;                                       \
+    data_batch_tmp.cpp.down = ~up;                                      \
+    out_batch.pkt##_pkt = data_batch_tmp;                               \
                                                                         \
     desc_batch_tmp.send_pkt##_pkt = eop;                                \
     desc_batch_tmp.queue_pkt##_pkt = queue;                             \
@@ -232,7 +274,7 @@ stage_batch()
     unsigned int eop, up;
     struct pci_out_data_batch_msg data_batch_msg;
     struct pci_out_desc_batch_msg desc_batch_tmp;
-    struct nfd_pci_out_cpp_desc cpp_desc_tmp;
+    struct pci_out_data_dma_info data_batch_tmp;
     unsigned int desc_batch_index;
 
     if (signal_test(&may_poll)) {
@@ -407,15 +449,25 @@ distr_seqn()
     }
 
     if (signal_test(&data_dma_event_sig)) {
+        __implicit_read(&rx_data_compl_reflect_xwrite);
+
         dma_seqn_advance(&data_dma_event_xfer, &data_dma_compl);
+
+        /* Mirror to remote ME */
+        rx_data_compl_reflect_xwrite = data_dma_compl;
+        reflect_data(RX_DATA_DMA_ME,
+                     __xfer_reg_number(&rx_data_compl_reflect_xread,
+                                       RX_DATA_DMA_ME),
+                     __signal_number(&rx_data_compl_reflect_sig,
+                                     RX_DATA_DMA_ME),
+                     &rx_data_compl_reflect_xwrite,
+                     sizeof rx_data_compl_reflect_xwrite);
 
         event_cls_autopush_filter_reset(
             RX_DATA_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             RX_DATA_EVENT_FILTER);
         __implicit_write(&data_dma_event_sig);
-
-        /* XXX reflect data_dma_compl to issue_dma */
     }
 }
 

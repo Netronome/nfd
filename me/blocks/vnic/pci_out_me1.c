@@ -22,7 +22,7 @@ main(void)
         issue_dma_setup_shared();
 
     } else {
-
+        issue_dma_setup();
     }
 
     /*
@@ -38,6 +38,7 @@ main(void)
     } else {
         /* Worker main loop */
         for (;;) {
+            issue_dma();
 
             /* Yield thread */
             ctx_swap();

@@ -156,6 +156,7 @@ distr_seqn()
         __implicit_read(&tx_gather_compl_reflect_xwrite);
 
         /* Compute increase and update gather_dma_seq_compl */
+        /* XXX use dma_seqn_advance API */
         event.__raw = tx_gather_event_xfer;
         seqn_inc = (event.source - gather_dma_seq_compl) & 0xFFF;
         gather_dma_seq_compl += seqn_inc;
@@ -182,6 +183,7 @@ distr_seqn()
         __implicit_read(&tx_data_compl_reflect_xwrite);
 
         /* Compute increase and update gather_dma_seq_compl */
+        /* XXX use dma_seqn_advance API */
         event.__raw = tx_data_event_xfer;
         seqn_inc = (event.source - data_dma_seq_compl) & 0xFFF;
         data_dma_seq_compl += seqn_inc;
