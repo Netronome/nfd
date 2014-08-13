@@ -43,7 +43,7 @@
  * The threshold at which the ring tests empty depends on the configuration set
  * by nn_ring_init_receive.
  */
-static __inline nn_ring_empty()
+__intrinsic nn_ring_empty()
 {
     return inp_state_test(inp_state_nn_empty);
 }
@@ -57,7 +57,7 @@ static __inline nn_ring_empty()
  * an explanation of how many long words of data can safely be added to a
  * ring after it tests !NN_FULL.
  */
-static __inline int nn_ring_full()
+__intrinsic int nn_ring_full()
 {
     return inp_state_test(inp_state_nn_full);
 }

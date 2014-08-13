@@ -25,6 +25,8 @@
 
 #define RX_STAGE_START_CTX              1
 #define RX_STAGE_WAIT_CYCLES            200
+#define RX_ISSUE_START_CTX              1
+
 
 /* DMAConfigReg index allocations */
 #define RX_FL_CFG_REG                   4
@@ -57,9 +59,7 @@
 
 
 /* Ring defines */
-/* XXX should _SZ always indicate a byte size? */
 #define RX_DESC_BATCH_RING_BAT          32
-#define RX_DATA_BATCH_RING_PKTS         256
 #define RX_CPP_BATCH_RING_BAT           32
 #define RX_DATA_BATCH_RING_NUM  14  /* XXX use generic resource allocation */
 

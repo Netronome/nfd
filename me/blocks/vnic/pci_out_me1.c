@@ -20,6 +20,7 @@ main(void)
         ctassert(MAX_VNICS * MAX_VNIC_QUEUES <= 64);
 
         issue_dma_setup_shared();
+        free_buf_setup();
 
     } else {
         issue_dma_setup();
@@ -33,6 +34,11 @@ main(void)
         /* CTX0 main loop */
         for (;;) {
             issue_dma_check_compl();
+
+            /* Running free_buf on CTX0 as well allows CTX1-7 to
+             * wait on work in issue_dma without preventing blocking
+             * buffer freeing. */
+            free_buf();
 
             /* Yield thread */
             ctx_swap();

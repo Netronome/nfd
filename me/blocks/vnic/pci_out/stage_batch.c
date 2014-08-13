@@ -25,7 +25,6 @@
 #include <vnic/pci_out/pci_out_internal.h>
 #include <vnic/shared/nfd_shared.h>
 #include <vnic/shared/qc.h>
-#include <vnic/utils/cls_ring.h>
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
@@ -84,9 +83,6 @@ extern __shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
 __shared __lmem struct pci_out_desc_batch_msg
     desc_batch_msg[RX_DESC_BATCH_RING_BAT];
 
-__export __cls __align(RX_DATA_DMA_INFO_SZ * RX_DATA_BATCH_RING_PKTS)
-    char data_batch_mem[RX_DATA_DMA_INFO_SZ * RX_DATA_BATCH_RING_PKTS];
-
 NFD_RING_DECLARE(PCIE_ISL, pci_out, RX_PCI_OUT_RING_SZ);
 
 static __gpr mem_ring_addr_t in_ring_addr;
@@ -95,10 +91,7 @@ static __gpr unsigned int in_ring_num;
 static __xread struct _input_batch in_batch;
 SIGNAL get_sig;
 
-static __xwrite struct pci_out_data_batch out_batch;
-SIGNAL put_sig;
-
-SIGNAL get_order_sig, put_order_sig, may_poll;
+SIGNAL get_order_sig, put_order_sig,  may_poll;
 static SIGNAL_MASK stage_wait_msk = 0;
 
 extern __shared __gpr struct qc_bitmask urgent_bmsk;
@@ -143,35 +136,11 @@ stage_batch_setup_rings()
 {
     /* Input ring */
     NFD_RING_CONFIGURE(PCIE_ISL, pci_out);
-
-    /* unsigned int x = __alloc_resource("rx_data_ring clsrings island 1"); */
-
-    /* cls_ring_setup(x, data_batch_mem, */
-    /*                sizeof data_batch_mem); */
-
-    cls_ring_setup(RX_DATA_BATCH_RING_NUM, data_batch_mem,
-                   sizeof data_batch_mem);
 }
 
 void
 stage_batch_setup_shared()
 {
-    /*
-     * The "desc_batch_ring" is serviced after data DMAs have completed, so
-     * we can enforce space in the "data_batch_ring" and NN ring using just
-     * "desc_batch_served".  This requires  "data_batch_ring" and the NN
-     * ring to be able to hold more batches than "desc_batch_ring".
-     *
-     * The NN ring can hold up to 124 32bit words, so 124 batches.
-     * "data_batch_ring" conservatively holds (RX_DATA_BATCH_RING_PKTS /
-     * MAX_RX_BATCH_SZ) batches.  (Conservatively because the size
-     * of the messages placed on the ring is rounded up to a power of two
-     * before allocating memory.)
-     */
-    ctassert(124 > RX_DESC_BATCH_RING_BAT);
-    ctassert((RX_DATA_BATCH_RING_PKTS / MAX_RX_BATCH_SZ) >
-             RX_DESC_BATCH_RING_BAT);
-
     /* Kick off ordering */
     reorder_start(RX_STAGE_START_CTX, &get_order_sig);
     reorder_start(RX_STAGE_START_CTX, &put_order_sig);
@@ -219,6 +188,16 @@ _fl_avail_check(__gpr unsigned int queue)
 }
 
 
+__intrinsic void
+_nn_put_msg(struct pci_out_data_dma_info *msg)
+{
+    nn_ring_put(msg->__raw[0]);
+    nn_ring_put(msg->__raw[1]);
+    nn_ring_put(msg->__raw[2]);
+    nn_ring_put(msg->__raw[3]);
+}
+
+
 /*
  * Construct messages for the "data_batch_ring" and the "desc_batch_ring".
  *
@@ -253,7 +232,7 @@ do {                                                                    \
     data_batch_tmp.cpp = in_batch.pkt##_pkt##.cpp;                      \
     data_batch_tmp.cpp.sop &= up;                                       \
     data_batch_tmp.cpp.down = ~up;                                      \
-    out_batch.pkt##_pkt = data_batch_tmp;                               \
+    _nn_put_msg(&data_batch_tmp);                                       \
                                                                         \
     desc_batch_tmp.send_pkt##_pkt = eop;                                \
     desc_batch_tmp.queue_pkt##_pkt = queue;                             \
@@ -272,7 +251,7 @@ stage_batch()
 {
     __gpr unsigned int queue;
     unsigned int eop, up;
-    struct pci_out_data_batch_msg data_batch_msg;
+    struct pci_out_data_batch_msg data_batch_msg = {0};
     struct pci_out_desc_batch_msg desc_batch_tmp;
     struct pci_out_data_dma_info data_batch_tmp;
     unsigned int desc_batch_index;
@@ -308,10 +287,9 @@ stage_batch()
     }
 
     __implicit_read(&get_sig);
-    __implicit_read(&put_sig);
     __implicit_read(&put_order_sig);
 
-    if (batch_issued == batch_safe) {
+    if (batch_issued == batch_safe || nn_ring_full()) {
         /* Recompute safe sequence number and clear the wait mask
          * to allow the test to execute again.
          * NB: the next thread cannot continue yet as put_order_sig
@@ -326,7 +304,7 @@ stage_batch()
     }
 
     /* Reset the wait mask */
-    stage_wait_msk = __signals(&get_sig, &put_sig, &put_order_sig);
+    stage_wait_msk = __signals(&get_sig, &put_order_sig);
 
     /*
      * Increment batch_issued upfront to avoid ambiguity about
@@ -342,6 +320,7 @@ stage_batch()
         __critical_path();
         data_batch_msg.num = 4;
         desc_batch_tmp.__raw = 4;
+        nn_ring_put(data_batch_msg.__raw);
 
         _STAGE_BATCH_PROC(0);
         _STAGE_BATCH_PROC(1);
@@ -357,9 +336,6 @@ stage_batch()
         /* Allow next CTX to process a batch */
         reorder_done(RX_STAGE_START_CTX, &put_order_sig);
 
-        /* Remove CLS ring put from the wait mask */
-        stage_wait_msk &= ~__signals(&put_sig);
-
         /* We don't issue this batch after all. We haven't swapped, so
          * can just decrement batch_issued again to correct it. */
         batch_issued--;
@@ -371,6 +347,7 @@ stage_batch()
         /* Batch of 1 */
         data_batch_msg.num = 1;
         desc_batch_tmp.__raw = 1;
+        nn_ring_put(data_batch_msg.__raw);
 
         _STAGE_BATCH_PROC(0);
 
@@ -382,6 +359,7 @@ stage_batch()
         /* Batch of 2 */
         data_batch_msg.num = 2;
         desc_batch_tmp.__raw = 2;
+        nn_ring_put(data_batch_msg.__raw);
 
         _STAGE_BATCH_PROC(0);
         _STAGE_BATCH_PROC(1);
@@ -393,6 +371,7 @@ stage_batch()
         /* Batch of 3 */
         data_batch_msg.num = 3;
         desc_batch_tmp.__raw = 3;
+        nn_ring_put(data_batch_msg.__raw);
 
         _STAGE_BATCH_PROC(0);
         _STAGE_BATCH_PROC(1);
@@ -402,14 +381,9 @@ stage_batch()
 
     }
 
-
-    /* Enqueue batch messages */
+    /* Enqueue desc batch message */
     desc_batch_index = batch_issued & (RX_DESC_BATCH_RING_BAT - 1);
     desc_batch_msg[desc_batch_index] = desc_batch_tmp;
-
-    cls_ring_put(RX_DATA_BATCH_RING_NUM, &out_batch, sizeof out_batch,
-                 &put_sig);
-    nn_ring_put(data_batch_msg.__raw);
 
     /* Allow this thread to poll again on its next turn */
     reorder_self(&may_poll);
@@ -542,9 +516,9 @@ do {                                                                    \
     descr_tmp.cpp_addr_lo = send_desc_addr_lo | send_desc_off;          \
     pcie_dma_set_event(&descr_tmp, RX_DESC_EVENT_TYPE, desc_dma_issued); \
                                                                         \
-dma_out.pkt##_pkt = descr_tmp;                                          \
-__pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, RX_DESC_DMA_QUEUE,         \
-               sig_done, &desc_sig##_pkt);                              \
+    dma_out.pkt##_pkt = descr_tmp;                                      \
+    __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, RX_DESC_DMA_QUEUE,     \
+                   sig_done, &desc_sig##_pkt);                          \
     } else {                                                            \
         /* Don't wait on the DMA signal */                              \
         desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);               \
@@ -557,7 +531,7 @@ __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, RX_DESC_DMA_QUEUE,         \
 
 
 #define SEND_DESC_CLR(_pkt)                              \
-      do {                                               \
+do {                                                     \
     desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);    \
 } while (0)
 

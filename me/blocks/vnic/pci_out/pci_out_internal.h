@@ -90,11 +90,16 @@ struct pci_out_data_batch_msg {
 #define RX_DATA_DMA_INFO_SZ     16
 
 struct pci_out_data_dma_info {
-    struct nfd_pci_out_cpp_desc cpp;
-    unsigned int rid:8;
-    unsigned int spare:8;
-    unsigned int data_len:16;
-    unsigned int fl_cache_index;
+    union {
+        struct {
+            struct nfd_pci_out_cpp_desc cpp;
+            unsigned int rid:8;
+            unsigned int spare:8;
+            unsigned int data_len:16;
+            unsigned int fl_cache_index;
+        };
+        unsigned int __raw[4];
+    };
 };
 
 
