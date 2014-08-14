@@ -83,6 +83,18 @@ _add_imm(unsigned int base, unsigned int offset, unsigned int val)
 }
 
 
+__intrinsic void
+_zero_imm(unsigned int base, unsigned int offset)
+{
+    unsigned int ind;
+
+    ind = (NFP_MECSR_PREV_ALU_LENGTH(8) | NFP_MECSR_PREV_ALU_OV_LEN |
+           NFP_MECSR_PREV_ALU_OVE_DATA(2));
+
+    __asm alu[--, --, B, ind];
+    __asm mem[atomic_write_imm, --, base, <<8, offset, 1], indirect_ref;
+}
+
 /**
  * Check whether fl_cache_dma_seq_compl can be advanced and, if so, process
  * the messages in the fl_cache_pending queue.  Two dependent LM accesses are
@@ -234,7 +246,8 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].fl_u = 0;
         queue_data[bmsk_queue].rx_w = 0;
 
-        /* XXX reset credits */
+        /* Reset credits */
+        _zero_imm(fl_cache_credits_base, bmsk_queue);
 
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK;
         rxq.size         = ring_sz - 8; /* XXX add define for size shift */
@@ -263,7 +276,8 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].fl_u = 0;
         queue_data[bmsk_queue].rx_w = 0;
 
-        /* XXX reset credits */
+        /* Reset credits */
+        _zero_imm(fl_cache_credits_base, bmsk_queue);
 
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;

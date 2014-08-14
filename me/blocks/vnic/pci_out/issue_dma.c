@@ -44,10 +44,6 @@ struct _cpp_desc_batch {
 };
 
 
-/* XXX Further data will be required when checking for follow on packets
- * volatile set temporarily */
-volatile __shared __lmem unsigned int ring_rids[MAX_RX_QUEUES];
-
 __shared __gpr unsigned int data_dma_seq_issued = 0;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
@@ -158,27 +154,8 @@ _recompute_safe()
 void
 issue_dma_setup_shared()
 {
-    /* XXX complete non-per-queue data */
-    unsigned int queue;
-    unsigned int vnic;
-    unsigned int vnic_q;
     struct nfp_pcie_dma_cfg cfg_tmp;
     __xwrite struct nfp_pcie_dma_cfg cfg;
-
-    ctassert(__is_log2(MAX_VNICS));
-    ctassert(__is_log2(MAX_VNIC_QUEUES));
-
-    /*
-     * Set requester IDs
-     */
-    for (queue = 0, vnic = 0; vnic < MAX_VNICS; vnic++) {
-        for (vnic_q = 0; vnic_q < MAX_VNIC_QUEUES; vnic_q++, queue++) {
-            unsigned int bmsk_queue;
-
-            bmsk_queue = map_natural_to_bitmask(queue);
-            ring_rids[bmsk_queue] = vnic;
-        }
-    }
 
     /*
      * Setup the DMA configuration registers
