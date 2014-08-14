@@ -35,7 +35,6 @@ struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt3;
 };
 
-
 struct _cpp_desc_batch {
     struct nfd_pci_out_cpp_desc pkt0;
     struct nfd_pci_out_cpp_desc pkt1;
@@ -44,17 +43,29 @@ struct _cpp_desc_batch {
 };
 
 
+/*
+ * Rings and queues
+ */
+static __shared __lmem struct _cpp_desc_batch
+    cpp_desc_ring[RX_CPP_BATCH_RING_BAT];
+
+/*
+ * Sequence numbers
+ */
 __shared __gpr unsigned int data_dma_seq_issued = 0;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
 __shared __gpr unsigned int data_dma_seq_safe;
 
-__visible volatile __xread unsigned int rx_data_compl_reflect_xread = 0;
-__visible volatile SIGNAL rx_data_compl_reflect_sig;
-
+/*
+ * issue_dma variables
+ */
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 static __xwrite struct _dma_desc_batch dma_out_main;
 static __xwrite struct _dma_desc_batch dma_out_res;
+
+static __xread struct nfd_pci_out_fl_desc fl_entries[4];
+
 static SIGNAL data_sig0, data_sig1, data_sig2, data_sig3;
 static SIGNAL_MASK data_wait_msk = 0;
 static SIGNAL fl_sig0,  fl_sig1,  fl_sig2,  fl_sig3;
@@ -62,54 +73,25 @@ static SIGNAL_MASK fl_wait_msk = 0;
 
 SIGNAL get_order_sig, issue_order_sig;
 
+__visible volatile __xread unsigned int rx_data_compl_reflect_xread = 0;
+__visible volatile SIGNAL rx_data_compl_reflect_sig;
 
-static __xread struct nfd_pci_out_fl_desc fl_entries[4];
 
-
-static __shared __lmem struct _cpp_desc_batch
-    cpp_desc_ring[RX_CPP_BATCH_RING_BAT];
+/*
+ * free_buf variables
+ */
 static __gpr unsigned int blm_raddr;
 static __gpr unsigned int blm_rnum_start;
 
 
+/*
+ * Initialise the NN ring from stage_batch to issue_dma
+ */
 NN_RING_ZERO_PTRS;
 NN_RING_EMPTY_ASSERT_SET(0);
 
 
-__intrinsic void
-_get_fl_entry(__xread struct nfd_pci_out_fl_desc *entry,
-              struct pci_out_data_dma_info *info,
-              sync_t sync, SIGNAL *sig)
-{
-    unsigned int index = info->fl_cache_index;
-    unsigned int count = sizeof(struct nfd_pci_out_fl_desc) >> 3;
-
-    ctassert(sync == sig_done);
-    __asm mem[read, *entry, 0, index, count], sig_done[*sig];
-}
-
-__intrinsic void
-_get_ctm_addr(__gpr struct nfp_pcie_dma_cmd *descr,
-              struct pci_out_data_dma_info *info)
-{
-    descr->cpp_addr_hi = 0x80 | info->cpp.isl;
-    descr->cpp_addr_lo = ((1 << 31) | (info->cpp.pktnum << 16) |
-                          (info->cpp.offset & ((1<<11) - 1)));
-}
-
-
-__intrinsic void
-_free_ctm_addr(struct nfd_pci_out_cpp_desc *cpp)
-{
-    unsigned int addr_hi, addr_lo;
-
-    /* Construct address >>8 in single register */
-    addr_hi = (1<<31) | (cpp->isl << 24);
-    addr_lo = cpp->pktnum;
-    __asm mem[packet_free, --, addr_hi, <<8, addr_lo];
-}
-
-
+/* XXX replace with flowenv function */
 __intrinsic void
 _swap_on_msk(SIGNAL_MASK *wait_msk)
 {
@@ -120,37 +102,9 @@ _swap_on_msk(SIGNAL_MASK *wait_msk)
 }
 
 
-__intrinsic void
-_nn_get_msg(struct pci_out_data_dma_info *msg)
-{
-    /* Stage batch may head of line block, while enqueuing a message batch,
-     * so while dequeuing we must also head of line block. */
-    while (nn_ring_empty()) {
-        ctx_swap();
-    }
-
-    msg->__raw[0] = nn_ring_get();
-    msg->__raw[1] = nn_ring_get();
-    msg->__raw[2] = nn_ring_get();
-    msg->__raw[3] = nn_ring_get();
-}
-
-
-void
-_recompute_safe()
-{
-    unsigned int cpp_batch_safe = data_dma_seq_served + RX_CPP_BATCH_RING_BAT;
-    /* A single descriptor may require 2 DMAs */
-    unsigned int dma_batch_safe = data_dma_seq_compl + (RX_DESC_MAX_IN_FLIGHT /
-                                                         (MAX_RX_BATCH_SZ * 2));
-
-    data_dma_seq_safe = dma_batch_safe;
-    if (cpp_batch_safe < dma_batch_safe) {
-        data_dma_seq_safe = cpp_batch_safe;
-    }
-}
-
-
+/**
+ * Perform once off, CTX0-only initialisation
+ */
 void
 issue_dma_setup_shared()
 {
@@ -186,6 +140,10 @@ issue_dma_setup_shared()
     reorder_start(RX_ISSUE_START_CTX, &issue_order_sig);
 }
 
+
+/**
+ * Perform per CTX configuration of issue_dma
+ */
 void
 issue_dma_setup()
 {
@@ -208,6 +166,30 @@ issue_dma_setup()
 }
 
 
+/**
+ * Recompute the data_dma_seq_safe sequence number.  This sequence number
+ * combines space in the "cpp_desc_ring" and inflight DMAs into a single
+ * value to test against.
+ */
+void
+_recompute_safe()
+{
+    unsigned int cpp_batch_safe = data_dma_seq_served + RX_CPP_BATCH_RING_BAT;
+    /* A single descriptor may require 2 DMAs */
+    unsigned int dma_batch_safe = data_dma_seq_compl + (RX_DESC_MAX_IN_FLIGHT /
+                                                         (MAX_RX_BATCH_SZ * 2));
+
+    data_dma_seq_safe = dma_batch_safe;
+    if (cpp_batch_safe < dma_batch_safe) {
+        data_dma_seq_safe = cpp_batch_safe;
+    }
+}
+
+
+/**
+ * Copy reflected data_dma_seq_compl to shared variable and recompute the
+ * safe sequence number based on the updated value.
+ */
 void
 issue_dma_check_compl()
 {
@@ -218,6 +200,28 @@ issue_dma_check_compl()
 }
 
 
+/**
+ * Access FL entry from local CTM
+ * @param entry     Output FL descriptor
+ * @param info      Message from "stage_batch" containing fl_cache_index
+ * @param sync      Synchronisation type, must be "sig_done"
+ * @param sig       Signal to use for the read
+ */
+__intrinsic void
+_get_fl_entry(__xread struct nfd_pci_out_fl_desc *entry,
+              struct pci_out_data_dma_info *info,
+              sync_t sync, SIGNAL *sig)
+{
+    unsigned int index = info->fl_cache_index;
+    unsigned int count = sizeof(struct nfd_pci_out_fl_desc) >> 3;
+
+    ctassert(sync == sig_done);
+    __asm mem[read, *entry, 0, index, count], sig_done[*sig];
+}
+
+/**
+ * Wrapper macro for the "_get_fl_entry" method
+ */
 /* XXX if CTM reads aren't threaded we can save 3 signals here */
 #define _FL_PROC(_pkt)                                     \
 do {                                                       \
@@ -226,12 +230,40 @@ do {                                                       \
 } while (0)
 
 
+/**
+ * Remove "fl_sigX" for the packet from the wait mask
+ */
 #define _FL_CLR(_pkt)                            \
 do {                                             \
     fl_wait_msk &= ~__signals(&fl_sig##_pkt);    \
 } while (0)
 
 
+/**
+ * Populate a DMA descriptor with CTM address info from PCI.OUT input
+ * @param descr     Partially completed DMA descriptor
+ * @param info      PCI.OUT input message
+ */
+__intrinsic void
+_get_ctm_addr(__gpr struct nfp_pcie_dma_cmd *descr,
+              struct pci_out_data_dma_info *info)
+{
+    descr->cpp_addr_hi = 0x80 | info->cpp.isl;
+    descr->cpp_addr_lo = ((1 << 31) | (info->cpp.pktnum << 16) |
+                          (info->cpp.offset & ((1<<11) - 1)));
+}
+
+
+/**
+ * Handle one descriptor in the batch, issuing the DMAs that it requires,
+ * and passing the CPP descriptor on to the "free_buf" block.
+ * There following affect processing:
+ *      "SOP": if a packet is not "SOP" DMA addresses are offset
+ *      to complete the packet.
+ *      "EOP": if a packet is "EOP" we can neglect some checks on DMA size.
+ *      MU only packets (cpp.isl == 0): do not DMA from CTM
+ *      Queue "down": pass on CPP descriptor only
+ */
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     descr_tmp.rid = in_batch.pkt##_pkt##.rid;                           \
@@ -276,12 +308,12 @@ do {                                                                    \
                 descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;  \
                                                                         \
                 descr_tmp.length = ctm_bytes - 1;                       \
-                 pcie_dma_set_event(&descr_tmp, _type, _src);            \
-                                                                         \
-                 dma_out_main.pkt##_pkt = descr_tmp;                     \
-                 __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt##,     \
-                                RX_DATA_DMA_QUEUE,                      \
-                                sig_done, &data_sig##_pkt##);           \
+                pcie_dma_set_event(&descr_tmp, _type, _src);            \
+                                                                        \
+                dma_out_main.pkt##_pkt = descr_tmp;                     \
+                __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt##,     \
+                               RX_DATA_DMA_QUEUE,                       \
+                               sig_done, &data_sig##_pkt##);            \
                                                                         \
             } else {                                                    \
                 __critical_path();                                      \
@@ -383,6 +415,11 @@ do {                                                                    \
 } while (0)
 
 
+/**
+ * Remove "data_sigX" for the packet from the wait mask.
+ * Ensure that "EOP" is unset in the CPP descriptor message so that
+ * "free_buf" ignores the descriptor.
+ */
 #define _ISSUE_CLR(_pkt)                                             \
 do {                                                                 \
     data_wait_msk &= ~__signals(&data_sig##_pkt);                    \
@@ -391,8 +428,34 @@ do {                                                                 \
 } while (0)
 
 
+/**
+ * Dequeue a message from "stage_batch".
+ */
+__intrinsic void
+_nn_get_msg(struct pci_out_data_dma_info *msg)
+{
+    /* Stage batch may head of line block, while enqueuing a message batch,
+     * so while dequeuing we must also head of line block. */
+    while (nn_ring_empty()) {
+        ctx_swap();
+    }
 
-/** Parameters list to be filled out as extended */
+    msg->__raw[0] = nn_ring_get();
+    msg->__raw[1] = nn_ring_get();
+    msg->__raw[2] = nn_ring_get();
+    msg->__raw[3] = nn_ring_get();
+}
+
+
+
+/**
+ * Check for messages from "stage_batch" and then execute those messages.
+ * For each message we fetch a FL entry from CTM, performing an ordered swap
+ * until it is available, and then issue the DMAs required by the descriptor.
+ * This method *may* head of line block (in particular if "stage_block" head
+ * of line blocks).  This is not a problem because "free_buf" also runs on
+ * CTX0, so the other functions running on this ME can continue.
+ */
 void
 issue_dma()
 {
@@ -563,6 +626,9 @@ issue_dma()
 }
 
 
+/**
+ * Perform per CTX initialisation of "free_buf"
+ */
 void
 free_buf_setup()
 {
@@ -571,6 +637,25 @@ free_buf_setup()
 }
 
 
+/**
+ * Issue a "packet_free" command for the packet listed in the CPP descriptor
+ * @param cpp       CPP descriptor containing CTM packet information
+ */
+__intrinsic void
+_free_ctm_addr(struct nfd_pci_out_cpp_desc *cpp)
+{
+    unsigned int addr_hi, addr_lo;
+
+    /* Construct address >>8 in single register */
+    addr_hi = (1<<31) | (cpp->isl << 24);
+    addr_lo = cpp->pktnum;
+    __asm mem[packet_free, --, addr_hi, <<8, addr_lo];
+}
+
+
+/**
+ * Free the CTM and MU buffers associated with a CPP descriptor.
+ */
 #define _FREE_BUF(_pkt)                                                 \
 do {                                                                    \
     struct nfd_pci_out_cpp_desc cpp_desc;                               \
@@ -590,7 +675,10 @@ do {                                                                    \
 } while (0)
 
 
-/* NB this method does not swap */
+/**
+ * Check whether any batches can be freed, and handle the batch
+ * NB this method does not swap
+ */
 void
 free_buf()
 {

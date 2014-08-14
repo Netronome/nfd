@@ -17,11 +17,11 @@
 struct nfd_pci_out_fl_desc {
     union {
         struct {
-            unsigned int dd:1;
+            unsigned int dd:1;          /* Must be zero */
             unsigned int spare:23;
-            unsigned int dma_addr_hi:8;
+            unsigned int dma_addr_hi:8; /* High bits of the buf address */
 
-            unsigned int dma_addr_lo;
+            unsigned int dma_addr_lo;   /* Low bits of the buffer address */
         };
         unsigned int __raw[2];
     };
@@ -55,6 +55,12 @@ struct pci_out_cfg_msg {
     };
 };
 
+
+/**
+ * Message format used between "stage_batch" and "send_desc"
+ * "num" provides the number of packets in this batch.  RX descriptors
+ * are only DMA'ed if "send_pktX" is set.
+ */
 struct pci_out_desc_batch_msg {
     union {
         struct {
@@ -72,6 +78,10 @@ struct pci_out_desc_batch_msg {
     };
 };
 
+
+/**
+ * Batch header used on the "stage_batch" to "issue_dma" NN ring
+ */
 struct pci_out_data_batch_msg {
     union {
         struct {
@@ -89,30 +99,32 @@ struct pci_out_data_batch_msg {
  */
 #define RX_DATA_DMA_INFO_SZ     16
 
+/**
+ * Descriptor passed between "stage_batch" and "issue_dma"
+ */
 struct pci_out_data_dma_info {
     union {
         struct {
-            struct nfd_pci_out_cpp_desc cpp;
-            unsigned int rid:8;
+            struct nfd_pci_out_cpp_desc cpp;    /* CPP descriptor */
+            unsigned int rid:8;                 /* Requester ID for the pkt */
             unsigned int spare:8;
-            unsigned int data_len:16;
-            unsigned int fl_cache_index;
+            unsigned int data_len:16;           /* Total data length */
+            unsigned int fl_cache_index;        /* FL descriptor index */
         };
         unsigned int __raw[4];
     };
 };
 
 
+/**
+ * Structure for a batch of "stage_batch" to "issue_dma" descriptors
+ */
 struct pci_out_data_batch {
     struct pci_out_data_dma_info pkt0;
     struct pci_out_data_dma_info pkt1;
     struct pci_out_data_dma_info pkt2;
     struct pci_out_data_dma_info pkt3;
 };
-
-
-
-
 
 
 #endif /* !_BLOCKS__VNIC_PCI_OUT_INTERNAL_H_ */

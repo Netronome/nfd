@@ -14,7 +14,6 @@ extern void issue_dma_setup();
 
 extern void issue_dma_check_compl();
 
-/** Parameters list to be filled out as extended */
 extern void issue_dma();
 
 extern void free_buf_setup();

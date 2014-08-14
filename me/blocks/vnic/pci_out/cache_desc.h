@@ -15,10 +15,10 @@ extern void cache_desc_setup();
 
 __intrinsic void cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg_in);
 
+extern void cache_desc();
+
 __intrinsic unsigned int cache_desc_compute_fl_addr(__gpr unsigned int *queue,
                                                     unsigned int seq);
-
-extern void cache_desc();
 
 #endif /* !_BLOCKS__VNIC_PCI_OUT_CACHE_DESC_H_ */
 

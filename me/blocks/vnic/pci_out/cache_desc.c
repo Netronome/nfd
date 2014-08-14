@@ -30,11 +30,10 @@
 /* #define NFD_PCI_OUT_CREDITS_HOST_ISSUED */
 #define NFD_PCI_OUT_CREDITS_NFP_CACHED
 
-/* XXX move to a shared file */
 #define RX_FL_CACHE_SZ_PER_QUEUE   \
     (RX_FL_CACHE_BUFS_PER_QUEUE * sizeof(struct nfd_pci_out_fl_desc))
 
-/**
+/*
  * State variables for PCI.OUT queue controller accesses
  */
 static __xread struct qc_xfers rx_ap_xfers;
@@ -47,29 +46,45 @@ static volatile SIGNAL rx_ap_s3;
 __shared __gpr struct qc_bitmask active_bmsk;
 __shared __gpr struct qc_bitmask urgent_bmsk;
 
+
+/*
+ * Memory for PCI.OUT
+ */
 __shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
 
-__export __ctm __align(MAX_RX_QUEUES * RX_FL_CACHE_SZ_PER_QUEUE)
-    struct nfd_pci_out_fl_desc
-    fl_cache[MAX_RX_QUEUES][RX_FL_CACHE_BUFS_PER_QUEUE];
+static __shared __lmem unsigned int fl_cache_pending[RX_FL_FETCH_MAX_IN_FLIGHT];
 
 /* NB: MAX_RX_QUEUES * sizeof(unsigned int) <= 256 */
 __export __ctm __align256 unsigned int nfd_pci_out_credits[MAX_RX_QUEUES];
 
-static __gpr struct nfp_pcie_dma_cmd descr_tmp;
+__export __ctm __align(MAX_RX_QUEUES * RX_FL_CACHE_SZ_PER_QUEUE)
+    struct nfd_pci_out_fl_desc
+    fl_cache_mem[MAX_RX_QUEUES][RX_FL_CACHE_BUFS_PER_QUEUE];
 
-static __gpr unsigned int fl_cache_addr_lo;
+static __gpr unsigned int fl_cache_mem_addr_lo;
 static __gpr unsigned int fl_cache_credits_base = 0;
 
+
+/*
+ * Sequence numbers and update variables
+ */
 static __gpr unsigned int fl_cache_dma_seq_issued = 0;
 static __gpr unsigned int fl_cache_dma_seq_compl = 0;
 static __gpr unsigned int fl_cache_dma_seq_served = 0;
 static volatile __xread unsigned int fl_cache_event_xfer;
 static SIGNAL fl_cache_event_sig;
 
-static __shared __lmem unsigned int fl_cache_pending[RX_FL_FETCH_MAX_IN_FLIGHT];
+static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
 
+/**
+ * Access the MEM atomic "add_imm" instruction
+ * @param base      Start address of structure to increment
+ * @param offset    Offset within structure to increment
+ * @param val       Value to add
+ *
+ * XXX replace this command with suitable flowenv alternative when available.
+ */
 __intrinsic void
 _add_imm(unsigned int base, unsigned int offset, unsigned int val)
 {
@@ -83,6 +98,13 @@ _add_imm(unsigned int base, unsigned int offset, unsigned int val)
 }
 
 
+/**
+ * Zero data using MEM atomic engine
+ * @param base      Start address of structure to zero
+ * @param offset    Offset within structure to zero
+ *
+ * XXX replace this command with suitable flowenv alternative when available.
+ */
 __intrinsic void
 _zero_imm(unsigned int base, unsigned int offset)
 {
@@ -95,53 +117,10 @@ _zero_imm(unsigned int base, unsigned int offset)
     __asm mem[atomic_write_imm, --, base, <<8, offset, 1], indirect_ref;
 }
 
+
 /**
- * Check whether fl_cache_dma_seq_compl can be advanced and, if so, process
- * the messages in the fl_cache_pending queue.  Two dependent LM accesses are
- * required to process each message, so cycles lost to LM pointer setup are
- * hard to avoid.
+ * Perform once off, CTX0-only initialisation of the FL descriptor cacher
  */
-void
-_complete_fetch()
-{
-    unsigned int queue_c;
-    unsigned int pending_slot;
-
-    if (signal_test(&fl_cache_event_sig)) {
-        dma_seqn_advance(&fl_cache_event_xfer, &fl_cache_dma_seq_compl);
-
-        event_cls_autopush_filter_reset(
-            RX_FL_FETCH_EVENT_FILTER,
-            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            RX_FL_FETCH_EVENT_FILTER);
-        __implicit_write(&fl_cache_event_sig);
-
-        /* XXX how many updates can we receive at once? Do we need to
-         * throttle this? */
-        while (fl_cache_dma_seq_compl != fl_cache_dma_seq_served) {
-            /* Increment fl_cache_dma_seq_served upfront
-             * to avoid ambiguity about sequence number zero */
-            fl_cache_dma_seq_served++;
-
-            /* Extract queue from the fl_cache_pending message */
-            pending_slot = (fl_cache_dma_seq_served &
-                            (RX_FL_FETCH_MAX_IN_FLIGHT -1));
-            queue_c = fl_cache_pending[pending_slot];
-
-#ifdef NFD_PCI_OUT_CREDITS_NFP_CACHED
-            _add_imm(fl_cache_credits_base, queue_c * 4, RX_FL_BATCH_SZ);
-#endif
-
-            /* Increment queue available pointer by one batch
-             * NB: If NFP cached credits are not used, there is nothing to
-             * fill the LM pointer usage slots */
-            queue_data[queue_c].fl_a += RX_FL_BATCH_SZ;
-        }
-    }
-}
-
-
-
 void
 cache_desc_setup_shared()
 {
@@ -192,21 +171,36 @@ cache_desc_setup_shared()
     descr_tmp.trans_class = 0;
     descr_tmp.cpp_token = 0;
     descr_tmp.dma_cfg_index = RX_FL_CFG_REG;
-    descr_tmp.cpp_addr_hi = ((unsigned long long) fl_cache >> 8) & 0xff000000;
+    descr_tmp.cpp_addr_hi = (((unsigned long long) fl_cache_mem >> 8) &
+                             0xff000000);
 
-    fl_cache_addr_lo = ((unsigned long long) fl_cache & 0xffffffff);
+    /* Initialise addresses of the FL cache and credits */
+    fl_cache_mem_addr_lo = ((unsigned long long) fl_cache_mem & 0xffffffff);
     fl_cache_credits_base = (((unsigned long long) nfd_pci_out_credits >> 8) &
                              0xffffffff);
 }
 
 
+/**
+ * Perform per CTX configuration of the FL descriptor cacher.
+ *
+ * This method populates values required by threads calling
+ * "cache_desc_compute_fl_addr" as a service method.
+ */
 void
 cache_desc_setup()
 {
-    fl_cache_addr_lo = ((unsigned long long) fl_cache & 0xffffffff);
+    fl_cache_mem_addr_lo = ((unsigned long long) fl_cache_mem & 0xffffffff);
 }
 
 
+/**
+ * Setup PCI.OUT configuration fro the vNIC specified in cfg_msg
+ * @param cfg_msg   Standard configuration message
+ *
+ * This method handles all PCI.OUT configuration related to bringing a vNIC up
+ * or down.
+ */
 __intrinsic void
 cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
 {
@@ -287,6 +281,16 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
 }
 
 
+/**
+ * Perform checks and issue a FL batch fetch
+ * @param queue     Queue selected for the fetch
+ *
+ * This method uses and maintains LM queue state to determine whether to fetch
+ * a batch of FL descriptors.  If the state indicates that there is a batch to
+ * fetch and space to put it, then the fetch will proceed.  If not, the queue
+ * controller queue is reread to update the state.  The "urgent" bit for the
+ * queue is also cleared by this method.
+ */
 __intrinsic int
 _fetch_fl(__gpr unsigned int *queue)
 {
@@ -338,7 +342,6 @@ _fetch_fl(__gpr unsigned int *queue)
     /* We have a batch available, is there space to put it?
      * Space = ring size - (fl_s - fl_u). We require
      * space >= batch size. */
-    /* XXX check that we can issue a DMA! */
     space_chk = ((RX_FL_CACHE_BUFS_PER_QUEUE - RX_FL_BATCH_SZ) +
                  queue_data[*queue].fl_u - queue_data[*queue].fl_s);
     if (space_chk >= 0) {
@@ -386,26 +389,73 @@ _fetch_fl(__gpr unsigned int *queue)
         /* Indicate work done on queue */
         return 0;
     }
+    /* XXX clear urgent bit if the queue FL cache has become full! */
 
     /* Indicate no work done on queue */
     return -1;
 }
 
 
-__intrinsic unsigned int
-cache_desc_compute_fl_addr(__gpr unsigned int *queue, unsigned int seq)
+/**
+ * Check whether fl_cache_dma_seq_compl can be advanced and, if so, process
+ * the messages in the fl_cache_pending queue.  Two dependent LM accesses are
+ * required to process each message, so cycles lost to LM pointer setup are
+ * hard to avoid.
+ */
+void
+_complete_fetch()
 {
-    unsigned int ret;
+    unsigned int queue_c;
+    unsigned int pending_slot;
 
-    ret = seq & (RX_FL_CACHE_BUFS_PER_QUEUE - 1);
-    ret *= sizeof(struct nfd_pci_out_fl_desc);
-    ret |= (*queue * RX_FL_CACHE_SZ_PER_QUEUE );
-    ret |= fl_cache_addr_lo;
+    if (signal_test(&fl_cache_event_sig)) {
+        dma_seqn_advance(&fl_cache_event_xfer, &fl_cache_dma_seq_compl);
 
-    return ret;
+        event_cls_autopush_filter_reset(
+            RX_FL_FETCH_EVENT_FILTER,
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+            RX_FL_FETCH_EVENT_FILTER);
+        __implicit_write(&fl_cache_event_sig);
+
+        /* XXX how many updates can we receive at once? Do we need to
+         * throttle this? */
+        while (fl_cache_dma_seq_compl != fl_cache_dma_seq_served) {
+            /* Increment fl_cache_dma_seq_served upfront
+             * to avoid ambiguity about sequence number zero */
+            fl_cache_dma_seq_served++;
+
+            /* Extract queue from the fl_cache_pending message */
+            pending_slot = (fl_cache_dma_seq_served &
+                            (RX_FL_FETCH_MAX_IN_FLIGHT -1));
+            queue_c = fl_cache_pending[pending_slot];
+
+#ifdef NFD_PCI_OUT_CREDITS_NFP_CACHED
+            _add_imm(fl_cache_credits_base, queue_c * 4, RX_FL_BATCH_SZ);
+#endif
+
+            /* Increment queue available pointer by one batch
+             * NB: If NFP cached credits are not used, there is nothing to
+             * fill the LM pointer usage slots */
+            queue_data[queue_c].fl_a += RX_FL_BATCH_SZ;
+        }
+    }
 }
 
 
+/**
+ * Cache FL descriptors
+ *
+ * This method implements the overall caching strategy, calling
+ * "_complete_fetch" and "_fetch_fl" for detailed implementation.
+ *
+ * The general strategy is to poll up to RX_MAX_RETRIES queues via
+ * bitmasks to identify queues that may have pending FL entries.
+ * Queues are selected from the "urgent" bitmask first, and then the
+ * "active" bitmask.
+ *
+ * This method also updates the "active" bitmask, and checks for completed
+ * fetches.
+ */
 void
 cache_desc()
 {
@@ -464,4 +514,23 @@ cache_desc()
             ret = _fetch_fl(&queue);
         }
     }
+}
+
+
+/**
+ * Service function to determine the address of a specific FL entry
+ * @param queue     Bitmask numbered queue
+ * @param seq       Current "fl_u" sequence number for the queue
+ */
+__intrinsic unsigned int
+cache_desc_compute_fl_addr(__gpr unsigned int *queue, unsigned int seq)
+{
+    unsigned int ret;
+
+    ret = seq & (RX_FL_CACHE_BUFS_PER_QUEUE - 1);
+    ret *= sizeof(struct nfd_pci_out_fl_desc);
+    ret |= (*queue * RX_FL_CACHE_SZ_PER_QUEUE );
+    ret |= fl_cache_mem_addr_lo;
+
+    return ret;
 }

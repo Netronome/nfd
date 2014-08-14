@@ -39,23 +39,48 @@ struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt3;
 };
 
+struct _input_batch {
+    struct nfd_pci_out_input pkt0;
+    struct nfd_pci_out_input pkt1;
+    struct nfd_pci_out_input pkt2;
+    struct nfd_pci_out_input pkt3;
+};
+
+
+/*
+ * Variables "owned" by cache_desc
+ */
+extern __shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
+extern __shared __gpr struct qc_bitmask urgent_bmsk;
+
+
+/*
+ * Rings and queues
+ */
+NFD_RING_DECLARE(PCIE_ISL, pci_out, RX_PCI_OUT_RING_SZ);
+static __gpr mem_ring_addr_t in_ring_addr;
+static __gpr unsigned int in_ring_num;
+
+__shared __lmem struct pci_out_desc_batch_msg
+    desc_batch_msg[RX_DESC_BATCH_RING_BAT];
+
+
+/*
+ * stage_batch variables
+ */
 __shared __gpr unsigned int batch_issued = 0;
 __shared __gpr unsigned int batch_safe = RX_DESC_BATCH_RING_BAT;
-__shared __gpr unsigned int desc_batch_served = 0;
+
+static __xread struct _input_batch in_batch;
+SIGNAL get_sig;
+
+SIGNAL get_order_sig, put_order_sig,  may_poll;
+static SIGNAL_MASK stage_wait_msk = 0;
 
 
-/* Descriptor DMAs are counted individually, but we need space for
- * MAX_RX_BATCH_SZ DMAs to ensure we can complete a full batch. */
-__shared __gpr unsigned int desc_dma_issued = 0;
-__shared __gpr unsigned int desc_dma_compl = 0;
-__shared __gpr unsigned int desc_dma_safe = (RX_DESC_MAX_IN_FLIGHT -
-                                             MAX_RX_BATCH_SZ);
-__shared __gpr unsigned int data_dma_compl = 0;
-
-__shared __gpr unsigned int send_desc_addr_lo;
-__shared __gpr unsigned int send_desc_off = sizeof(struct nfd_pci_out_cpp_desc);
-static __gpr struct nfp_pcie_dma_cmd descr_tmp;
-
+/*
+ * distr_seqn variables
+ */
 static volatile __xread unsigned int data_dma_event_xfer;
 static volatile __xread unsigned int desc_dma_event_xfer;
 static SIGNAL data_dma_event_sig;
@@ -66,35 +91,27 @@ __remote volatile __xread unsigned int rx_data_compl_reflect_xread;
 __remote volatile SIGNAL rx_data_compl_reflect_sig;
 
 
+/*
+ * send_desc variables
+ */
+static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 static __xwrite struct _dma_desc_batch dma_out;
 static SIGNAL desc_sig0, desc_sig1, desc_sig2, desc_sig3;
 static SIGNAL_MASK desc_dma_wait_msk = 0;
 
-struct _input_batch {
-    struct nfd_pci_out_input pkt0;
-    struct nfd_pci_out_input pkt1;
-    struct nfd_pci_out_input pkt2;
-    struct nfd_pci_out_input pkt3;
-};
+__shared __gpr unsigned int send_desc_addr_lo;
+__shared __gpr unsigned int send_desc_off = sizeof(struct nfd_pci_out_cpp_desc);
 
+__shared __gpr unsigned int desc_dma_issued = 0;
+__shared __gpr unsigned int desc_dma_compl = 0;
+/* Descriptor DMAs are counted individually, but we need space for
+ * MAX_RX_BATCH_SZ DMAs to ensure we can complete a full batch. */
+__shared __gpr unsigned int desc_dma_safe = (RX_DESC_MAX_IN_FLIGHT -
+                                             MAX_RX_BATCH_SZ);
 
-extern __shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
+__shared __gpr unsigned int data_dma_compl = 0;
+__shared __gpr unsigned int desc_batch_served = 0;
 
-__shared __lmem struct pci_out_desc_batch_msg
-    desc_batch_msg[RX_DESC_BATCH_RING_BAT];
-
-NFD_RING_DECLARE(PCIE_ISL, pci_out, RX_PCI_OUT_RING_SZ);
-
-static __gpr mem_ring_addr_t in_ring_addr;
-static __gpr unsigned int in_ring_num;
-
-static __xread struct _input_batch in_batch;
-SIGNAL get_sig;
-
-SIGNAL get_order_sig, put_order_sig,  may_poll;
-static SIGNAL_MASK stage_wait_msk = 0;
-
-extern __shared __gpr struct qc_bitmask urgent_bmsk;
 
 
 /* XXX Move to some sort of CT reflect library */
@@ -138,6 +155,9 @@ stage_batch_setup_rings()
     NFD_RING_CONFIGURE(PCIE_ISL, pci_out);
 }
 
+/**
+ * Perform once off, CTX0-only initialisation
+ */
 void
 stage_batch_setup_shared()
 {
@@ -147,6 +167,9 @@ stage_batch_setup_shared()
 }
 
 
+/**
+ * Perform per CTX configuration of stage_batch
+ */
 void
 stage_batch_setup()
 {
@@ -162,7 +185,15 @@ stage_batch_setup()
     stage_wait_msk = __signals(&get_sig, &put_order_sig);
 }
 
-
+/**
+ * Test available FL entries against a "soft" threshold
+ *
+ * If FL a lot of entries are available, this code performs only one test.
+ * If fewer entries are available, the queue is flagged as "urgent" and
+ * more detailed tests are performed.  The method will ultimately head of
+ * line block if there is a packet to send on an "up" queue but no FL
+ * entry for that packet.  "Down" queues do not head of line block.
+ */
 void
 _fl_avail_check(__gpr unsigned int queue)
 {
@@ -188,6 +219,10 @@ _fl_avail_check(__gpr unsigned int queue)
 }
 
 
+/**
+ *  Add a "struct pci_out_data_dma_info" to the NN ring
+ *  @param msg      The structure to send
+ */
 __intrinsic void
 _nn_put_msg(struct pci_out_data_dma_info *msg)
 {
@@ -198,7 +233,7 @@ _nn_put_msg(struct pci_out_data_dma_info *msg)
 }
 
 
-/*
+/**
  * Construct messages for the "data_batch_ring" and the "desc_batch_ring".
  *
  * The "desc_batch_ring" needs the queue number from the RX descriptor and
@@ -245,7 +280,17 @@ do {                                            \
 } while (0)
 
 
-/* NB: This method has a path that does not swap */
+/**
+ * Check the input ring for a batch of packets and stage the batch.
+ * "Staging the batch" consists of constructing messages to the "send_desc"
+ * and the "issue_dma" blocks, and enqueuing these messages in the appropriate
+ * rings.
+ * This method may not block the thread as send_desc runs on the same
+ * threads.  The "may_poll" ordering signal serves a dual function of
+ * throttling the input ring polling when it tests empty, and providing
+ * a bypass pathway.
+ * NB: This method has a path that does not swap.
+ */
 void
 stage_batch()
 {
@@ -393,6 +438,9 @@ stage_batch()
 }
 
 
+/**
+ * Perform once off, CTX0-only initialisation of sequence number autopushes
+ */
 void
 distr_seqn_setup_shared()
 {
@@ -406,6 +454,9 @@ distr_seqn_setup_shared()
 }
 
 
+/**
+ * Check autopushes, compute sequence numbers, and reflect to issue_dma ME
+ */
 void
 distr_seqn()
 {
@@ -445,7 +496,9 @@ distr_seqn()
     }
 }
 
-
+/**
+ * Perform once off, CTX0-only initialisation of the send_desc DMA config
+ */
 void
 send_desc_setup_shared()
 {
@@ -471,6 +524,9 @@ send_desc_setup_shared()
 }
 
 
+/**
+ * Perform per CTX initialisation of the "send_desc" DMA config
+ */
 void
 send_desc_setup()
 {
@@ -494,6 +550,11 @@ send_desc_setup()
 }
 
 
+/**
+ * Setup the RX descriptor DMA from the PCI.OUT input ring
+ * "send_desc_off" must be updated even if we don't actually DMA
+ * the descriptor for a given packet.
+ */
 #define SEND_DESC_PROC(_pkt)                                            \
 do {                                                                    \
     if (msg.send_pkt##_pkt) {                                           \
@@ -530,13 +591,19 @@ do {                                                                    \
 } while (0)
 
 
+/**
+ * Remove "desc_sigX" for the packet from the wait mask
+ */
 #define SEND_DESC_CLR(_pkt)                              \
 do {                                                     \
     desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);    \
 } while (0)
 
 
-/* NB: send_desc has no ordering requirements and will always swap */
+/**
+ * Check for completed DMA batches and send the RX descriptors
+ * "send_desc" has no ordering requirements and will always swap.
+ */
 void
 send_desc()
 {
