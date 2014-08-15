@@ -57,4 +57,14 @@ _alloc_resource(_name emem##_emem##_queues global _num _num)
     _alloc_resource(_name BLQ_EMU_RINGS global 1)
 #define NFD_BLM_Q_ALLOC(_name) NFD_BLM_Q_ALLOC_IND(_name)
 
+
+/*
+ * Allocate 256B (64 x 4B) of memory at offset 0 in CTM for credits.
+ * Forcing this to zero on all PCIe islands makes code to access credits
+ * simpler and more efficient throughout the system.
+ */
+#define NFD_CREDITS_ALLOC_IND(_off)                                    \
+     _alloc_mem("nfd_pci_out_credits ctm+" #_off " island 256")
+#define NFD_CREDITS_ALLOC(_off) NFD_CREDITS_ALLOC_IND(_off)
+
 #endif /* !_BLOCKS__VNIC_SHARED_NFD_SHARED_H_ */

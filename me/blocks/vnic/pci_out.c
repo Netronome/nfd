@@ -33,11 +33,45 @@ pci_out_map_queue(unsigned int vnic, unsigned int queue)
 }
 
 
-unsigned int
-pci_out_get_credit(unsigned int bmsk_queue, unsigned int num)
+/*
+ * XXX this code assumes that credits are forced to start at CTM addr 0.
+ */
+__intrinsic void
+__pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
+                     unsigned int num, __xrw unsigned int *data,
+                     sync_t sync, SIGNAL_PAIR *sigpair)
 {
-    /* dummy code */
-    return num;
+    unsigned int addr_hi = pcie_isl << 30;
+    unsigned int addr_lo = bmsk_queue * sizeof(unsigned int);
+
+    ctassert(__is_ct_const(sync));
+    ctassert(__is_read_write_reg(data));
+
+    *data = num;
+
+    if (sync == sig_done) {
+        __asm mem[test_subsat, *data, addr_hi, <<8, addr_lo, 1], \
+            sig_done[*sigpair];
+    } else {
+        __asm mem[test_subsat, *data, addr_hi, <<8, addr_lo, 1], \
+            sig_done[*sigpair];
+        wait_for_all(sigpair);
+    }
+}
+
+
+unsigned int
+pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
+                   unsigned int num)
+{
+    __xrw unsigned int data;
+    SIGNAL_PAIR sig;
+    unsigned int ret;
+
+    __pci_out_get_credit(pcie_isl, bmsk_queue, num, &data, ctx_swap, &sig);
+    ret = data;
+
+    return ret;
 }
 
 

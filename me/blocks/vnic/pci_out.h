@@ -98,9 +98,19 @@ extern unsigned int pci_out_map_queue(unsigned int vnic, unsigned int queue);
  * @param bmsk_queue    Queue, bitmask numbered
  * @param num           Number of credits to request
  *
- * This method returns the actual number of credits allocated.
+ * This method returns the number of credits available before the request.
+ * It is the user's responsibility to verify that this is non-zero if one
+ * credit was requested, and greater than or equal to num if more than one
+ * credit was requested.
  */
-extern unsigned int pci_out_get_credit(unsigned int bmsk_queue,
+
+__intrinsic void __pci_out_get_credit(unsigned int pcie_isl,
+                                      unsigned int bmsk_queue, unsigned int num,
+                                      __xrw unsigned int *data,
+                                      sync_t sync, SIGNAL_PAIR *sigpair);
+
+extern unsigned int pci_out_get_credit(unsigned int pcie_isl,
+                                       unsigned int bmsk_queue,
                                        unsigned int num);
 
 

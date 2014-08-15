@@ -21,6 +21,7 @@
 #include <vnic/pci_out_cfg.h>
 #include <vnic/pci_out/pci_out_internal.h>
 #include <vnic/shared/qc.h>
+#include <vnic/shared/nfd_shared.h>
 #include <vnic/shared/vnic_cfg.h>
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/pcie.h>
@@ -54,15 +55,15 @@ __shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
 
 static __shared __lmem unsigned int fl_cache_pending[RX_FL_FETCH_MAX_IN_FLIGHT];
 
-/* NB: MAX_RX_QUEUES * sizeof(unsigned int) <= 256 */
-__export __ctm __align256 unsigned int nfd_pci_out_credits[MAX_RX_QUEUES];
+/* NFD credits are fixed at offset zero in CTM */
+NFD_CREDITS_ALLOC(RX_CREDITS_BASE);
+
 
 __export __ctm __align(MAX_RX_QUEUES * RX_FL_CACHE_SZ_PER_QUEUE)
     struct nfd_pci_out_fl_desc
     fl_cache_mem[MAX_RX_QUEUES][RX_FL_CACHE_BUFS_PER_QUEUE];
 
 static __gpr unsigned int fl_cache_mem_addr_lo;
-static __gpr unsigned int fl_cache_credits_base = 0;
 
 
 /*
@@ -78,7 +79,7 @@ static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
 
 /**
- * Access the MEM atomic "add_imm" instruction
+ * Increment an atomic counter stored in local CTM
  * @param base      Start address of structure to increment
  * @param offset    Offset within structure to increment
  * @param val       Value to add
@@ -90,16 +91,17 @@ _add_imm(unsigned int base, unsigned int offset, unsigned int val)
 {
     unsigned int ind;
 
+    offset = offset * sizeof(unsigned int);
     ind = (NFP_MECSR_PREV_ALU_LENGTH(8) | NFP_MECSR_PREV_ALU_OV_LEN |
            NFP_MECSR_PREV_ALU_OVE_DATA(2));
 
     __asm alu[--, ind, or, val, <<16];
-    __asm mem[add_imm, --, base, <<8, offset, 1], indirect_ref;
+    __asm mem[add_imm, --, base, offset, 1], indirect_ref;
 }
 
 
 /**
- * Zero data using MEM atomic engine
+ * Zero an atomic counter stored in local CTM
  * @param base      Start address of structure to zero
  * @param offset    Offset within structure to zero
  *
@@ -110,11 +112,12 @@ _zero_imm(unsigned int base, unsigned int offset)
 {
     unsigned int ind;
 
+    offset = offset * sizeof(unsigned int);
     ind = (NFP_MECSR_PREV_ALU_LENGTH(8) | NFP_MECSR_PREV_ALU_OV_LEN |
            NFP_MECSR_PREV_ALU_OVE_DATA(2));
 
     __asm alu[--, --, B, ind];
-    __asm mem[atomic_write_imm, --, base, <<8, offset, 1], indirect_ref;
+    __asm mem[atomic_write_imm, --, base, offset, 1], indirect_ref;
 }
 
 
@@ -176,8 +179,6 @@ cache_desc_setup_shared()
 
     /* Initialise addresses of the FL cache and credits */
     fl_cache_mem_addr_lo = ((unsigned long long) fl_cache_mem & 0xffffffff);
-    fl_cache_credits_base = (((unsigned long long) nfd_pci_out_credits >> 8) &
-                             0xffffffff);
 }
 
 
@@ -241,7 +242,7 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].rx_w = 0;
 
         /* Reset credits */
-        _zero_imm(fl_cache_credits_base, bmsk_queue);
+        _zero_imm(RX_CREDITS_BASE, bmsk_queue);
 
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK;
         rxq.size         = ring_sz - 8; /* XXX add define for size shift */
@@ -271,7 +272,7 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].rx_w = 0;
 
         /* Reset credits */
-        _zero_imm(fl_cache_credits_base, bmsk_queue);
+        _zero_imm(RX_CREDITS_BASE, bmsk_queue);
 
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
@@ -318,7 +319,7 @@ _fetch_fl(__gpr unsigned int *queue)
         ptr_inc &= queue_data[*queue].ring_sz_msk;
         queue_data[*queue].fl_w += ptr_inc;
 #ifdef NFD_PCI_OUT_CREDITS_HOST_ISSUED
-        _add_imm(fl_cache_credits_base, *queue * 4, ptr_inc);
+        _add_imm(RX_CREDITS_BASE, *queue * 4, ptr_inc);
 #endif
         if (!wptr.wmreached) {
             /* Mark the queue not urgent
@@ -430,7 +431,7 @@ _complete_fetch()
             queue_c = fl_cache_pending[pending_slot];
 
 #ifdef NFD_PCI_OUT_CREDITS_NFP_CACHED
-            _add_imm(fl_cache_credits_base, queue_c * 4, RX_FL_BATCH_SZ);
+            _add_imm(RX_CREDITS_BASE, queue_c * 4, RX_FL_BATCH_SZ);
 #endif
 
             /* Increment queue available pointer by one batch
