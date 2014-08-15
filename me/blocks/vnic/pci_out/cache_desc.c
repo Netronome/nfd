@@ -68,9 +68,9 @@ static __gpr unsigned int fl_cache_credits_base = 0;
 /*
  * Sequence numbers and update variables
  */
-static __gpr unsigned int fl_cache_dma_seq_issued = 0;
-static __gpr unsigned int fl_cache_dma_seq_compl = 0;
-static __gpr unsigned int fl_cache_dma_seq_served = 0;
+__gpr unsigned int fl_cache_dma_seq_issued = 0;
+__gpr unsigned int fl_cache_dma_seq_compl = 0;
+__gpr unsigned int fl_cache_dma_seq_served = 0;
 static volatile __xread unsigned int fl_cache_event_xfer;
 static SIGNAL fl_cache_event_sig;
 

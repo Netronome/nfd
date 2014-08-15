@@ -7,9 +7,33 @@
 #ifndef _BLOCKS__VNIC_PCI_IN_GATHER_STATUS_H_
 #define _BLOCKS__VNIC_PCI_IN_GATHER_STATUS_H_
 
-#define STATUS_Q_INDEP_START    16
+#define STATUS_Q_CACHE_START    8
+#define STATUS_Q_STAGE_START    16
 #define STATUS_Q_INFO_START     24
 #define STATUS_Q_SEL_START      31
+
+
+struct rx_cache_desc_status {
+    unsigned int active_bmsk_hi;
+    unsigned int active_bmsk_lo;
+    unsigned int urgent_bmsk_hi;
+    unsigned int urgent_bmsk_lo;
+    unsigned int fl_cache_issued;
+    unsigned int fl_cache_compl;
+    unsigned int fl_cache_served;
+    unsigned int spare;
+};
+
+struct rx_stage_batch_status {
+    unsigned int batch_issued;
+    unsigned int batch_safe;
+    unsigned int data_dma_compl;
+    unsigned int desc_batch_served;
+    unsigned int desc_dma_issued;
+    unsigned int desc_dma_compl;
+    unsigned int desc_dma_safe;
+    unsigned int spare;
+};
 
 
 extern void cache_desc_status_setup();
