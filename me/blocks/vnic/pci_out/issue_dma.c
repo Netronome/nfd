@@ -176,7 +176,7 @@ _recompute_safe()
 {
     unsigned int cpp_batch_safe = data_dma_seq_served + RX_CPP_BATCH_RING_BAT;
     /* A single descriptor may require 2 DMAs */
-    unsigned int dma_batch_safe = data_dma_seq_compl + (RX_DESC_MAX_IN_FLIGHT /
+    unsigned int dma_batch_safe = data_dma_seq_compl + (RX_DATA_MAX_IN_FLIGHT /
                                                          (MAX_RX_BATCH_SZ * 2));
 
     data_dma_seq_safe = dma_batch_safe;
