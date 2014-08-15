@@ -11,6 +11,8 @@
 #include <nfp/me.h>
 
 #include <vnic/pci_out/issue_dma.h>
+#include <vnic/pci_out/issue_dma_status.h>
+
 
 int
 main(void)
@@ -20,6 +22,7 @@ main(void)
         ctassert(MAX_VNICS * MAX_VNIC_QUEUES <= 64);
 
         issue_dma_setup_shared();
+        issue_dma_status_setup();
         free_buf_setup();
 
     } else {
@@ -39,6 +42,8 @@ main(void)
              * wait on work in issue_dma without preventing blocking
              * buffer freeing. */
             free_buf();
+
+            issue_dma_status();
 
             /* Yield thread */
             ctx_swap();
