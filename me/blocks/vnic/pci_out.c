@@ -209,4 +209,3 @@ pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
     result = data[0].cpp.__raw[0];
     return (result & (1 << 31)) ? (result << 2) : -1;
 }
-

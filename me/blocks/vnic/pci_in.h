@@ -84,6 +84,16 @@ struct nfd_pci_in_pkt_desc {
 };
 
 
+__intrinsic void __nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
+                                __xread struct nfd_pci_in_pkt_desc *pci_in_meta,
+                                sync_t sync, SIGNAL *sig);
+
+void pci_in_map_queue(unsigned int *vnic, unsigned int *queue,
+                      unsigned int nfd_queue);
+
+__intrinsic unsigned int pci_in_pkt_len(
+    __xread struct nfd_pci_in_pkt_desc *pci_in_meta);
+
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_H_ */
 
