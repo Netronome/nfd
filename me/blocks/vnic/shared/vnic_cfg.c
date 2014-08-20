@@ -545,7 +545,7 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
     /* Check if change affects this component */
     if (comp == VNIC_CFG_PCI_IN || comp == VNIC_CFG_PCI_OUT) {
         /* Only interested in the change if it contains a general update */
-        if (cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2] & NS_VNIC_CFG_UPDATE_GEN) {
+        if (cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2] & NS_VNIC_CFG_UPDATE_RING) {
             cfg_msg->interested = 1;
         }
     } else {
