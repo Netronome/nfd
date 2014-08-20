@@ -41,11 +41,14 @@ __pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
                      unsigned int num, __xrw unsigned int *data,
                      sync_t sync, SIGNAL_PAIR *sigpair)
 {
-    unsigned int addr_hi = pcie_isl << 30;
-    unsigned int addr_lo = bmsk_queue * sizeof(unsigned int);
+    unsigned int addr_hi;
+    unsigned int addr_lo;
 
     ctassert(__is_ct_const(sync));
     ctassert(__is_read_write_reg(data));
+
+    addr_hi = (0x84 | pcie_isl) << 24;
+    addr_lo = bmsk_queue * sizeof(unsigned int);
 
     *data = num;
 

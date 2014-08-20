@@ -66,7 +66,7 @@ void main(void)
 
         /* Get a credit */
         __pci_out_get_credit(PCIE_ISL, queue, 1, &credit,
-                             sig_done, &credit_sig);
+                             ctx_swap, &credit_sig);
         if (credit != 0) {
             /* Return the packet */
             pci_out_fill_addr_mu_only(&pci_out_desc, pci_in_meta.buf_addr, 0,
