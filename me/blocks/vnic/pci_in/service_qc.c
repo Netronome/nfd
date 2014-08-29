@@ -40,9 +40,11 @@ service_qc_setup ()
     struct nfp_em_filter_status tmp_status;
     __cls struct event_cls_filter *tmp_event_filter;
 
-    /* XXX Set QC to generate events including 8bit queue numbers.
-     * Ultimately the configurator will perform this job. */
+#ifdef NFD_VNIC_SIM
+    /* Set QC to generate events including 8bit queue numbers.
+     * The configurator performs this job on hardware. */
     set_Qctl8bitQnum();
+#endif
 
     /* Zero bitmasks */
     init_bitmasks(&active_bmsk);
