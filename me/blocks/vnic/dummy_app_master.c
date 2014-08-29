@@ -75,14 +75,14 @@ main(void)
         ctx_of = ctx() * 8 * (BUF_SZ >> 11);
 
         /* TEMP */
-        fake_bufs[0] = buf_base | ctx_of | 0 * (BUF_SZ >> 11);
-        fake_bufs[1] = buf_base | ctx_of | 1 * (BUF_SZ >> 11);
-        fake_bufs[2] = buf_base | ctx_of | 2 * (BUF_SZ >> 11);
-        fake_bufs[3] = buf_base | ctx_of | 3 * (BUF_SZ >> 11);
-        fake_bufs[4] = buf_base | ctx_of | 4 * (BUF_SZ >> 11);
-        fake_bufs[5] = buf_base | ctx_of | 5 * (BUF_SZ >> 11);
-        fake_bufs[6] = buf_base | ctx_of | 6 * (BUF_SZ >> 11);
-        fake_bufs[7] = buf_base | ctx_of | 7 * (BUF_SZ >> 11);
+        fake_bufs[0] = buf_base + ctx_of + 0 * (BUF_SZ >> 11);
+        fake_bufs[1] = buf_base + ctx_of + 1 * (BUF_SZ >> 11);
+        fake_bufs[2] = buf_base + ctx_of + 2 * (BUF_SZ >> 11);
+        fake_bufs[3] = buf_base + ctx_of + 3 * (BUF_SZ >> 11);
+        fake_bufs[4] = buf_base + ctx_of + 4 * (BUF_SZ >> 11);
+        fake_bufs[5] = buf_base + ctx_of + 5 * (BUF_SZ >> 11);
+        fake_bufs[6] = buf_base + ctx_of + 6 * (BUF_SZ >> 11);
+        fake_bufs[7] = buf_base + ctx_of + 7 * (BUF_SZ >> 11);
 
         rnum = _alloc_resource(BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS global 1);
 
