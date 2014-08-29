@@ -46,14 +46,16 @@ void main(void)
     int ret;
 
     if (ctx() == 0) {
+        local_csr_write(NFP_MECSR_MAILBOX_3, 0); /* Ensure usage shadow */
+
         local_csr_write(NFP_MECSR_MAILBOX_0, 0);
         local_csr_write(NFP_MECSR_MAILBOX_1, 0);
         local_csr_write(NFP_MECSR_MAILBOX_2, 0);
     }
 
-    /* Cheep and nasty delay to allow work queues
+    /* Manual delay to allow work queues
      * to become configured! */
-    sleep(7000);
+    while (local_csr_read(NFP_MECSR_MAILBOX_3) == 0);
 
     for (;;) {
         __nfd_pkt_recv(PCIE_ISL, ctx(), &pci_in_meta, sig_done, &get_sig);

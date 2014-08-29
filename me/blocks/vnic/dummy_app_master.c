@@ -34,7 +34,7 @@ __shared __gpr mem_ring_addr_t fake_blm_addr;
 #define BUF_SZ  (10 * 1024)
 #define BUF_NUM 128
 __xwrite unsigned int fake_bufs[8];
-__export __emem __align2M char bufs_array[BUF_NUM * BUF_SZ];
+__export __imem __align2M char bufs_array[BUF_NUM * BUF_SZ];
 
 
 int
