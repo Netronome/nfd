@@ -322,7 +322,7 @@ _fetch_fl(__gpr unsigned int *queue)
         ptr_inc &= queue_data[*queue].ring_sz_msk;
         queue_data[*queue].fl_w += ptr_inc;
 #ifdef NFD_PCI_OUT_CREDITS_HOST_ISSUED
-        _add_imm(RX_CREDITS_BASE, *queue * 4, ptr_inc);
+        _add_imm(RX_CREDITS_BASE, *queue, ptr_inc);
 #endif
         if (!wptr.wmreached) {
             /* Mark the queue not urgent
@@ -434,7 +434,7 @@ _complete_fetch()
             queue_c = fl_cache_pending[pending_slot];
 
 #ifdef NFD_PCI_OUT_CREDITS_NFP_CACHED
-            _add_imm(RX_CREDITS_BASE, queue_c * 4, RX_FL_BATCH_SZ);
+            _add_imm(RX_CREDITS_BASE, queue_c, RX_FL_BATCH_SZ);
 #endif
 
             /* Increment queue available pointer by one batch
