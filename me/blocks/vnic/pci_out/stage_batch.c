@@ -152,6 +152,7 @@ void
 stage_batch_setup_rings()
 {
     /* Input ring */
+    in_ring_num = NFD_RING_ALLOC(PCIE_ISL, pci_out, 1);
     NFD_RING_CONFIGURE(PCIE_ISL, pci_out);
 }
 
