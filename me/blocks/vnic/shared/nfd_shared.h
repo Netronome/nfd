@@ -67,4 +67,15 @@ _alloc_resource(_name emem##_emem##_queues global _num _num)
      _alloc_mem("nfd_pci_out_credits ctm+" #_off " island 256")
 #define NFD_CREDITS_ALLOC(_off) NFD_CREDITS_ALLOC_IND(_off)
 
+
+/* Check for consistency of defines */
+#if defined NFD_VNIC_PF && defined NFD_VNIC_VF
+#error "Incompatible defines: NFD_VNIC_PF and NFD_VNIC_VF both set"
+#endif
+
+#if !defined NFD_VNIC_PF && !defined NFD_VNIC_VF
+#error "Incompatible defines: Neither NFD_VNIC_PF nor NFD_VNIC_VF set"
+#endif
+
+
 #endif /* !_BLOCKS__VNIC_SHARED_NFD_SHARED_H_ */

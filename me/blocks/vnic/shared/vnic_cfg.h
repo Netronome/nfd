@@ -117,6 +117,10 @@ extern void vnic_cfg_setup();
  */
 __intrinsic void vnic_cfg_setup_pf();
 
+
+__intrinsic void vnic_cfg_setup_vf();
+
+
 /**
  * Perform shared configuration on "cfg_msg" and "cfg_sig".
  * @param cfg_sig       signal set to indicate that a message is ready

@@ -48,7 +48,13 @@ main(void)
         gather_status_setup();
 
         /* Initialisation that swaps and takes longer */
+#ifdef NFD_VNIC_PF
         vnic_cfg_setup_pf();
+#endif
+
+#ifdef NFD_VNIC_VF
+        vnic_cfg_setup_vf();
+#endif
 
         service_qc_setup();
         distr_seqn_setup();

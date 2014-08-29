@@ -118,6 +118,9 @@ issue_dma_setup_shared()
 
             bmsk_queue = map_natural_to_bitmask(queue);
             queue_data[bmsk_queue].rid = vnic;
+#ifdef NFD_VNIC_VF
+            queue_data[bmsk_queue].rid += 1;
+#endif
         }
     }
 

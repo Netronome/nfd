@@ -213,6 +213,51 @@ vnic_cfg_setup_pf()
 }
 
 
+__intrinsic void
+vnic_cfg_setup_vf()
+{
+    __gpr unsigned int addr_hi =  PCIE_ISL << 30;
+    unsigned int bar_base_addr;
+    struct nfp_pcie_barcfg_vf_p2c bar_tmp;
+    __xwrite struct nfp_pcie_barcfg_vf_p2c bar;
+    SIGNAL sig;
+
+    /* Clean start state */
+    bar_tmp.__raw = 0;
+
+    /* BAR0 (resource0) config mem */
+    bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_LEN_64BIT;
+    bar_tmp.target = 7; /* MU CPP target */
+    bar_tmp.token = 0;
+    /* XXX this is A0 specific */
+    bar_tmp.base = (unsigned long long) VNIC_CFG_BASE(PCIE_ISL) >> (40 - 19);
+    bar = bar_tmp;
+
+    bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(0);
+    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
+        ctx_swap[sig];
+
+    /* BAR1 (resource2) PCI.IN queues  */
+    bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_LEN_32BIT;
+    bar_tmp.target = 0; /* Internal PCIe Target */
+    /* XXX this is A0 specific */
+    bar_tmp.base = 0x80000 >> (40 - 19);
+    bar = bar_tmp;
+
+    bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(1);
+    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
+        ctx_swap[sig];
+
+    /* BAR2 (resource4) PCI.OUT queues */
+    /* XXX this is A0 specific */
+    bar_tmp.base = (0x80000 + 128 * 0x800) >> (40 - 19);
+    bar = bar_tmp;
+
+    bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(2);
+    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
+        ctx_swap[sig];
+}
+
 
 void
 _vnic_cfg_queue_setup()
