@@ -679,7 +679,7 @@ do {                                                                    \
  * Check whether any batches can be freed, and handle the batch
  * NB this method does not swap
  */
-void
+__forceinline void
 free_buf()
 {
     unsigned int rnum = blm_rnum_start;

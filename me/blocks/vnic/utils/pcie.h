@@ -27,14 +27,14 @@
  * If @req_id is constant and 0, don't configure the Requester ID and
  * use the device default instead.
  */
-__intrinsic void __pcie_c2p_barcfg(unsigned char pcie_isl,
+__intrinsic void __pcie_c2p_barcfg(unsigned int pcie_isl,
                                    unsigned char bar_idx,
                                    unsigned int addr_hi,
                                    unsigned int addr_lo,
                                    unsigned char req_id,
                                    sync_t sync, SIGNAL *sig);
 
-__intrinsic void pcie_c2p_barcfg(unsigned char pcie_isl,
+__intrinsic void pcie_c2p_barcfg(unsigned int pcie_isl,
                                  unsigned char bar_idx,
                                  unsigned int addr_hi,
                                  unsigned int addr_lo,
@@ -53,13 +53,13 @@ __intrinsic void pcie_c2p_barcfg(unsigned char pcie_isl,
  * Maximum size supported is 128B.
  */
 __intrinsic void __pcie_read(__xread void *data,
-                             unsigned char pcie_isl, unsigned char bar_idx,
+                             unsigned int pcie_isl, unsigned char bar_idx,
                              unsigned int addr_hi, unsigned int addr_lo,
                              size_t size, size_t max_size,
                              sync_t sync, SIGNAL *sig);
 
 __intrinsic void pcie_read(__xread void *data,
-                           unsigned char pcie_isl, unsigned char bar_idx,
+                           unsigned int pcie_isl, unsigned char bar_idx,
                            unsigned int addr_hi, unsigned int addr_lo,
                            size_t size);
 
@@ -76,13 +76,13 @@ __intrinsic void pcie_read(__xread void *data,
  * Maximum size supported is 128B.
  */
 __intrinsic void __pcie_write(__xwrite void *data,
-                              unsigned char pcie_isl, unsigned char bar_idx,
+                              unsigned int pcie_isl, unsigned char bar_idx,
                               unsigned int addr_hi, unsigned int addr_lo,
                               size_t size, size_t max_size,
                               sync_t sync, SIGNAL *sig);
 
 __intrinsic void pcie_write(__xwrite void *data,
-                            unsigned char pcie_isl, unsigned char bar_idx,
+                            unsigned int pcie_isl, unsigned char bar_idx,
                             unsigned int addr_hi, unsigned int addr_lo,
                             size_t size);
 
@@ -140,7 +140,7 @@ struct pcie_dma_cfg_one {
  * the caller's responsibility to ensure that calls for neighbours in a pair
  * do not overlap.
  */
-__intrinsic void pcie_dma_cfg_set_one(unsigned char pcie_isl,
+__intrinsic void pcie_dma_cfg_set_one(unsigned int pcie_isl,
                                       unsigned int index,
                                       struct pcie_dma_cfg_one new_cfg);
 
@@ -158,11 +158,11 @@ __intrinsic void pcie_dma_cfg_set_one(unsigned char pcie_isl,
  * ctx_swap sync options are supported.
  */
 __intrinsic void __pcie_dma_cfg_set_pair(
-    unsigned char pcie_isl, unsigned int index,
+    unsigned int pcie_isl, unsigned int index,
     __xwrite struct nfp_pcie_dma_cfg *new_cfg, sync_t sync, SIGNAL *sig);
 
 __intrinsic void pcie_dma_cfg_set_pair(
-    unsigned char pcie_isl, unsigned int index,
+    unsigned int pcie_isl, unsigned int index,
     __xwrite struct nfp_pcie_dma_cfg *new_cfg);
 
 
@@ -200,15 +200,15 @@ __intrinsic void pcie_dma_set_event(void *cmd,
  * @param cmd               DMA command to send
  * @param queue             queue to use, e.g. NFP_PCIE_DMA_TOPCI_HI
  */
-__intrinsic void __pcie_dma_enq(unsigned char pcie_isl,
+__intrinsic void __pcie_dma_enq(unsigned int pcie_isl,
                                 __xwrite struct nfp_pcie_dma_cmd *cmd,
                                 unsigned int queue, sync_t sync, SIGNAL *sig);
 
-__intrinsic void pcie_dma_enq(unsigned char pcie_isl,
+__intrinsic void pcie_dma_enq(unsigned int pcie_isl,
                               __xwrite struct nfp_pcie_dma_cmd *cmd,
                               unsigned int queue);
 
-__intrinsic void pcie_dma_enq_no_sig(unsigned char pcie_isl,
+__intrinsic void pcie_dma_enq_no_sig(unsigned int pcie_isl,
                                      __xwrite struct nfp_pcie_dma_cmd *cmd,
                                      unsigned int queue);
 

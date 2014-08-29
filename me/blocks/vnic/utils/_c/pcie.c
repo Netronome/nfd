@@ -31,7 +31,7 @@ struct _pcie_dma_cfg_word_access {
 
 
 __intrinsic void
-__pcie_c2p_barcfg(unsigned char pcie_isl, unsigned char bar_idx,
+__pcie_c2p_barcfg(unsigned int pcie_isl, unsigned char bar_idx,
                   unsigned int addr_hi, unsigned int addr_lo,
                   unsigned char req_id, sync_t sync, SIGNAL *sig)
 {
@@ -64,7 +64,7 @@ __pcie_c2p_barcfg(unsigned char pcie_isl, unsigned char bar_idx,
 
 
 __intrinsic void
-pcie_c2p_barcfg(unsigned char pcie_isl, unsigned char bar_idx,
+pcie_c2p_barcfg(unsigned int pcie_isl, unsigned char bar_idx,
                 unsigned int addr_hi, unsigned int addr_lo,
                 unsigned char req_id)
 {
@@ -139,7 +139,7 @@ do {                                                                    \
 
 
 __intrinsic void
-__pcie_read(__xread void *data, unsigned char pcie_isl, unsigned char bar_idx,
+__pcie_read(__xread void *data, unsigned int pcie_isl, unsigned char bar_idx,
             unsigned int addr_hi, unsigned int addr_lo,
             size_t size, size_t max_size, sync_t sync, SIGNAL *sig)
 {
@@ -150,7 +150,7 @@ __pcie_read(__xread void *data, unsigned char pcie_isl, unsigned char bar_idx,
 
 
 __intrinsic void
-pcie_read(__xread void *data, unsigned char pcie_isl, unsigned char bar_idx,
+pcie_read(__xread void *data, unsigned int pcie_isl, unsigned char bar_idx,
           unsigned int addr_hi, unsigned int addr_lo, size_t size)
 {
     SIGNAL sig;
@@ -162,7 +162,7 @@ pcie_read(__xread void *data, unsigned char pcie_isl, unsigned char bar_idx,
 
 
 __intrinsic void
-__pcie_write(__xwrite void *data, unsigned char pcie_isl, unsigned char bar_idx,
+__pcie_write(__xwrite void *data, unsigned int pcie_isl, unsigned char bar_idx,
              unsigned int addr_hi, unsigned int addr_lo,
              size_t size, size_t max_size, sync_t sync, SIGNAL *sig)
 {
@@ -173,7 +173,7 @@ __pcie_write(__xwrite void *data, unsigned char pcie_isl, unsigned char bar_idx,
 
 
 __intrinsic void
-pcie_write(__xwrite void *data, unsigned char pcie_isl, unsigned char bar_idx,
+pcie_write(__xwrite void *data, unsigned int pcie_isl, unsigned char bar_idx,
            unsigned int addr_hi, unsigned int addr_lo, size_t size)
 {
     SIGNAL sig;
@@ -185,12 +185,12 @@ pcie_write(__xwrite void *data, unsigned char pcie_isl, unsigned char bar_idx,
 
 
 __intrinsic void
-pcie_dma_cfg_set_one(unsigned char pcie_isl, unsigned int index,
+pcie_dma_cfg_set_one(unsigned int pcie_isl, unsigned int index,
                      struct pcie_dma_cfg_one new_cfg)
 {
     __xrw unsigned int cfg;
     unsigned int count = ((sizeof cfg) >> 2);
-    __gpr struct _pcie_dma_cfg_word_access cfg_tmp;
+    struct _pcie_dma_cfg_word_access cfg_tmp;
     SIGNAL sig;
 
     /* XXX nfp_pcie.h defines not convenient for this purpose */
@@ -219,7 +219,7 @@ pcie_dma_cfg_set_one(unsigned char pcie_isl, unsigned int index,
 }
 
 __intrinsic void
-__pcie_dma_cfg_set_pair(unsigned char pcie_isl, unsigned int index,
+__pcie_dma_cfg_set_pair(unsigned int pcie_isl, unsigned int index,
                         __xwrite struct nfp_pcie_dma_cfg *new_cfg,
                         sync_t sync, SIGNAL *sig)
 {
@@ -239,7 +239,7 @@ __pcie_dma_cfg_set_pair(unsigned char pcie_isl, unsigned int index,
 }
 
 __intrinsic void
-pcie_dma_cfg_set_pair(unsigned char pcie_isl, unsigned int index,
+pcie_dma_cfg_set_pair(unsigned int pcie_isl, unsigned int index,
                       __xwrite struct nfp_pcie_dma_cfg *new_cfg)
 {
     SIGNAL sig;
@@ -280,13 +280,13 @@ pcie_dma_set_event(void *cmd, unsigned int type, unsigned int source)
 }
 
 
-__intrinsic void __pcie_dma_enq(unsigned char pcie_isl,
+__intrinsic void __pcie_dma_enq(unsigned int pcie_isl,
                                   __xwrite struct nfp_pcie_dma_cmd *cmd,
                                   unsigned int queue,
                                   sync_t sync, SIGNAL *sig)
 {
     unsigned int count = (sizeof(struct nfp_pcie_dma_cmd) >> 2);
-    __gpr unsigned int addr_hi = pcie_isl << 30;
+    unsigned int addr_hi = pcie_isl << 30;
 
     ctassert(__is_write_reg(cmd));
     ctassert(__is_ct_const(sync));
@@ -302,19 +302,19 @@ __intrinsic void __pcie_dma_enq(unsigned char pcie_isl,
 }
 
 __intrinsic void
-pcie_dma_enq(unsigned char pcie_isl, __xwrite struct nfp_pcie_dma_cmd *cmd,
+pcie_dma_enq(unsigned int pcie_isl, __xwrite struct nfp_pcie_dma_cmd *cmd,
              unsigned int queue)
 {
     SIGNAL sig;
     __pcie_dma_enq(pcie_isl, cmd, queue, ctx_swap, &sig);
 }
 
-__intrinsic void pcie_dma_enq_no_sig(unsigned char pcie_isl,
+__intrinsic void pcie_dma_enq_no_sig(unsigned int pcie_isl,
                                      __xwrite struct nfp_pcie_dma_cmd *cmd,
                                      unsigned int queue)
 {
     unsigned int count = (sizeof(struct nfp_pcie_dma_cmd) >> 2);
-    __gpr unsigned int addr_hi = pcie_isl << 30;
+    unsigned int addr_hi = pcie_isl << 30;
 
     ctassert(__is_write_reg(cmd));
 
