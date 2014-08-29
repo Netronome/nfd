@@ -41,7 +41,7 @@ main(void)
             /* Running free_buf on CTX0 as well allows CTX1-7 to
              * wait on work in issue_dma without preventing blocking
              * buffer freeing. */
-            free_buf();
+            /* free_buf(); XXX resolve why "this" causes issues if PCIE_ISL=0 */
 
             issue_dma_status();
 

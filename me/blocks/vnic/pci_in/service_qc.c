@@ -60,7 +60,7 @@ service_qc_setup ()
     tmp_status.__raw = 0; /* bitmask32 requires no further settings */
     tmp_event_filter = event_cls_filter_handle(8);
     event_cls_filter_setup(tmp_event_filter, NFP_EM_FILTER_MASK_TYPE_LASTEV,
-                           0x140000, 0xFC0000, tmp_status);
+                           ((4 | PCIE_ISL)<<18), 0xFC0000, tmp_status);
 
     /* XXX set all QC queues to a safe state! */
 }
