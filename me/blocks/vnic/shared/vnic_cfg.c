@@ -66,7 +66,8 @@ __visible SIGNAL VNIC_CFG_SIG;
 __remote SIGNAL VNIC_CFG_SIG_NEXT_ME;
 #endif
 
-__export __emem __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS) char
+/* XXX remove EMU specification */
+__export __emem_n(2) __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS) char
     VNIC_CFG_BASE(PCIE_ISL)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
 
 static unsigned int cfg_ring_enables[2] = {0, 0};
