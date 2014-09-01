@@ -84,7 +84,7 @@ void main(void)
         pci_out_dummy_vlan(&pci_out_desc, 0x1234, 0xd);
 
         queue = pci_out_map_queue(0, 0);
-        ret = pci_out_send(1, queue, &pci_out_desc);
+        ret = pci_out_send(PCIE_ISL, queue, &pci_out_desc);
 
 
 /*         /\* pbuf = pkt_ctm_ptr40(pi->isl, pi->pnum, 0); *\/ */
