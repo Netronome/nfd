@@ -63,4 +63,9 @@
 
 #define VNIC_CFG_PCI_OUT(_x)    __nfp_idstr2meid("pcie##_x##.me0")
 
+
+/* Debug defines */
+#define TX_DBG_GATHER_INTVL             1000000
+#define TX_DBG_ISSUE_DMA_INTVL          1000000
+
 #endif /* !_BLOCKS__VNIC_PCI_IN_CFG_H_ */

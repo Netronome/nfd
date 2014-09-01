@@ -7,6 +7,7 @@
 
 #include <nfp.h>
 
+#include <nfp/me.h>
 #include <std/reg_utils.h>
 
 #include <vnic/pci_out/issue_dma_status.h>
@@ -30,24 +31,36 @@ extern __shared __gpr unsigned int data_dma_seq_safe;
  */
 static __xwrite struct rx_issue_dma_status status_issued = {0, 0, 0, 0};
 
+SIGNAL status_throttle;
+
 
 void
 issue_dma_status_setup()
 {
     /* Fix the transfer registers used */
     __assign_relative_register(&status_issued, STATUS_ISSUE_DMA_START);
+
+    set_alarm(RX_DBG_ISSUE_DMA_INTVL, &status_throttle);
 }
 
 void
 issue_dma_status()
 {
-    __implicit_read(&status_issued, sizeof status_issued);
+    if (signal_test(&status_throttle))
+    {
+        __implicit_read(&status_issued, sizeof status_issued);
 
-    /*
-     * Collect the independent data from various sources
-     */
-    status_issued.data_dma_seq_issued = data_dma_seq_issued;
-    status_issued.data_dma_seq_compl = data_dma_seq_compl;
-    status_issued.data_dma_seq_served = data_dma_seq_served;
-    status_issued.data_dma_seq_safe = data_dma_seq_safe;
+        /*
+         * Collect the independent data from various sources
+         */
+        status_issued.data_dma_seq_issued = data_dma_seq_issued;
+        status_issued.data_dma_seq_compl = data_dma_seq_compl;
+        status_issued.data_dma_seq_served = data_dma_seq_served;
+        status_issued.data_dma_seq_safe = data_dma_seq_safe;
+
+        /*
+         * Reset the alarm
+         */
+        set_alarm(RX_DBG_ISSUE_DMA_INTVL, &status_throttle);
+    }
 }

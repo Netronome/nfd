@@ -65,4 +65,8 @@
 #define RX_DATA_BATCH_RING_NUM  14  /* XXX use generic resource allocation */
 
 
+/* Debug defines */
+#define RX_DBG_CACHE_DESC_INTVL         1000000
+#define RX_DBG_ISSUE_DMA_INTVL          1000000
+
 #endif /* !_BLOCKS__VNIC_PCI_OUT_CFG_H_ */
