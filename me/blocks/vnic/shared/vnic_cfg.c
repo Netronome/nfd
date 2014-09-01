@@ -94,7 +94,7 @@ send_interthread_sig(unsigned int dst_me, unsigned int ctx, unsigned int sig_no)
     __asm ct[interthread_signal, --, addr, 0, --];
 }
 
-/* XXX move to libnfp.c */
+
 /**
  * Find first set and return -1 if none
  * @param data          Value to test for first set
@@ -105,7 +105,7 @@ send_interthread_sig(unsigned int dst_me, unsigned int ctx, unsigned int sig_no)
  * by returning '-1' in this case.
  */
 __intrinsic int
-ffs(unsigned int data)
+_ffs(unsigned int data)
 {
     int ret;
 
@@ -384,7 +384,7 @@ vnic_cfg_next_vnic()
     __xread struct nfp_qc_sts_lo cfg_queue_sts;
     SIGNAL sig;
 
-    curr_bit = ffs(cfg_vnic_bmsk);
+    curr_bit = _ffs(cfg_vnic_bmsk);
 
     /* cfg_vnic_bmsk empty, fast path short circuits any context swaps */
     if (curr_bit < 0) {
