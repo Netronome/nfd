@@ -88,7 +88,7 @@ static __gpr unsigned int blm_rnum_start;
  * Initialise the NN ring from stage_batch to issue_dma
  */
 NN_RING_ZERO_PTRS;
-NN_RING_EMPTY_ASSERT_SET(0);
+NN_RING_EMPTY_ASSERT_SET(3);
 
 
 /* XXX replace with flowenv function */
