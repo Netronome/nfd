@@ -408,8 +408,7 @@ vnic_cfg_next_vnic()
     vnic = queue / (2 * MAX_VNIC_QUEUES);
     qc_add_to_ptr(PCIE_ISL, queue, QC_RPTR, 1);
 #else
-    cfg_queue_sts.__raw = __qc_read(PCIE_ISL, queue, QC_RPTR,
-                                    ctx_swap, &sig);
+    __qc_read(PCIE_ISL, queue, QC_RPTR, &cfg_queue_sts.__raw, ctx_swap, &sig);
     if (cfg_queue_sts.empty) {
         /* We haven't found a vNIC to service this time */
         vnic = -1;

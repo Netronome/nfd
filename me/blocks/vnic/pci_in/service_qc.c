@@ -100,7 +100,7 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
         queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
 #ifdef NFD_VNIC_VF
-        queue_data[bmsk_queue].requester_id += 1;
+        queue_data[bmsk_queue].requester_id += VNIC_CFG_VF_OFFSET;
 #endif
         queue_data[bmsk_queue].spare0 = 0;
         queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;

@@ -22,6 +22,7 @@
 #include <vnic/pci_in/pci_in_internal.h>
 #include <vnic/pci_in/precache_bufs.h>
 #include <vnic/shared/qc.h>
+#include <vnic/shared/vnic_cfg.h>
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/pcie.h>
 #include <vnic/utils/nn_ring.h>
@@ -119,7 +120,7 @@ issue_dma_setup_shared()
             bmsk_queue = map_natural_to_bitmask(queue);
             queue_data[bmsk_queue].rid = vnic;
 #ifdef NFD_VNIC_VF
-            queue_data[bmsk_queue].rid += 1;
+            queue_data[bmsk_queue].rid += VNIC_CFG_VF_OFFSET;
 #endif
         }
     }

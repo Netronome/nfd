@@ -33,6 +33,8 @@
 /* XXX allocate using generic resource management */
 #define REQUESTER_ID_BASE       (6<<6)
 
+#define VNIC_CFG_VF_OFFSET      64
+
 /* Minimum size configuration rings are fine */
 #define VNIC_CFG_RING_SZ        512
 
