@@ -4,12 +4,28 @@
  * @file          blocks/vnic/pci_in/pci_out_internal.h
  * @brief         Internal structure and message definitions for PCI.OUT
  */
-
-#include <vnic/pci_out.h>
-
 #ifndef _BLOCKS__VNIC_PCI_OUT_INTERNAL_H_
 #define _BLOCKS__VNIC_PCI_OUT_INTERNAL_H_
 
+
+struct rx_queue_info {
+    unsigned int fl_w;
+    unsigned int fl_s;
+    unsigned int ring_sz_msk;
+    unsigned int requester_id:8;
+    unsigned int spare0:15;
+    unsigned int up:1;
+    unsigned int ring_base_hi:8;
+    unsigned int ring_base_lo;
+    unsigned int fl_a;
+    unsigned int fl_u;
+    unsigned int rx_w;
+};
+
+
+#if defined (__NFP_LANG_MICROC)
+
+#include <vnic/pci_out.h>
 
 /*
  * Freelist descriptor format
@@ -27,20 +43,6 @@ struct nfd_pci_out_fl_desc {
     };
 };
 
-
-struct rx_queue_info {
-    unsigned int fl_w;
-    unsigned int fl_s;
-    unsigned int ring_sz_msk;
-    unsigned int requester_id:8;
-    unsigned int spare0:15;
-    unsigned int up:1;
-    unsigned int ring_base_hi:8;
-    unsigned int ring_base_lo;
-    unsigned int fl_a;
-    unsigned int fl_u;
-    unsigned int rx_w;
-};
 
 /* NB: this struct must be compatible with vnic_cfg_msg */
 struct pci_out_cfg_msg {
@@ -126,5 +128,6 @@ struct pci_out_data_batch {
     struct pci_out_data_dma_info pkt3;
 };
 
+#endif /* __NFP_LANG_MICROC */
 
 #endif /* !_BLOCKS__VNIC_PCI_OUT_INTERNAL_H_ */

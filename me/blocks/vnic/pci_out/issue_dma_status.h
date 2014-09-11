@@ -16,6 +16,9 @@ struct rx_issue_dma_status {
     unsigned int data_dma_seq_safe;
 };
 
+
+#if defined (__NFP_LANG_MICROC)
+
 /**
  * Initialise the issue_dma status output
  */
@@ -25,5 +28,7 @@ extern void issue_dma_status_setup();
  * Show issue_dma status in transfer registers
  */
 extern void issue_dma_status();
+
+#endif /* __NFP_LANG_MICROC */
 
 #endif /* !_BLOCKS__VNIC_PCI_OUT_ISSUE_DMA_STATUS_H_ */

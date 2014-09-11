@@ -30,6 +30,9 @@ struct tx_notify_status {
     unsigned int dma_served;
 };
 
+
+#if defined (__NFP_LANG_MICROC)
+
 /**
  * Initialise the gather and notify status output
  */
@@ -39,6 +42,8 @@ extern void gather_status_setup();
  * Show gather and notify status in transfer registers
  */
 extern void gather_status();
+
+#endif /* __NFP_LANG_MICROC */
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_GATHER_STATUS_H_ */
 
