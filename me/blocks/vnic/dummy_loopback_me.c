@@ -37,7 +37,8 @@ void main(void)
     __xread struct nfd_pci_in_pkt_desc pci_in_meta;
     __gpr struct nfd_pci_out_input pci_out_desc;
     unsigned int bls = TX_BLM_BLS;
-    unsigned int queue = 0;
+    unsigned int queue;
+    unsigned int vnic;
     unsigned int pktlen;
     __xrw unsigned int credit;
     SIGNAL get_sig;
@@ -64,7 +65,10 @@ void main(void)
         nrecv++;
         local_csr_write(NFP_MECSR_MAILBOX_0, nrecv);
 
-        queue = pci_in_meta.q_num;
+        /* Increment the queue number within the vnic */
+        pci_in_map_queue(&vnic, &queue, pci_in_meta.q_num);
+        queue = queue + 1;
+        queue = pci_out_map_queue(vnic, queue);
 
         /* Get a credit */
         __pci_out_get_credit(PCIE_ISL, queue, 1, &credit,
