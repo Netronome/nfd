@@ -176,7 +176,7 @@ gather()
              * by doing it all by hand, or playing with initialisation time.
              */
             descr_tmp.pcie_addr_hi = queue_data[queue].ring_base_hi;
-            descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_lo |
+            descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_lo +
                                       pcie_addr_off);
             descr_tmp.cpp_addr_lo =  desc_ring_base | desc_ring_off;
             descr_tmp.rid = queue_data[queue].requester_id;

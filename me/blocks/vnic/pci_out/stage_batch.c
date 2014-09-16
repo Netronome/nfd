@@ -571,7 +571,7 @@ do {                                                                    \
     pcie_addr_off = pcie_addr_off * sizeof(struct nfd_pci_out_rx_desc); \
     queue_data[queue].rx_w++;                                           \
     descr_tmp.pcie_addr_hi = queue_data[queue].ring_base_hi;            \
-    descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_lo |          \
+    descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_lo +          \
                               pcie_addr_off);                           \
     descr_tmp.rid = queue_data[queue].requester_id;                     \
                                                                         \

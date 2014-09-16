@@ -364,7 +364,7 @@ _fetch_fl(__gpr unsigned int *queue)
 
         /* Complete descriptor */
         descr_tmp.pcie_addr_hi = queue_data[*queue].ring_base_hi;
-        descr_tmp.pcie_addr_lo = (queue_data[*queue].ring_base_lo |
+        descr_tmp.pcie_addr_lo = (queue_data[*queue].ring_base_lo +
                                   pcie_addr_off);
 
         descr_tmp.cpp_addr_lo =
