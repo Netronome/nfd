@@ -28,14 +28,27 @@
 #include <vnic/utils/ordering.h>
 
 
+#ifndef DUMMY_LOOPBACK_WQ
+#define DUMMY_LOOPBACK_WQ   0
+#endif
+
+
 __shared int nrecv = 0;
 __shared int nsent = 0;
 __shared int nfail = 0;
+
+
+/* Ordering  */
+static SIGNAL get_order_sig;
+static SIGNAL credit_order_sig;
+static SIGNAL send_order_sig;
+
 
 void main(void)
 {
     __xread struct nfd_pci_in_pkt_desc pci_in_meta;
     __gpr struct nfd_pci_out_input pci_out_desc;
+    __xrw struct nfd_pci_out_input pci_out_desc_xfer[2];
     unsigned int bls = TX_BLM_BLS;
     unsigned int queue;
     unsigned int vnic;
@@ -43,12 +56,20 @@ void main(void)
     __xrw unsigned int credit;
     SIGNAL get_sig;
     SIGNAL_PAIR credit_sig;
+    SIGNAL_PAIR send_sig;
 
     int ret;
 
     if (ctx() == 0) {
+        /* Kick off ordering */
+        signal_ctx(0, __signal_number(&get_order_sig));
+        signal_ctx(0, __signal_number(&credit_order_sig));
+        signal_ctx(0, __signal_number(&send_order_sig));
+
+        /* Clear the manual delay flag */
         local_csr_write(NFP_MECSR_MAILBOX_3, 0); /* Ensure usage shadow */
 
+        /* Clear counters */
         local_csr_write(NFP_MECSR_MAILBOX_0, 0);
         local_csr_write(NFP_MECSR_MAILBOX_1, 0);
         local_csr_write(NFP_MECSR_MAILBOX_2, 0);
@@ -58,21 +79,33 @@ void main(void)
      * to become configured! */
     while (local_csr_read(NFP_MECSR_MAILBOX_3) == 0);
 
+    /* Reorder before starting the work loop */
+    wait_for_all(&send_order_sig);
+    signal_next_ctx(__signal_number(&send_order_sig));
+
+
     for (;;) {
-        __nfd_pkt_recv(PCIE_ISL, ctx(), &pci_in_meta, sig_done, &get_sig);
-        wait_for_all(&get_sig);
+        /* Receive a packet */
+        __nfd_pkt_recv(PCIE_ISL, DUMMY_LOOPBACK_WQ, &pci_in_meta,
+                       sig_done, &get_sig);
+        wait_for_all(&get_sig, &get_order_sig);
+        signal_next_ctx(__signal_number(&get_order_sig));
 
         nrecv++;
         local_csr_write(NFP_MECSR_MAILBOX_0, nrecv);
+
 
         /* Increment the queue number within the vnic */
         pci_in_map_queue(&vnic, &queue, pci_in_meta.q_num);
         queue = queue + 1;
         queue = pci_out_map_queue(vnic, queue);
 
+
         /* Get a credit */
         __pci_out_get_credit(PCIE_ISL, queue, 1, &credit,
-                             ctx_swap, &credit_sig);
+                             sig_done, &credit_sig);
+        wait_for_all(&credit_sig, &credit_order_sig);
+        signal_next_ctx(__signal_number(&credit_order_sig));
         if (credit != 0) {
             /* Return the packet */
             pci_out_fill_addr_mu_only(&pci_out_desc, pci_in_meta.buf_addr, 0,
@@ -87,8 +120,11 @@ void main(void)
             pci_out_dummy_vlan(&pci_out_desc, pci_in_meta.vlan,
                                pci_in_meta.flags);
 
-            ret = pci_out_send(PCIE_ISL, queue, &pci_out_desc);
-
+            __pci_out_send(PCIE_ISL, queue, pci_out_desc_xfer, &pci_out_desc,
+                           sig_done, &send_sig);
+            wait_for_all(&send_sig, &send_order_sig);
+            signal_next_ctx(__signal_number(&send_order_sig));
+            ret = pci_out_send_test(pci_out_desc_xfer);
             if (ret >= 0) {
                 nsent++;
             } else {
@@ -96,9 +132,12 @@ void main(void)
             }
 
         } else {
+            /* Participate in ordering */
+            wait_for_all(&send_order_sig);
+            signal_next_ctx(__signal_number(&send_order_sig));
+
             /* Drop the packet */
             nfail++;
-
         }
 
         local_csr_write(NFP_MECSR_MAILBOX_1, nsent);

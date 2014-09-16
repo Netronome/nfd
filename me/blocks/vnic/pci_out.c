@@ -199,16 +199,25 @@ __pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
 
 
 __intrinsic int
+pci_out_send_test(__xrw struct nfd_pci_out_input desc_out[2])
+{
+    int result;
+
+    result = desc_out[0].cpp.__raw[0];
+    return (result & (1 << 31)) ? (result << 2) : -1;
+}
+
+
+__intrinsic int
 pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
              __gpr struct nfd_pci_out_input *desc)
 {
     __xrw struct nfd_pci_out_input data[2];
     SIGNAL_PAIR sigpair;
-    int result;
 
     __pci_out_send(pcie_isl, bmsk_queue, data, desc, sig_done, &sigpair);
     wait_for_all(&sigpair);
 
-    result = data[0].cpp.__raw[0];
-    return (result & (1 << 31)) ? (result << 2) : -1;
+    return pci_out_send_test(data);
+
 }

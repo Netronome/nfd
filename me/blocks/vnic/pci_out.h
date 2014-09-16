@@ -184,6 +184,17 @@ __intrinsic void __pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
 
 
 /**
+ * Test result of "__pci_out_send"
+ * @param desc_out      Write transfer registers that were used in send
+ *
+ * This helper function tests for error codes from the hardware queue engine
+ * that indicate whether a "__pci_out_send" call failed.  "desc_out" must have
+ * been used in the "__pci_out_send" call of interest, immediately before.
+ */
+__intrinsic int pci_out_send_test(__xrw struct nfd_pci_out_input desc_out[2]);
+
+
+/**
  * Enqueue descriptor(s) to PCI.OUT ring
  * @param pcie_isl      PCIe island to send the descriptors to
  * @param bmsk_queue    Queue to send the packets (bitmask numbered)
