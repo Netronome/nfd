@@ -155,6 +155,12 @@ notify()
         q_batch = batch_in.pkt0.q_num; /* Batches have a least one packet */
         n_batch = batch_in.pkt0.num_batch;
 
+#ifdef NFD_VNIC_DBG_CHKS
+        if (n_batch == 0 || n_batch > MAX_TX_BATCH_SZ) {
+            halt();
+        }
+#endif
+
         /* Interface and queue info are the same for all packets in batch */
         pkt_desc_tmp.intf = PCIE_ISL;
         pkt_desc_tmp.q_num = q_batch;
