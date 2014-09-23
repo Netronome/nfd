@@ -326,8 +326,8 @@ issue_dma()
     issued_tmp.num_batch = batch.num;   /* Only needed in pkt0 */
 
     /* Maybe add "full" bit */
-    if (batch.num == 4)
-    {
+    switch (batch.num) {
+    case 4:
         /* Full batches are the critical path */
         /* XXX maybe tricks with an extra tx_dma_state
          * struct would convince nfcc to use one set LM index? */
@@ -336,27 +336,34 @@ issue_dma()
         _ISSUE_PROC(1, TX_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(2, TX_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(3, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
-    } else {
-        /* Off the critical path, handle non-full batches */
-        if (batch.num == 3) {
-            _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, TX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(2, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+        break;
 
-            _ISSUE_CLR(3);
-        } else if (batch.num == 2) {
-            _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+    case 3:
+        _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(1, TX_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(2, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
 
-            _ISSUE_CLR(2);
-            _ISSUE_CLR(3);
-        } else {
-            _ISSUE_PROC(0, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+        _ISSUE_CLR(3);
+        break;
 
-            _ISSUE_CLR(1);
-            _ISSUE_CLR(2);
-            _ISSUE_CLR(3);
-        }
+    case 2:
+        _ISSUE_PROC(0, TX_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(1, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+        _ISSUE_CLR(2);
+        _ISSUE_CLR(3);
+        break;
+
+    case 1:
+        _ISSUE_PROC(0, TX_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+        _ISSUE_CLR(1);
+        _ISSUE_CLR(2);
+        _ISSUE_CLR(3);
+        break;
+
+    default:
+        halt();
     }
 
     /* XXX THS-50 workaround */
