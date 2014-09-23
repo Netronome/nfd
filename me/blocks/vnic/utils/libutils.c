@@ -13,6 +13,7 @@
  */
 
 #include "_c/cls_ring.c"
+#include "_c/ctm_ring.c"
 #include "_c/dma_seqn.c"
 #include "_c/mem_bulk32.c"
 #include "_c/nn_ring.c"
