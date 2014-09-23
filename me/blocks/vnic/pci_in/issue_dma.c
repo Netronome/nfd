@@ -23,7 +23,8 @@
 #include <vnic/pci_in/precache_bufs.h>
 #include <vnic/shared/qc.h>
 #include <vnic/shared/vnic_cfg.h>
-#include <vnic/utils/cls_ring.h>
+/*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
+#include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
 #include <vnic/utils/pcie.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
@@ -52,8 +53,10 @@ struct _dma_desc_batch {
 
 /* Ring declarations */
 /* XXX use CLS ring API when available */
-__export __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
-    __cls struct nfd_pci_in_issued_desc tx_issued_ring[TX_ISSUED_RING_SZ];
+/* XXX THS-50 workaround, use CTM instead of CLS rings */
+__export __ctm
+    __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
+    struct nfd_pci_in_issued_desc tx_issued_ring[TX_ISSUED_RING_SZ];
 
 #define DESC_RING_SZ (MAX_TX_BATCH_SZ * DESC_BATCH_Q_SZ *       \
                       sizeof(struct nfd_pci_in_tx_desc))
@@ -103,7 +106,10 @@ issue_dma_setup_shared()
     ctassert(__is_log2(MAX_VNICS));
     ctassert(__is_log2(MAX_VNIC_QUEUES));
 
-    cls_ring_setup(TX_ISSUED_RING_NUM, tx_issued_ring, sizeof tx_issued_ring);
+    /* XXX THS-50 workaround */
+    /* cls_ring_setup(TX_ISSUED_RING_NUM, tx_issued_ring, sizeof tx_issued_ring); */
+    ctm_ring_setup(TX_ISSUED_RING_NUM, tx_issued_ring, sizeof tx_issued_ring);
+
 
     /*
      * Initialise the CLS TX descriptor ring
@@ -353,6 +359,8 @@ issue_dma()
         }
     }
 
-    cls_ring_put(TX_ISSUED_RING_NUM, &batch_out, sizeof batch_out,
-                 &msg_sig);
+    /* XXX THS-50 workaround */
+    /* cls_ring_put(TX_ISSUED_RING_NUM, &batch_out, sizeof batch_out, */
+    /*              &msg_sig); */
+    ctm_ring_put(TX_ISSUED_RING_NUM, &batch_out, sizeof batch_out, &msg_sig);
 }

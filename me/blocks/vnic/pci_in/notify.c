@@ -21,7 +21,8 @@
 #include <vnic/pci_in/pci_in_internal.h>
 #include <vnic/shared/nfd_shared.h>
 #include <vnic/shared/qc.h>
-#include <vnic/utils/cls_ring.h>
+/*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
+#include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
 #include <vnic/utils/qcntl.h>
 
 /* XXX assume this runs on PCI.IN ME0 */
@@ -51,8 +52,10 @@ __xwrite struct _pkt_desc_batch batch_out;
 __xwrite unsigned int qc_xfer;
 
 /* XXX use CLS ring API when available */
-__export __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
-    __cls struct nfd_pci_in_issued_desc tx_issued_ring[TX_ISSUED_RING_SZ];
+/* XXX THS-50 workaround, use CTM instead of CLS rings */
+__export __ctm
+    __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
+    struct nfd_pci_in_issued_desc tx_issued_ring[TX_ISSUED_RING_SZ];
 
 /* XXX declare dst_q counters in LM */
 
@@ -130,7 +133,10 @@ notify()
         /* Increment data_dma_seq_served before swapping */
         data_dma_seq_served += 1;
 
-        cls_ring_get(TX_ISSUED_RING_NUM, &batch_in, sizeof batch_in, &msg_sig);
+        /* XXX THS-50 workaround */
+        /* cls_ring_get(TX_ISSUED_RING_NUM, &batch_in, sizeof batch_in, */
+        /*              &msg_sig); */
+        ctm_ring_get(TX_ISSUED_RING_NUM, &batch_in, sizeof batch_in, &msg_sig);
 
         __asm {
             ctx_arb[--], defer[1];
