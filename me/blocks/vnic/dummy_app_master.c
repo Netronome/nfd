@@ -90,7 +90,10 @@ main(void)
             ctx_swap();
         }
 
-        mem_ring_put(rnum, fake_blm_addr, fake_bufs, sizeof fake_bufs);
+        /* TEMP restrict buffers further by reducing ctx putting to the ring */
+        if (ctx() < 8) {
+            mem_ring_put(rnum, fake_blm_addr, fake_bufs, sizeof fake_bufs);
+        }
     }
 
     for (;;) {
