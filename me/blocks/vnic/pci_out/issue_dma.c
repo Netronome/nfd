@@ -669,7 +669,7 @@ do {                                                                    \
             _free_ctm_addr(&cpp_desc);                                  \
         }                                                               \
                                                                         \
-        rnum += cpp_desc.bls;                                           \
+        rnum = blm_rnum_start + cpp_desc.bls;                           \
         mem_ring_journal_fast(rnum, blm_raddr, cpp_desc.mu_addr);       \
     }                                                                   \
 } while (0)
@@ -682,7 +682,7 @@ do {                                                                    \
 __forceinline void
 free_buf()
 {
-    unsigned int rnum = blm_rnum_start;
+    unsigned int rnum;
 
     if (data_dma_seq_served != data_dma_seq_compl) {
         /*
