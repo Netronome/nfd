@@ -16,6 +16,7 @@
 #include <nfp.h>
 
 #include <nfp/me.h>
+#include <nfp/mem_ring.h>
 
 #include <nfp6000/nfp_me.h>
 
@@ -32,6 +33,9 @@
 #define DUMMY_LOOPBACK_WQ   0
 #endif
 
+/* XXX variables that app and/or BLM should expose */
+_declare_resource("BLQ_EMU_RINGS global 8 emem1_queues+4");
+#define APP_BLM_RADDR __LoadTimeConstant("__addr_emem1")
 
 __shared int nrecv = 0;
 __shared int nsent = 0;
@@ -57,6 +61,13 @@ void main(void)
     SIGNAL get_sig;
     SIGNAL_PAIR credit_sig;
     SIGNAL_PAIR send_sig;
+
+    /* Variables to return MU buffers to BLM when dropping packets
+     * Note constant bls currently */
+    unsigned int blm_raddr = ((unsigned long long) APP_BLM_RADDR >> 8);
+    unsigned int blm_rnum =
+        _alloc_resource(BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS global 1) + bls;
+
 
     int ret;
 
@@ -137,7 +148,9 @@ void main(void)
             signal_next_ctx(__signal_number(&send_order_sig));
 
             /* Drop the packet */
+            /* XXX this assumes that there is no CTM buffer! */
             nfail++;
+            mem_ring_journal_fast(blm_rnum, blm_raddr, pci_in_meta.buf_addr);
         }
 
         local_csr_write(NFP_MECSR_MAILBOX_1, nsent);
