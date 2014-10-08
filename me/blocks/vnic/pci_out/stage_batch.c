@@ -227,6 +227,11 @@ _fl_avail_check(__gpr unsigned int queue)
 __intrinsic void
 _nn_put_msg(struct pci_out_data_dma_info *msg)
 {
+    /* TEMP: NN ring false overflow workaround (THS TBD) */
+    while (nn_ring_full()) {
+        ctx_swap();
+    }
+
     nn_ring_put(msg->__raw[0]);
     nn_ring_put(msg->__raw[1]);
     nn_ring_put(msg->__raw[2]);
