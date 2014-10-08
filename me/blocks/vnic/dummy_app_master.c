@@ -31,10 +31,11 @@ __export __emem_n(1) __align(8 * BLM_RING_SZ)
 __shared __gpr mem_ring_addr_t fake_blm_addr;
 
 /* Fake buffers */
-#define BUF_SZ  (10 * 1024)
-#define BUF_NUM 128
+#define BUF_SZ  (2 * 1024)
+#define BUF_NUM 1024
 __xwrite unsigned int fake_bufs[8];
 __export __imem __align2M char bufs_array[BUF_NUM * BUF_SZ];
+__shared __gpr unsigned int buf_cnt = 0;
 
 
 int
@@ -66,23 +67,13 @@ main(void)
         vnic_cfg_init_cfg_msg(&vnic_cfg_sig_app_master1, &cfg_msg);
     } else {
         unsigned int buf_base;
-        unsigned int ctx_of;
+        /* unsigned int ctx_of; */
         unsigned int rnum;
 
-        ctassert(SZ_2M > (BUF_NUM * BUF_SZ));
+        ctassert(SZ_2M >= (BUF_NUM * BUF_SZ));
+        ctassert(__is_aligned(BUF_NUM, 8));
 
         buf_base = ((unsigned long long) bufs_array>>11) & 0xffffffff;
-        ctx_of = ctx() * 8 * (BUF_SZ >> 11);
-
-        /* TEMP */
-        fake_bufs[0] = buf_base + ctx_of + 0 * (BUF_SZ >> 11);
-        fake_bufs[1] = buf_base + ctx_of + 1 * (BUF_SZ >> 11);
-        fake_bufs[2] = buf_base + ctx_of + 2 * (BUF_SZ >> 11);
-        fake_bufs[3] = buf_base + ctx_of + 3 * (BUF_SZ >> 11);
-        fake_bufs[4] = buf_base + ctx_of + 4 * (BUF_SZ >> 11);
-        fake_bufs[5] = buf_base + ctx_of + 5 * (BUF_SZ >> 11);
-        fake_bufs[6] = buf_base + ctx_of + 6 * (BUF_SZ >> 11);
-        fake_bufs[7] = buf_base + ctx_of + 7 * (BUF_SZ >> 11);
 
         rnum = _alloc_resource(BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS global 1);
 
@@ -90,8 +81,12 @@ main(void)
             ctx_swap();
         }
 
-        /* TEMP restrict buffers further by reducing ctx putting to the ring */
-        if (ctx() < 8) {
+        while (buf_cnt < BUF_NUM) {
+            int i = 0;
+            for (; i < 8; i++) {
+                fake_bufs[i] = buf_base + buf_cnt * (BUF_SZ >> 11);
+                buf_cnt++;
+            }
             mem_ring_put(rnum, fake_blm_addr, fake_bufs, sizeof fake_bufs);
         }
     }
