@@ -347,7 +347,7 @@ _fetch_fl(__gpr unsigned int *queue)
      * Space = ring size - (fl_s - fl_u). We require
      * space >= batch size. */
     space_chk = ((RX_FL_CACHE_BUFS_PER_QUEUE - RX_FL_BATCH_SZ) +
-                 queue_data[*queue].fl_u - queue_data[*queue].fl_s);
+                 queue_data[*queue].rx_w - queue_data[*queue].fl_s);
     if (space_chk >= 0) {
         __xwrite unsigned int qc_xfer;
         unsigned int pending_slot;
