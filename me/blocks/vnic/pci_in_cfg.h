@@ -53,6 +53,7 @@
 #define TX_DATA_DMA_QUEUE       NFP_PCIE_DMA_FROMPCI_LO
 #define TX_DATA_DMA_TOKEN       2
 #define TX_DATA_OFFSET          64
+#define TX_DATA_ROUND           4
 
 #define TX_GATHER_EVENT_TYPE    5
 #define TX_DATA_EVENT_TYPE      6

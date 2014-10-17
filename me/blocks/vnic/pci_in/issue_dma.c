@@ -175,6 +175,12 @@ issue_dma_setup()
 
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
+    unsigned int dma_len;                                               \
+                                                                        \
+    /* THS-54 workaround, round DMA up to next 4B multiple size */      \
+    dma_len = ((tx_desc.pkt##_pkt##.dma_len + TX_DATA_ROUND) &          \
+               ~(TX_DATA_ROUND -1));                                    \
+                                                                        \
     if (tx_desc.pkt##_pkt##.eop && !queue_data[queue].cont) {           \
         /* Fast path, use buf_store data */                             \
         __critical_path();                                              \
@@ -200,7 +206,7 @@ do {                                                                    \
         descr_tmp.cpp_addr_hi = queue_data[queue].curr_buf>>21;         \
         descr_tmp.cpp_addr_lo = queue_data[queue].curr_buf<<11;         \
         descr_tmp.cpp_addr_lo += queue_data[queue].offset;              \
-        queue_data[queue].offset += tx_desc.pkt##_pkt##.dma_len;        \
+        queue_data[queue].offset += dma_len;                            \
                                                                         \
         issued_tmp.buf_addr = queue_data[queue].curr_buf;               \
                                                                         \
@@ -233,7 +239,7 @@ do {                                                                    \
                                                                         \
     descr_tmp.rid = queue_data[queue].rid;                              \
     pcie_dma_set_event(&descr_tmp, _type, _src);                        \
-    descr_tmp.length = tx_desc.pkt##_pkt##.dma_len - 1;                 \
+    descr_tmp.length = dma_len - 1;                                     \
     dma_out.pkt##_pkt## = descr_tmp;                                    \
                                                                         \
     __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##, TX_DATA_DMA_QUEUE,   \
