@@ -304,6 +304,7 @@ _fetch_fl(__gpr unsigned int *queue)
     __xwrite struct nfp_pcie_dma_cmd descr;
     SIGNAL qc_sig;
     int space_chk;
+    int ret;        /* Required to ensure __intrinsic_begin|end pairing */
 
     qc_queue = (map_bitmask_to_natural(*queue) << 1) | RXQ_START;
 
@@ -344,7 +345,7 @@ _fetch_fl(__gpr unsigned int *queue)
     }
 
     /* We have a batch available, is there space to put it?
-     * Space = ring size - (fl_s - fl_u). We require
+     * Space = ring size - (fl_s - rx_w). We require
      * space >= batch size. */
     space_chk = ((RX_FL_CACHE_BUFS_PER_QUEUE - RX_FL_BATCH_SZ) +
                  queue_data[*queue].rx_w - queue_data[*queue].fl_s);
@@ -375,7 +376,11 @@ _fetch_fl(__gpr unsigned int *queue)
                            fl_cache_dma_seq_issued);
         descr = descr_tmp;
 
-        /* Increment fl_s and QC FL.R before swapping */
+        /* Increment fl_s and QC FL.R before swapping
+         * It is safe to increment fl_s because the host will not
+         * overwrite the FL descriptor there, the firmware will overwrite
+         * it once it has used the FL descriptor and written the RX descriptor.
+         */
         queue_data[*queue].fl_s += RX_FL_BATCH_SZ;
         __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, RX_FL_BATCH_SZ, &qc_xfer,
                         sig_done, &qc_sig);
@@ -391,12 +396,16 @@ _fetch_fl(__gpr unsigned int *queue)
         wait_for_all(&dma_sig, &qc_sig);
 
         /* Indicate work done on queue */
-        return 0;
-    }
-    /* XXX clear urgent bit if the queue FL cache has become full! */
+        ret = 0;
+    } else {
+        /* The cache is full, so the queue is not "urgent". */
+        clear_queue(queue, &urgent_bmsk);
 
-    /* Indicate no work done on queue */
-    return -1;
+        /* Indicate no work done on queue */
+        ret = -1;
+    }
+
+    return ret;
 }
 
 
