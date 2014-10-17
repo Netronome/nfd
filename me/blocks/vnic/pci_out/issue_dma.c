@@ -411,7 +411,7 @@ do {                                                                    \
     }                                                                   \
                                                                         \
     /* Pass CPP descriptor on to next block */                          \
-    cpp_desc_ring[data_dma_seq_issued].pkt##_pkt = in_batch.pkt##_pkt##.cpp; \
+    cpp_desc_ring[cpp_desc_index].pkt##_pkt = in_batch.pkt##_pkt##.cpp; \
 } while (0)
 
 
@@ -423,8 +423,8 @@ do {                                                                    \
 #define _ISSUE_CLR(_pkt)                                             \
 do {                                                                 \
     data_wait_msk &= ~__signals(&data_sig##_pkt);                    \
-    cpp_desc_ring[data_dma_seq_issued].pkt##_pkt##.__raw[0] = 0;     \
-    cpp_desc_ring[data_dma_seq_issued].pkt##_pkt##.__raw[1] = 0;     \
+    cpp_desc_ring[cpp_desc_index].pkt##_pkt##.__raw[0] = 0;          \
+    cpp_desc_ring[cpp_desc_index].pkt##_pkt##.__raw[1] = 0;          \
 } while (0)
 
 
@@ -462,7 +462,7 @@ issue_dma()
     struct pci_out_data_batch in_batch;
     struct pci_out_data_batch_msg msg;
     unsigned int n_bat;
-
+    unsigned int cpp_desc_index;
 
     /* Start of "get" order stage */
     _swap_on_msk(&data_wait_msk);
@@ -509,6 +509,7 @@ issue_dma()
             reorder_done(RX_ISSUE_START_CTX, &issue_order_sig);
 
             data_dma_seq_issued++;
+            cpp_desc_index = data_dma_seq_issued & (RX_CPP_BATCH_RING_BAT - 1);
             _ISSUE_PROC(0, RX_DATA_IGN_EVENT_TYPE, 0);
             _ISSUE_PROC(1, RX_DATA_IGN_EVENT_TYPE, 0);
             _ISSUE_PROC(2, RX_DATA_IGN_EVENT_TYPE, 0);
@@ -541,6 +542,7 @@ issue_dma()
             reorder_done(RX_ISSUE_START_CTX, &issue_order_sig);
 
             data_dma_seq_issued++;
+            cpp_desc_index = data_dma_seq_issued & (RX_CPP_BATCH_RING_BAT - 1);
             _ISSUE_PROC(0, RX_DATA_IGN_EVENT_TYPE, 0);
             _ISSUE_PROC(1, RX_DATA_IGN_EVENT_TYPE, 0);
             _ISSUE_PROC(2, RX_DATA_EVENT_TYPE, data_dma_seq_issued);
@@ -573,6 +575,7 @@ issue_dma()
             reorder_done(RX_ISSUE_START_CTX, &issue_order_sig);
 
             data_dma_seq_issued++;
+            cpp_desc_index = data_dma_seq_issued & (RX_CPP_BATCH_RING_BAT - 1);
             _ISSUE_PROC(0, RX_DATA_IGN_EVENT_TYPE, 0);
             _ISSUE_PROC(1, RX_DATA_EVENT_TYPE, data_dma_seq_issued);
 
@@ -604,6 +607,7 @@ issue_dma()
             reorder_done(RX_ISSUE_START_CTX, &issue_order_sig);
 
             data_dma_seq_issued++;
+            cpp_desc_index = data_dma_seq_issued & (RX_CPP_BATCH_RING_BAT - 1);
             _ISSUE_PROC(0, RX_DATA_EVENT_TYPE, data_dma_seq_issued);
 
             _ISSUE_CLR(1);
@@ -660,7 +664,7 @@ _free_ctm_addr(struct nfd_pci_out_cpp_desc *cpp)
 do {                                                                    \
     struct nfd_pci_out_cpp_desc cpp_desc;                               \
                                                                         \
-    cpp_desc = cpp_desc_ring[data_dma_seq_served].pkt##_pkt;            \
+    cpp_desc = cpp_desc_ring[cpp_desc_index].pkt##_pkt;                 \
                                                                         \
     /* Only free for EOP */                                             \
     if (cpp_desc.eop) {                                                 \
@@ -683,6 +687,7 @@ __forceinline void
 free_buf()
 {
     unsigned int rnum;
+    unsigned int cpp_desc_index;
 
     if (data_dma_seq_served != data_dma_seq_compl) {
         /*
@@ -690,6 +695,7 @@ free_buf()
          * sequence number zero
          */
         data_dma_seq_served++;
+        cpp_desc_index = data_dma_seq_served & (RX_CPP_BATCH_RING_BAT - 1);
 
         _FREE_BUF(0);
         _FREE_BUF(1);
