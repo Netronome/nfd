@@ -125,7 +125,7 @@ notify()
 
     /* Is there a batch to process
      * XXX assume that issue_dma only inc's dma seq for final dma in batch */
-    if (data_dma_seq_compl > data_dma_seq_served)
+    if (data_dma_seq_compl != data_dma_seq_served)
     {
         /* Process whole batch */
         __critical_path();

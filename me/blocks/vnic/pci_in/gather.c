@@ -101,7 +101,7 @@ gather()
      * and we need space in the CLS and NN rings. The CLS ring is sized to hold
      * more batches than the NN ring, so checking for !nn_ring_full is enough.
      */
-    if ((dma_seq_issued < (TX_GATHER_MAX_IN_FLIGHT + gather_dma_seq_compl)) &&
+    if ((dma_seq_issued != (TX_GATHER_MAX_IN_FLIGHT + gather_dma_seq_compl)) &&
         (!nn_ring_full())) {
         ret = select_queue(&queue, &pending_bmsk);
 
