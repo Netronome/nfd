@@ -43,6 +43,7 @@ __shared unsigned long long nrecv = 0;
 __shared unsigned long long nsent = 0;
 volatile __shared unsigned long long nfail = 0;
 __shared __lmem unsigned int cached_credits[MAX_TX_QUEUES];
+__shared __lmem unsigned int fetched_credits[MAX_TX_QUEUES];
 
 
 /* Ordering  */
@@ -129,8 +130,10 @@ void main(void)
                                      ctx_swap, &credit_sig);
                 if (credit >= CREDIT_BATCH) {
                     queue_credits += CREDIT_BATCH;
+                    fetched_credits[queue] += CREDIT_BATCH;
                 } else {
                     queue_credits = credit;
+                    fetched_credits[queue] += credit;
                 }
             }
         }
