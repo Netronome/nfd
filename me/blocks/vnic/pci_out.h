@@ -11,9 +11,9 @@
 /* XXX rename */
 /* #define RX_PCI_OUT_RING_SZ  (4 * 16 * 1024 *1024) */
 
-/* Only support up to 256 credits and one queue in the PCI.OUT input ring
+/* Only support up to 256 credits and 64 queues in the PCI.OUT input ring
  * so that the ring fits easily in the direct access memory */
-#define RX_PCI_OUT_RING_SZ  (16 * 1 * 256)
+#define RX_PCI_OUT_RING_SZ  (16 * 64 * 256)
 
 /*
  * RX descriptor format
