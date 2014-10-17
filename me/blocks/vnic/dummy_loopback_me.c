@@ -33,6 +33,8 @@
 #define DUMMY_LOOPBACK_WQ   0
 #endif
 
+#define CREDIT_BATCH        16
+
 /* XXX variables that app and/or BLM should expose */
 _declare_resource("BLQ_EMU_RINGS global 8 emem1_queues+4");
 #define APP_BLM_RADDR __LoadTimeConstant("__addr_emem1")
@@ -40,6 +42,7 @@ _declare_resource("BLQ_EMU_RINGS global 8 emem1_queues+4");
 __shared int nrecv = 0;
 __shared int nsent = 0;
 __shared int nfail = 0;
+__shared __lmem unsigned int cached_credits[MAX_TX_QUEUES];
 
 
 /* Ordering  */
@@ -55,6 +58,7 @@ void main(void)
     __xrw struct nfd_pci_out_input pci_out_desc_xfer[2];
     unsigned int bls = TX_BLM_BLS;
     unsigned int queue;
+    unsigned int queue_credits;
     unsigned int vnic;
     unsigned int pktlen;
     __xrw unsigned int credit;
@@ -112,45 +116,52 @@ void main(void)
         queue = pci_out_map_queue(vnic, queue);
 
 
-        /* Get a credit */
-        __pci_out_get_credit(PCIE_ISL, queue, 1, &credit,
-                             sig_done, &credit_sig);
-        wait_for_all(&credit_sig, &credit_order_sig);
-        signal_next_ctx(__signal_number(&credit_order_sig));
-        if (credit != 0) {
-            /* Return the packet */
-            pci_out_fill_addr_mu_only(&pci_out_desc, pci_in_meta.buf_addr, 0,
-                                      bls);
-
-            /* XXX alternative:
-             * pktlen = pci_in_meta.data_len - pci_in_meta.offset; */
-            pktlen = pci_in_pkt_len(&pci_in_meta);
-
-            pci_out_fill_size(&pci_out_desc, TX_DATA_OFFSET, pktlen,
-                              pci_in_meta.offset);
-            pci_out_dummy_vlan(&pci_out_desc, pci_in_meta.vlan,
-                               pci_in_meta.flags);
-
-            __pci_out_send(PCIE_ISL, queue, pci_out_desc_xfer, &pci_out_desc,
-                           sig_done, &send_sig);
-            wait_for_all(&send_sig, &send_order_sig);
-            signal_next_ctx(__signal_number(&send_order_sig));
-            ret = pci_out_send_test(pci_out_desc_xfer);
-            if (ret >= 0) {
-                nsent++;
-            } else {
-                nfail++;
-            }
+        /* Check cached credits and update if necessary */
+        wait_for_all(&credit_order_sig);
+        queue_credits = cached_credits[queue];
+        if (queue_credits != 0) {
+            __critical_path();
 
         } else {
-            /* Participate in ordering */
-            wait_for_all(&send_order_sig);
-            signal_next_ctx(__signal_number(&send_order_sig));
+            /* Poll for credits */
+            while (queue_credits == 0) {
+                __pci_out_get_credit(PCIE_ISL, queue, CREDIT_BATCH, &credit,
+                                     ctx_swap, &credit_sig);
+                if (credit >= CREDIT_BATCH) {
+                    queue_credits += CREDIT_BATCH;
+                } else {
+                    queue_credits = credit;
+                }
+            }
+        }
+        signal_next_ctx(__signal_number(&credit_order_sig));
 
-            /* Drop the packet */
-            /* XXX this assumes that there is no CTM buffer! */
+        /* Use a credit and return to cache */
+        queue_credits--;
+        cached_credits[queue] = queue_credits;
+
+        /* Return the packet */
+        pci_out_fill_addr_mu_only(&pci_out_desc, pci_in_meta.buf_addr, 0,
+                                      bls);
+
+        /* XXX alternative:
+         * pktlen = pci_in_meta.data_len - pci_in_meta.offset; */
+        pktlen = pci_in_pkt_len(&pci_in_meta);
+
+        pci_out_fill_size(&pci_out_desc, TX_DATA_OFFSET, pktlen,
+                          pci_in_meta.offset);
+        pci_out_dummy_vlan(&pci_out_desc, pci_in_meta.vlan,
+                           pci_in_meta.flags);
+
+        __pci_out_send(PCIE_ISL, queue, pci_out_desc_xfer, &pci_out_desc,
+                       sig_done, &send_sig);
+        wait_for_all(&send_sig, &send_order_sig);
+        signal_next_ctx(__signal_number(&send_order_sig));
+        ret = pci_out_send_test(pci_out_desc_xfer);
+        if (ret >= 0) {
+            nsent++;
+        } else {
             nfail++;
-            mem_ring_journal_fast(blm_rnum, blm_raddr, pci_in_meta.buf_addr);
         }
 
         local_csr_write(NFP_MECSR_MAILBOX_1, nsent);
