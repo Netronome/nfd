@@ -39,9 +39,9 @@
 _declare_resource("BLQ_EMU_RINGS global 8 emem1_queues+4");
 #define APP_BLM_RADDR __LoadTimeConstant("__addr_emem1")
 
-__shared int nrecv = 0;
-__shared int nsent = 0;
-__shared int nfail = 0;
+__shared unsigned long long nrecv = 0;
+__shared unsigned long long nsent = 0;
+volatile __shared unsigned long long nfail = 0;
 __shared __lmem unsigned int cached_credits[MAX_TX_QUEUES];
 
 
@@ -107,8 +107,8 @@ void main(void)
         signal_next_ctx(__signal_number(&get_order_sig));
 
         nrecv++;
-        local_csr_write(NFP_MECSR_MAILBOX_0, nrecv);
-
+        local_csr_write(NFP_MECSR_MAILBOX_0, (nrecv>>32) & 0xffffffff);
+        local_csr_write(NFP_MECSR_MAILBOX_1, nrecv & 0xffffffff);
 
         /* Increment the queue number within the vnic */
         pci_in_map_queue(&vnic, &queue, pci_in_meta.q_num);
@@ -164,8 +164,9 @@ void main(void)
             nfail++;
         }
 
-        local_csr_write(NFP_MECSR_MAILBOX_1, nsent);
-        local_csr_write(NFP_MECSR_MAILBOX_2, nfail);
+        local_csr_write(NFP_MECSR_MAILBOX_2, (nsent >> 32) & 0xffffffff);
+        local_csr_write(NFP_MECSR_MAILBOX_3, nsent & 0xffffffff);
+        /* local_csr_write(NFP_MECSR_MAILBOX_2, nfail); */
     }
 }
 
