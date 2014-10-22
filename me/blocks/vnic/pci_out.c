@@ -10,6 +10,7 @@
 
 #include <nfp/me.h>
 #include <nfp/mem_ring.h>
+#include <pkt/pkt.h>
 #include <std/reg_utils.h>
 
 #include <vnic/pci_out.h>
@@ -78,52 +79,27 @@ pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
 }
 
 
-/* unsigned int */
-/* pci_out_get_credit(unsigned int vnic, unsigned int queue, unsigned int num) */
-/* { */
-/*     unsigned int bmsk_queue; */
-
-/*     bmsk_queue = pci_out_map_queue(vnic, queue); */
-/*     /\* dummy code *\/ */
-/*     return num; */
-/* } */
-
-
-
 __intrinsic void
-pci_out_fill_addr(__gpr struct nfd_pci_out_input *desc,
-                  unsigned int isl, unsigned int pktnum, unsigned int mu_addr,
-                  unsigned int nbi, unsigned int bls)
+pci_out_fill_desc(__gpr struct nfd_pci_out_input *desc, void *pkt_info,
+                  unsigned int nbi, unsigned int pkt_start,
+                  unsigned int meta_len)
 {
-    desc->cpp.isl = isl;
-    desc->cpp.pktnum = pktnum;
-    desc->cpp.mu_addr = mu_addr;
+    ctassert(__is_in_reg_or_lmem(pkt_info) || __is_read_reg(pkt_info));
+
+    /* Address details */
+    desc->cpp.isl = ((struct nbi_meta_pkt_info *) pkt_info)->isl;
+    desc->cpp.pktnum = ((struct nbi_meta_pkt_info *) pkt_info)->pnum;
+    desc->cpp.mu_addr = ((struct nbi_meta_pkt_info *) pkt_info)->muptr;
     desc->cpp.nbi = nbi;
-    desc->cpp.bls = bls;
-}
+    desc->cpp.bls = ((struct nbi_meta_pkt_info *) pkt_info)->bls;
 
-
-__intrinsic void
-pci_out_fill_addr_mu_only(__gpr struct nfd_pci_out_input *desc,
-                          unsigned int mu_addr, unsigned int nbi,
-                          unsigned int bls)
-{
-    desc->cpp.isl = 0;
-    desc->cpp.pktnum = 0;
-    desc->cpp.mu_addr = mu_addr;
-    desc->cpp.nbi = nbi;
-    desc->cpp.bls = bls;
-}
-
-
-__intrinsic void
-pci_out_fill_size(__gpr struct nfd_pci_out_input *desc, unsigned int pkt_start,
-                  unsigned int pkt_len, unsigned int meta_len)
-{
-    desc->rxd.data_len = pkt_len + meta_len;
+    /* Length and offset details */
+    desc->rxd.data_len = (((struct nbi_meta_pkt_info *) pkt_info)->len +
+                          meta_len);
     desc->rxd.offset = meta_len;
     desc->cpp.offset = pkt_start - meta_len;
 }
+
 
 __intrinsic void
 pci_out_dummy_vlan(__gpr struct nfd_pci_out_input *desc, unsigned int vlan,

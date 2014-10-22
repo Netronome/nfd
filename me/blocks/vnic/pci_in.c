@@ -10,9 +10,11 @@
 
 #include <nfp/me.h>
 #include <nfp/mem_ring.h>
+#include <pkt/pkt.h>
 #include <std/reg_utils.h>
 
 #include <vnic/pci_in.h>
+#include <vnic/pci_in_cfg.h>
 #include <vnic/shared/nfd_shared.h>
 #include <vnic/shared/qc.h>
 
@@ -50,6 +52,28 @@ __nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
 
     __mem_workq_add_thread(rnum, raddr, pci_in_meta, sizeof(*pci_in_meta),
                            sizeof(*pci_in_meta), sync, sig);
+}
+
+
+__intrinsic void
+nfd_fill_meta(void *pkt_info,
+              __xread struct nfd_pci_in_pkt_desc *pci_in_meta)
+{
+    ctassert(__is_in_reg_or_lmem(pkt_info));
+
+    /* XXX What is typically done with these values
+     * when ejecting a packet from CTM? */
+    ((struct nbi_meta_pkt_info *) pkt_info)->isl = 0;   /* Signal MU only */
+    ((struct nbi_meta_pkt_info *) pkt_info)->pnum = 0;  /* Signal MU only */
+    ((struct nbi_meta_pkt_info *) pkt_info)->split = 0; /* Signal MU only */
+
+    ((struct nbi_meta_pkt_info *) pkt_info)->resv0 = 0;
+
+    ((struct nbi_meta_pkt_info *) pkt_info)->bls = TX_BLM_BLS;
+    ((struct nbi_meta_pkt_info *) pkt_info)->muptr = pci_in_meta->buf_addr;
+
+    ((struct nbi_meta_pkt_info *) pkt_info)->len = (pci_in_meta->data_len -
+                                                    pci_in_meta->offset);
 }
 
 

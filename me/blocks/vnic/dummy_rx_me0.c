@@ -78,9 +78,7 @@ void main(void)
         nrecv++;
         local_csr_write(NFP_MECSR_MAILBOX_0, nrecv);
 
-        pci_out_fill_addr(&pci_out_desc, pi->isl, pi->pnum, pi->muptr, 0,
-                          pi->bls);
-        pci_out_fill_size(&pci_out_desc, PKT_NBI_OFFSET, pi->len, 0);
+        pci_out_fill_desc(&pci_out_desc, pi, 0, PKT_NBI_OFFSET, 0);
         pci_out_dummy_vlan(&pci_out_desc, 0x1234, 0xd);
 
         queue = pci_out_map_queue(0, 0);

@@ -7,6 +7,8 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_H_
 #define _BLOCKS__VNIC_PCI_OUT_H_
 
+#include <pkt/pkt.h>
+
 
 /* XXX rename */
 /* #define RX_PCI_OUT_RING_SZ  (4 * 16 * 1024 *1024) */
@@ -121,43 +123,17 @@ extern unsigned int pci_out_get_credit(unsigned int pcie_isl,
 /**
  * Populate the address fields of the CPP descriptor for a packet
  * @param desc      PCI.OUT descriptor to fill
- * @param isl       CTM island for the packet
- * @param pktnum    CTM packet number
- * @param mu_addr   MU address for the packet
+ * @param pkt_info  Up to date nbi_meta_pkt_info struct for the packet
  * @param nbi       NBI that received the packet
- * @param bls       Buffer pool for the MU address
- *
- * If both NBIs share BLM pools, set "nbi" to zero.
- */
-__intrinsic void pci_out_fill_addr(__gpr struct nfd_pci_out_input *desc,
-                                   unsigned int isl, unsigned int pktnum,
-                                   unsigned int mu_addr, unsigned int nbi,
-                                   unsigned int bls);
-
-
-/**
- * Populate the address fields of the CPP descriptor for a packet
- * @param desc      PCI.OUT descriptor to fill
- * @param mu_addr   MU address for the packet
- * @param nbi       NBI that received the packet
- * @param bls       Buffer pool for the MU address
- *
- * If both NBIs share BLM pools, set "nbi" to zero.
- */
-__intrinsic void pci_out_fill_addr_mu_only(__gpr struct nfd_pci_out_input *desc,
-                                           unsigned int mu_addr,
-                                           unsigned int nbi, unsigned int bls);
-
-
-/**
- * Compute start offset and data_len for the packet
- * @param desc          PCI.OUT descriptor to fill
  * @param pkt_start     Start address of packet data
- * @param pkt_len       Length of the packet
  * @param meta_len      Amount of prepended meta data
+ *
+ * If both NBIs share BLM pools, set "nbi" to zero.  For MU only packets,
+ * "pkt_info->isl" must be zero.
  */
-__intrinsic void pci_out_fill_size(__gpr struct nfd_pci_out_input *desc,
-                                   unsigned int pkt_start, unsigned int pkt_len,
+__intrinsic void pci_out_fill_desc(__gpr struct nfd_pci_out_input *desc,
+                                   void *pkt_info, unsigned int nbi,
+                                   unsigned int pkt_start,
                                    unsigned int meta_len);
 
 

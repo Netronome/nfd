@@ -35,9 +35,6 @@
 
 #define CREDIT_BATCH        16
 
-/* XXX variables that app and/or BLM should expose */
-_declare_resource("BLQ_EMU_RINGS global 8 emem1_queues+4");
-#define APP_BLM_RADDR __LoadTimeConstant("__addr_emem1")
 
 __shared unsigned long long nrecv = 0;
 __shared unsigned long long nsent = 0;
@@ -57,22 +54,14 @@ void main(void)
     __xread struct nfd_pci_in_pkt_desc pci_in_meta;
     __gpr struct nfd_pci_out_input pci_out_desc;
     __xrw struct nfd_pci_out_input pci_out_desc_xfer[2];
-    unsigned int bls = TX_BLM_BLS;
+    __gpr struct nbi_meta_pkt_info pkt_info;
     unsigned int queue;
     unsigned int queue_credits;
     unsigned int vnic;
-    unsigned int pktlen;
     __xrw unsigned int credit;
     SIGNAL get_sig;
     SIGNAL_PAIR credit_sig;
     SIGNAL_PAIR send_sig;
-
-    /* Variables to return MU buffers to BLM when dropping packets
-     * Note constant bls currently */
-    unsigned int blm_raddr = ((unsigned long long) APP_BLM_RADDR >> 8);
-    unsigned int blm_rnum =
-        _alloc_resource(BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS global 1) + bls;
-
 
     int ret;
 
@@ -111,6 +100,9 @@ void main(void)
         local_csr_write(NFP_MECSR_MAILBOX_0, (nrecv>>32) & 0xffffffff);
         local_csr_write(NFP_MECSR_MAILBOX_1, nrecv & 0xffffffff);
 
+        /* Extract pkt_info */
+        nfd_fill_meta(&pkt_info, &pci_in_meta);
+
         /* Increment the queue number within the vnic */
         pci_in_map_queue(&vnic, &queue, pci_in_meta.q_num);
         queue = queue + 1;
@@ -144,15 +136,9 @@ void main(void)
         cached_credits[queue] = queue_credits;
 
         /* Return the packet */
-        pci_out_fill_addr_mu_only(&pci_out_desc, pci_in_meta.buf_addr, 0,
-                                      bls);
-
-        /* XXX alternative:
-         * pktlen = pci_in_meta.data_len - pci_in_meta.offset; */
-        pktlen = pci_in_pkt_len(&pci_in_meta);
-
-        pci_out_fill_size(&pci_out_desc, TX_DATA_OFFSET, pktlen,
+        pci_out_fill_desc(&pci_out_desc, &pkt_info, 0, TX_DATA_OFFSET,
                           pci_in_meta.offset);
+
         pci_out_dummy_vlan(&pci_out_desc, pci_in_meta.vlan,
                            pci_in_meta.flags);
 

@@ -7,6 +7,9 @@
 #ifndef _BLOCKS__VNIC_PCI_IN_H_
 #define _BLOCKS__VNIC_PCI_IN_H_
 
+#include <pkt/pkt.h>
+
+
 /**
  * PCI.in TX descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
@@ -87,6 +90,18 @@ struct nfd_pci_in_pkt_desc {
 __intrinsic void __nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
                                 __xread struct nfd_pci_in_pkt_desc *pci_in_meta,
                                 sync_t sync, SIGNAL *sig);
+
+/**
+ * Populate a nfd_pci_in_pkt_desc struct from the NFD meta data
+ * @param desc      PCI.IN descriptor for the packet
+ * @param pkt_info  nbi_meta_pkt_info struct for the packet
+ *
+ * "pkt_info->isl", "pkt_info->pnum", and "pkt_info->split" are set to zero
+ * as PCI.IN returns an "MU only" packet.
+ */
+__intrinsic void nfd_fill_meta(void *pkt_info,
+                               __xread struct nfd_pci_in_pkt_desc *pci_in_meta);
+
 
 void pci_in_map_queue(unsigned int *vnic, unsigned int *queue,
                       unsigned int nfd_queue);
