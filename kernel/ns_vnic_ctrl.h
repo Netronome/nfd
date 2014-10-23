@@ -109,6 +109,11 @@
 #define NS_VNIC_CFG_MAX_RXRINGS		0x0040
 #define NS_VNIC_CFG_MAX_MTU		0x0044
 
+/*
+ * YDS-155 workaround for the NFP-3200
+ * @NS_VNIC_CFG_SPARE_ADDR:  Host DMA address for ME code to use as it likes
+ */
+#define NS_VNIC_CFG_SPARE_ADDR		0x0060
 
 /**
  * RSS configuration (only when NS_VNIC_CFG_CTRL_RSS is enabled)
