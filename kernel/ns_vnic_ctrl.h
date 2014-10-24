@@ -25,7 +25,7 @@
 /**
  * Configuration BAR size
  */
-#define NS_VNIC_CFG_BAR_SZ		8192
+#define NS_VNIC_CFG_BAR_SZ		(32 * 1024) /* XXX THB-350 workaround, 8192 */
 
 /**
  * @NS_VNIC_TXR_MAX:         Maximum number of TX rings
