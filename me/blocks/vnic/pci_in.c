@@ -64,6 +64,17 @@ __nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
                            sizeof(*pci_in_meta), sync, sig);
 }
 
+__intrinsic void
+nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
+             __xread struct nfd_pci_in_pkt_desc *pci_in_meta)
+{
+    SIGNAL sig;
+
+    __nfd_pkt_recv(pcie_isl, workq, pci_in_meta, ctx_swap, &sig);
+}
+
+
+
 
 __intrinsic void
 nfd_fill_meta(void *pkt_info,
