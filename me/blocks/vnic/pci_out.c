@@ -80,6 +80,7 @@ __pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
     unsigned int addr_lo;
 
     ctassert(__is_ct_const(sync));
+    ctassert(sync == sig_done || sync == ctx_swap);
     ctassert(__is_read_write_reg(data));
 
     addr_hi = (0x84 | pcie_isl) << 24;
