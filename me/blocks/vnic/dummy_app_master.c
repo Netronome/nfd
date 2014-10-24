@@ -11,6 +11,8 @@
 
 #include <nfp/me.h>
 
+#include <nfp6000/nfp_me.h>
+
 #include <vnic/shared/vnic_cfg.h>
 
 __visible SIGNAL vnic_cfg_sig_app_master1;
@@ -36,6 +38,8 @@ __shared __gpr mem_ring_addr_t fake_blm_addr;
 __xwrite unsigned int fake_bufs[8];
 __export __imem __align2M char bufs_array[BUF_NUM * BUF_SZ];
 __shared __gpr unsigned int buf_cnt = 0;
+
+__xread unsigned int cfg_bar_data[6];
 
 
 int
@@ -93,9 +97,23 @@ main(void)
 
     for (;;) {
         if (ctx() == 0) {
-            vnic_cfg_app_check_cfg_msg(&vnic_cfg_sig_app_master1,
+            if (!cfg_msg.msg_valid) {
+                vnic_cfg_check_cfg_msg(&cfg_msg, &vnic_cfg_sig_app_master1,
                                        VNIC_CFG_RING_NUM(PCIE_ISL, 1),
                                        &VNIC_CFG_RING_ADDR(PCIE_ISL, 1));
+
+                if (cfg_msg.msg_valid) {
+                    vnic_cfg_app_read_general(cfg_bar_data, cfg_msg.vnic);
+                }
+            } else {
+                __implicit_read(cfg_bar_data, 6);
+
+                local_csr_write(NFP_MECSR_MAILBOX_0, cfg_msg.vnic);
+                local_csr_write(NFP_MECSR_MAILBOX_1, cfg_bar_data[0]);
+
+                cfg_msg.msg_valid = 0;
+                vnic_cfg_app_complete_cfg_msg(&cfg_msg);
+            }
 
             ctx_swap();
         } else {

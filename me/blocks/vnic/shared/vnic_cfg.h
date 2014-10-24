@@ -155,15 +155,6 @@ __intrinsic void vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                                         unsigned int next_me, unsigned int rnum,
                                         __dram void *rbase);
 
-/**
- * Check for a cfg_msg on the app ME master
- * @param cfg_sig           signal to check for messages
- * @param rnum              ring number to fetch messages from
- * @param rbase             base address of the ring to use
- */
-__intrinsic void vnic_cfg_app_check_cfg_msg(SIGNAL *cfg_sig, unsigned int rnum,
-                                        __dram void *rbase);
-
 
 /**
  * Check for a cfg_msg  on a NFD ME
@@ -181,8 +172,16 @@ __intrinsic void vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg,
  * Notify the host that a cfg_msg has been processed
  * @param cfg_msg       message listing the queue that has been configured
  */
-__intrinsic void vnic_cfg_app_complete_cfg_msg(
-    __xread struct vnic_cfg_msg *cfg_msg);
+__intrinsic void vnic_cfg_app_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg);
+
+
+/**
+ * Read general configuration data from cfg BAR
+ * @param cfg_bar_data      read transfer registers for the data
+ * @param vnic              vNIC BAR to access
+ */
+__intrinsic void vnic_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
+                                           unsigned int vnic);
 
 
 /**

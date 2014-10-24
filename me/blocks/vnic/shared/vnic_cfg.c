@@ -436,6 +436,7 @@ vnic_cfg_next_vnic()
     return vnic;
 }
 
+
 __intrinsic void
 vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                        __remote SIGNAL *cfg_sig_remote,
@@ -459,25 +460,6 @@ vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
                          __signal_number(cfg_sig_remote, next_me));
 }
 
-__intrinsic void
-vnic_cfg_app_check_cfg_msg(SIGNAL *cfg_sig, unsigned int rnum,
-                           __dram void *rbase)
-{
-    if (signal_test(cfg_sig)) {
-        __xread struct vnic_cfg_msg cfg_msg;
-
-        __implicit_write(cfg_sig);
-
-        mem_ring_get(rnum, mem_ring_get_addr(rbase), &cfg_msg,
-                     sizeof cfg_msg);
-
-        /* XXX move out of this method */
-        vnic_cfg_app_complete_cfg_msg(&cfg_msg);
-
-        local_csr_write(NFP_MECSR_MAILBOX_0, cfg_msg.vnic);
-        local_csr_write(NFP_MECSR_MAILBOX_1, 0x11223344);
-    }
-}
 
 __intrinsic void
 vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
@@ -501,7 +483,7 @@ vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
 
 
 __intrinsic void
-vnic_cfg_app_complete_cfg_msg(__xread struct vnic_cfg_msg *cfg_msg)
+vnic_cfg_app_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg)
 {
     __xwrite unsigned int result;
 
@@ -515,6 +497,16 @@ vnic_cfg_app_complete_cfg_msg(__xread struct vnic_cfg_msg *cfg_msg)
     mem_write32(&result,
                VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_UPDATE,
                sizeof(result));
+}
+
+
+__intrinsic void
+vnic_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
+                          unsigned int vnic)
+{
+    mem_read64(cfg_bar_data,
+               VNIC_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_CTRL,
+               6 * sizeof(unsigned int));
 }
 
 
