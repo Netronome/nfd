@@ -87,6 +87,14 @@ struct nfd_pci_in_pkt_desc {
 };
 
 
+/**
+ * Prepare ME data structures required to receive packets from NFD
+ *
+ * This method should be called from a single context, during initialisation.
+ */
+__intrinsic void nfd_pkt_recv_init();
+
+
 __intrinsic void __nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
                                 __xread struct nfd_pci_in_pkt_desc *pci_in_meta,
                                 sync_t sync, SIGNAL *sig);

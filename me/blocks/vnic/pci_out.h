@@ -89,6 +89,14 @@ struct nfd_pci_out_input {
 
 
 /**
+ * Prepare ME data structures required to send packets to NFD
+ *
+ * This method should be called from a single context, during initialisation.
+ */
+__intrinsic void nfd_pkt_send_init();
+
+
+/**
  * Map a vnic, queue number pair to a bitmask queue
  * @param vnic      vNIC as seen by the host
  * @param queue     queue number within the vNIC
@@ -122,17 +130,20 @@ extern unsigned int pci_out_get_credit(unsigned int pcie_isl,
 
 /**
  * Populate the address fields of the CPP descriptor for a packet
- * @param desc      PCI.OUT descriptor to fill
- * @param pkt_info  Up to date nbi_meta_pkt_info struct for the packet
- * @param nbi       NBI that received the packet
+ * @param desc          PCI.OUT descriptor to fill
+ * @param pkt_info      Up to date nbi_meta_pkt_info struct for the packet
+ * @param nbi           NBI that received the packet
+ * @param ctm_split     CTM split length for the packet
  * @param pkt_start     Start address of packet data
  * @param meta_len      Amount of prepended meta data
  *
  * If both NBIs share BLM pools, set "nbi" to zero.  For MU only packets,
- * "pkt_info->isl" must be zero.
+ * "pkt_info->isl" must be zero.  "ctm_split" must be encoded as for the
+ * "NbiDmaBPCfg" register (see DB).
  */
 __intrinsic void pci_out_fill_desc(__gpr struct nfd_pci_out_input *desc,
-                                   void *pkt_info, unsigned int nbi,
+                                   void *pkt_info,
+                                   unsigned int nbi, unsigned int ctm_split,
                                    unsigned int pkt_start,
                                    unsigned int meta_len);
 

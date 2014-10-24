@@ -19,6 +19,30 @@
 #include <vnic/shared/qc.h>
 
 
+__shared __lmem struct nfd_ring_info pci_in_ring_info[NFD_MAX_ISL];
+
+
+__intrinsic void
+nfd_pkt_recv_init()
+{
+#if _nfp_has_island("pcie0")
+    NFD_RING_INIT(0, pci_in, NFD_NUM_WQS);
+#endif
+
+#if _nfp_has_island("pcie1")
+    NFD_RING_INIT(1, pci_in, NFD_NUM_WQS);
+#endif
+
+#if _nfp_has_island("pcie2")
+    NFD_RING_INIT(2, pci_in, NFD_NUM_WQS);
+#endif
+
+#if _nfp_has_island("pcie3")
+    NFD_RING_INIT(3, pci_in, NFD_NUM_WQS);
+#endif
+}
+
+
 __intrinsic void
 __nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
                __xread struct nfd_pci_in_pkt_desc *pci_in_meta,
@@ -27,26 +51,12 @@ __nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
     mem_ring_addr_t raddr;
     unsigned int rnum;
 
-    switch (pcie_isl) {
-    case 0:
-        raddr = (unsigned long long) NFD_EMEM(0) >> 8;
-        rnum = NFD_RING_ALLOC(0, pci_in, NFD_NUM_WQS);
-        break;
-    case 1:
-        raddr = (unsigned long long) NFD_EMEM(1) >> 8;
-        rnum = NFD_RING_ALLOC(1, pci_in, NFD_NUM_WQS);
-        break;
-    case 2:
-        raddr = (unsigned long long) NFD_EMEM(2) >> 8;
-        rnum = NFD_RING_ALLOC(2, pci_in, NFD_NUM_WQS);
-        break;
-    case 3:
-        raddr = (unsigned long long) NFD_EMEM(3) >> 8;
-        rnum = NFD_RING_ALLOC(3, pci_in, NFD_NUM_WQS);
-        break;
-    default:
-        halt();
-    }
+    ctassert(__is_ct_const(sync));
+    ctassert(sync == sig_done || sync == ctx_swap);
+    try_ctassert(pcie_isl < NFD_MAX_ISL);
+
+    raddr = pci_in_ring_info[pcie_isl].addr_hi << 24;
+    rnum = pci_in_ring_info[pcie_isl].rnum;
 
     rnum |= workq;
 

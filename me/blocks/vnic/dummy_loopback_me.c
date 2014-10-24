@@ -78,6 +78,9 @@ void main(void)
         local_csr_write(NFP_MECSR_MAILBOX_0, 0);
         local_csr_write(NFP_MECSR_MAILBOX_1, 0);
         local_csr_write(NFP_MECSR_MAILBOX_2, 0);
+
+        nfd_pkt_recv_init();
+        nfd_pkt_send_init();
     }
 
     /* Manual delay to allow work queues
@@ -136,7 +139,7 @@ void main(void)
         cached_credits[queue] = queue_credits;
 
         /* Return the packet */
-        pci_out_fill_desc(&pci_out_desc, &pkt_info, 0, TX_DATA_OFFSET,
+        pci_out_fill_desc(&pci_out_desc, &pkt_info, 0, 0, TX_DATA_OFFSET,
                           pci_in_meta.offset);
 
         pci_out_dummy_vlan(&pci_out_desc, pci_in_meta.vlan,

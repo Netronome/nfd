@@ -18,10 +18,44 @@
 #include <vnic/shared/qc.h>
 
 
+__shared __lmem struct nfd_ring_info pci_out_ring_info[NFD_MAX_ISL];
+
+#if _nfp_has_island("pcie0")
 NFD_RING_DECLARE(0, pci_out, RX_PCI_OUT_RING_SZ);
+#endif
+
+#if _nfp_has_island("pcie1")
 NFD_RING_DECLARE(1, pci_out, RX_PCI_OUT_RING_SZ);
+#endif
+
+#if _nfp_has_island("pcie2")
 NFD_RING_DECLARE(2, pci_out, RX_PCI_OUT_RING_SZ);
+#endif
+
+#if _nfp_has_island("pcie3")
 NFD_RING_DECLARE(3, pci_out, RX_PCI_OUT_RING_SZ);
+#endif
+
+
+__intrinsic void
+nfd_pkt_send_init()
+{
+#if _nfp_has_island("pcie0")
+    NFD_RING_INIT(0, pci_out, 1);
+#endif
+
+#if _nfp_has_island("pcie1")
+    NFD_RING_INIT(1, pci_out, 1);
+#endif
+
+#if _nfp_has_island("pcie2")
+    NFD_RING_INIT(2, pci_out, 1);
+#endif
+
+#if _nfp_has_island("pcie3")
+    NFD_RING_INIT(3, pci_out, 1);
+#endif
+}
 
 
 unsigned int
@@ -81,8 +115,8 @@ pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
 
 __intrinsic void
 pci_out_fill_desc(__gpr struct nfd_pci_out_input *desc, void *pkt_info,
-                  unsigned int nbi, unsigned int pkt_start,
-                  unsigned int meta_len)
+                  unsigned int nbi, unsigned int ctm_split,
+                  unsigned int pkt_start, unsigned int meta_len)
 {
     ctassert(__is_in_reg_or_lmem(pkt_info) || __is_read_reg(pkt_info));
 
@@ -90,6 +124,7 @@ pci_out_fill_desc(__gpr struct nfd_pci_out_input *desc, void *pkt_info,
     desc->cpp.isl = ((struct nbi_meta_pkt_info *) pkt_info)->isl;
     desc->cpp.pktnum = ((struct nbi_meta_pkt_info *) pkt_info)->pnum;
     desc->cpp.mu_addr = ((struct nbi_meta_pkt_info *) pkt_info)->muptr;
+    desc->cpp.split = ctm_split;
     desc->cpp.nbi = nbi;
     desc->cpp.bls = ((struct nbi_meta_pkt_info *) pkt_info)->bls;
 
@@ -124,33 +159,16 @@ __pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
     mem_ring_addr_t raddr;
     unsigned int rnum;
 
+    ctassert(__is_ct_const(sync));
     ctassert(sync == sig_done);
+    try_ctassert(pcie_isl < NFD_MAX_ISL);
 
-    switch (pcie_isl) {
-    case 0:
-        raddr = (unsigned long long) NFD_EMEM(0) >> 8;
-        rnum = NFD_RING_ALLOC(0, pci_out, 1);
-        break;
-    case 1:
-        raddr = (unsigned long long) NFD_EMEM(1) >> 8;
-        rnum = NFD_RING_ALLOC(1, pci_out, 1);
-        break;
-    case 2:
-        raddr = (unsigned long long) NFD_EMEM(2) >> 8;
-        rnum = NFD_RING_ALLOC(2, pci_out, 1);
-        break;
-    case 3:
-        raddr = (unsigned long long) NFD_EMEM(3) >> 8;
-        rnum = NFD_RING_ALLOC(3, pci_out, 1);
-        break;
-    default:
-        halt();
-    }
+    raddr = pci_out_ring_info[pcie_isl].addr_hi << 24;
+    rnum = pci_out_ring_info[pcie_isl].rnum;
 
     /* Complete the basic descriptor */
     desc->rxd.dd = 1;
     desc->rxd.queue = bmsk_queue;
-    desc->cpp.split = 0; /* XXX deal with getting split length */
     desc->cpp.down = 0;
     desc->cpp.sop = 1;
 
