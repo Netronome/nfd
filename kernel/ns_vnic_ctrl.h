@@ -23,9 +23,16 @@
 #define _NS_VNIC_CTRL_H_
 
 /**
- * Configuration BAR size
+ * Configuration BAR size.
+ *
+ * The configuration BAR is 8K in size, but on the NFP6000, due to
+ * THB-350, 32k needs to be reserved.
  */
-#define NS_VNIC_CFG_BAR_SZ		(32 * 1024) /* XXX THB-350 workaround, 8192 */
+#ifdef __NFP_IS_6000
+#define NS_VNIC_CFG_BAR_SZ		(32 * 1024)
+#else
+#define NS_VNIC_CFG_BAR_SZ		(8 * 1024)
+#endif
 
 /**
  * @NS_VNIC_TXR_MAX:         Maximum number of TX rings
@@ -126,11 +133,10 @@
 #define   NS_VNIC_CFG_RSS_MASK		  (0x7f)
 #define   NS_VNIC_CFG_RSS_MASK_of(_x)	  ((_x) & 0x7f)
 #define   NS_VNIC_CFG_RSS_IPV4		  (1 <<  8) /* RSS for IPv4 */
-#define   NS_VNIC_CFG_RSS_IPV4TCP	  (3 <<  8) /* RSS for TCP/IPv4 */
-#define   NS_VNIC_CFG_RSS_IPV4UDP	  (5 <<  8) /* RSS for UDP/IPv4 */
-#define   NS_VNIC_CFG_RSS_IPV6		  (1 << 11) /* RSS for IPv6 */
-#define   NS_VNIC_CFG_RSS_IPV6TCP	  (3 << 11) /* RSS for TCP/IPv6 */
-#define   NS_VNIC_CFG_RSS_IPV6UDP	  (5 << 11) /* RSS for UDP/IPv6 */
+#define   NS_VNIC_CFG_RSS_IPV6		  (1 <<  9) /* RSS for IPv6 */
+#define   NS_VNIC_CFG_RSS_TCP		  (1 << 10) /* RSS for TCP only */
+#define   NS_VNIC_CFG_RSS_UDP		  (1 << 11) /* RSS for UDP only */
+#define   NS_VNIC_CFG_RSS_4TUPLE	  (1 << 12) /* RSS using 4 tuple */
 #define   NS_VNIC_CFG_RSS_TOEPLITZ	  (1 << 24) /* Use Toeplitz hash */
 #define NS_VNIC_CFG_RSS_KEY		(NS_VNIC_CFG_RSS_BASE + 0x4)
 #define NS_VNIC_CFG_RSS_KEY_SZ		0x28
