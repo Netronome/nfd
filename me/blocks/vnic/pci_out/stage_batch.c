@@ -17,13 +17,7 @@
 #include <nfp6000/nfp_event.h>
 #include <nfp6000/nfp_me.h>
 
-/* #include <vnic/pci_out/stage_batch.h> */
-
 #include <vnic/pci_out.h>
-/* #include <vnic/pci_out_cfg.h> */
-/* #include <vnic/pci_out/cache_desc.h> */
-/* #include <vnic/pci_out/pci_out_internal.h> */
-/* #include <vnic/shared/nfd_shared.h> */
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/dma_seqn.h>
@@ -155,7 +149,6 @@ stage_batch_setup_rings()
 {
     /* Input ring */
     in_ring_num = NFD_RING_ALLOC(PCIE_ISL, nfd_out, 1);
-    /* NFD_RING_CONFIGURE(PCIE_ISL, nfd_out); */
     MEM_RING_CONFIGURE(NFD_RING_BASE(PCIE_ISL, nfd_out), in_ring_num);
 }
 

@@ -14,7 +14,6 @@
 #include <std/reg_utils.h>
 
 #include <vnic/pci_out.h>
-/* #include <vnic/shared/nfd_shared.h> */
 #include <vnic/shared/nfd.h>
 #include <vnic/utils/qc.h>
 

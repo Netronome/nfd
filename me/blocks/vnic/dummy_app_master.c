@@ -105,7 +105,8 @@ main(void)
                                       NFD_CFG_RING_NUM(PCIE_ISL, 1));
 
                 if (cfg_msg.msg_valid) {
-                    mem_read64(cfg_bar_data, NFD_CFG_BASE(PCIE_ISL)[cfg_msg.vnic],
+                    mem_read64(cfg_bar_data,
+                               NFD_CFG_BASE(PCIE_ISL)[cfg_msg.vnic],
                                sizeof cfg_bar_data);
                 }
             } else {

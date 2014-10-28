@@ -15,10 +15,6 @@
 
 #include <nfp6000/nfp_me.h>
 
-/* #include <vnic/pci_in_cfg.h> */
-/* #include <vnic/pci_in/precache_bufs.h> */
-/* #include <vnic/shared/nfd_shared.h> */
-
 #include <vnic/shared/nfd_internal.h>
 
 
@@ -27,15 +23,8 @@
 #define NFD_IN_BUF_STORE_PTR *l$index3
 _init_csr("mecsr:CtxEnables.LMAddr3Global 1");
 
-/* struct precache_state { */
-/*     unsigned int pending_fetch:1; */
-/*     unsigned int spare:31; */
-/* }; */
-
-
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
-/* static struct precache_state state = {0, 0}; */
 static struct nfd_in_me1_state state = {0, 0, 0};
 static SIGNAL_PAIR precache_sig;
 

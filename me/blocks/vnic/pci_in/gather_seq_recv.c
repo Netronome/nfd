@@ -8,17 +8,8 @@
 #include <assert.h>
 #include <nfp.h>
 
-/* #include "gather_seq_recv.h" */
-
 #include <vnic/shared/nfd_internal.h>
 
-/* #include <vnic/pci_in/precache_bufs.h> */
-
-
-/* struct seq_recv_state { */
-/*     unsigned int recompute_seq_safe:1; */
-/*     unsigned int spare:31; */
-/* }; */
 
 __visible volatile __xread unsigned int nfd_in_gather_compl_reflect_xread;
 __visible volatile __xread unsigned int nfd_in_data_compl_reflect_xread;

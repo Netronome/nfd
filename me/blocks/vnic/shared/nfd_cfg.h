@@ -61,12 +61,6 @@ _alloc_resource(_name emem##_emem##_queues global _num _num)
         char NFD_CFG_BASE(_isl)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
 
 
-/* XXX TEMP */
-enum nfd_cfg_component {
-    NFD_CFG_PCI_IN,
-    NFD_CFG_PCI_OUT
-};
-
 
 /**
  * @param msg_valid     message contains valid information

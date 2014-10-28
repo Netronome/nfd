@@ -13,7 +13,6 @@
 
 #include <vnic/shared/nfd_cfg.h>
 
-/* #include <vnic/shared/nfd_shared.h> */
 #include <vnic/shared/nfd.h>
 #include <vnic/utils/mem_bulk32.h>
 

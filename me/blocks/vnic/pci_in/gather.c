@@ -8,11 +8,7 @@
 #include <assert.h>
 #include <nfp.h>
 
-/* #include <vnic/pci_in/gather.h> */
-
 #include <vnic/pci_in.h>
-/* #include <vnic/pci_in_cfg.h> */
-/* #include <vnic/pci_in/pci_in_internal.h> */
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/pcie.h>

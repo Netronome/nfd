@@ -12,10 +12,6 @@
 
 #include <nfp6000/nfp_cls.h>
 
-/* #include <vnic/pci_in/distr_seqn.h> */
-
-/* #include <vnic/pci_in_cfg.h> */
-
 #include <vnic/shared/nfd_internal.h>
 
 /*

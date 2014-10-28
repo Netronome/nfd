@@ -11,12 +11,8 @@
 
 #include <nfp6000/nfp_event.h>
 
-/* #include <vnic/pci_in/service_qc.h> */
-
 #include <vnic/pci_in.h>
 
-/* #include <vnic/pci_in_cfg.h> */
-/* #include <vnic/pci_in/pci_in_internal.h> */
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>

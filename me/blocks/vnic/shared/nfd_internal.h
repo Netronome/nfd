@@ -154,11 +154,10 @@
 
 
 /* nfd_cfg internal structures */
-/* XXX uncomment */
-/* enum nfd_cfg_component { */
-/*     NFD_CFG_PCI_IN, */
-/*     NFD_CFG_PCI_OUT */
-/* }; */
+enum nfd_cfg_component {
+    NFD_CFG_PCI_IN,
+    NFD_CFG_PCI_OUT
+};
 
 
 /* nfd_in internal structures */
@@ -245,20 +244,6 @@ struct nfd_in_me1_state {
 };
 
 
-/* /\* NB: this struct must be compatible with nfd_cfg_msg *\/ */
-/* struct pci_in_cfg_msg { */
-/*     union { */
-/*         struct { */
-/*             unsigned int msg_valid:1; */
-/*             unsigned int error:1; */
-/*             unsigned int spare:22; */
-/*             unsigned int vnic:8; */
-/*         }; */
-/*         unsigned int __raw; */
-/*     }; */
-/* }; */
-
-
 /* nfd_out internal structures */
 struct nfd_out_queue_info {
     unsigned int fl_w;
@@ -291,20 +276,6 @@ struct nfd_out_fl_desc {
         unsigned int __raw[2];
     };
 };
-
-
-/* /\* NB: this struct must be compatible with nfd_cfg_msg *\/ */
-/* struct nfd_out_cfg_msg { */
-/*     union { */
-/*         struct { */
-/*             unsigned int msg_valid:1; */
-/*             unsigned int error:1; */
-/*             unsigned int spare:22; */
-/*             unsigned int vnic:8; */
-/*         }; */
-/*         unsigned int __raw; */
-/*     }; */
-/* }; */
 
 
 /**

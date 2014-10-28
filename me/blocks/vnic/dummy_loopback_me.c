@@ -23,9 +23,7 @@
 #include <std/reg_utils.h>
 
 #include <vnic/pci_in.h>
-/* #include <vnic/pci_in_cfg.h> */
 #include <vnic/pci_out.h>
-/* #include <vnic/shared/nfd_shared.h> */
 #include <vnic/utils/ordering.h>
 
 
@@ -39,8 +37,8 @@
 __shared unsigned long long nrecv = 0;
 __shared unsigned long long nsent = 0;
 volatile __shared unsigned long long nfail = 0;
-__shared __lmem unsigned int cached_credits[NFD_IN_MAX_QUEUES];
-__shared __lmem unsigned int fetched_credits[NFD_IN_MAX_QUEUES];
+__shared __lmem unsigned int cached_credits[NFD_OUT_MAX_QUEUES];
+__shared __lmem unsigned int fetched_credits[NFD_OUT_MAX_QUEUES];
 
 
 /* Ordering  */

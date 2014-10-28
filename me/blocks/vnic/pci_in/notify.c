@@ -12,19 +12,11 @@
 
 #include <nfp6000/nfp_me.h>
 
-/* #include <vnic/pci_in/notify.h> */
-
 #include <nfp/mem_ring.h>
 
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>
-
-/* #include <vnic/pci_in.h> */
-/* #include <vnic/pci_in_cfg.h> */
-/* #include <vnic/pci_in/pci_in_internal.h> */
-/* #include <vnic/shared/nfd_shared.h> */
-
 /*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
 #include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
 #include <vnic/utils/qc.h>

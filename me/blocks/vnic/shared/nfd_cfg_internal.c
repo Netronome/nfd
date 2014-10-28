@@ -19,11 +19,9 @@
 #include <nfp6000/nfp_pcie.h>
 #include <nfp6000/nfp_qc.h>
 
-#include <vnic/shared/nfd_internal.h>
-#include <vnic/shared/nfd_cfg.h>
-
-/* #include <vnic/shared/nfd_shared.h> */
 #include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_cfg.h>
+#include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/mem_bulk32.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>

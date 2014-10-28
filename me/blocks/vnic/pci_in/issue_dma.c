@@ -15,19 +15,10 @@
 
 #include <nfp6000/nfp_me.h>
 
-/* #include <vnic/pci_in/issue_dma.h> */
-
-/* #include <vnic/pci_in.h> */
-/* #include <vnic/pci_in_cfg.h> */
-/* #include <vnic/pci_in/pci_in_internal.h> */
-
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>
 
-/* #include <vnic/pci_in/precache_bufs.h> */
-
-/* #include <vnic/shared/nfd_cfg.h> */
 /*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
 #include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
 #include <vnic/utils/nn_ring.h>

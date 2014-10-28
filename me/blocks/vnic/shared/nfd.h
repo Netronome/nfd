@@ -9,13 +9,14 @@
 
 #include <vnic/shared/nfcc_chipres.h>
 
-#define NFD_MAX_ISL     4   /* Maximum number of PCIe islands NFD may support */
-
-/* USER CONFIGURES */
+/* User configuration defines */
 #define NFD_PCIE0_EMEM      0
 #define NFD_PCIE1_EMEM      0
 #define NFD_PCIE2_EMEM      1
 #define NFD_PCIE3_EMEM      1
+
+/* Set defines */
+#define NFD_MAX_ISL     4   /* Maximum number of PCIe islands NFD may support */
 
 
 /* Helper macros */
@@ -44,12 +45,8 @@ do {                                                                    \
 } while(0)
 
 
-/* REMOVE? */
-/* #define NFD_RING_CONFIGURE_IND(_isl, _comp)                     \ */
-/*     MEM_RING_CONFIGURE(_comp##_ring_isl##_isl##, in_ring_num) */
-/* #define NFD_RING_CONFIGURE(_isl, _comp) NFD_RING_CONFIGURE_IND(_isl, _comp) */
 
-
+/* Shared structures */
 /**
  * Compact storage of NFD ring addresses and ring numbers
  */

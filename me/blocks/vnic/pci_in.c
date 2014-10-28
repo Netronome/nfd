@@ -14,8 +14,6 @@
 #include <std/reg_utils.h>
 
 #include <vnic/pci_in.h>
-/* #include <vnic/pci_in_cfg.h> */
-/* #include <vnic/shared/nfd_shared.h> */
 #include <vnic/shared/nfd.h>
 #include <vnic/utils/qc.h>
 
@@ -116,5 +114,3 @@ nfd_in_pkt_len(__xread struct nfd_in_pkt_desc *nfd_in_meta)
 {
     return nfd_in_meta->data_len - nfd_in_meta->offset;
 }
-
-
