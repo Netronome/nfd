@@ -29,7 +29,7 @@ extern __shared __gpr unsigned int data_dma_seq_safe;
 /**
  * Xfers to display state
  */
-static __xwrite struct rx_issue_dma_status status_issued = {0, 0, 0, 0};
+static __xwrite struct nfd_out_issue_dma_status status_issued = {0, 0, 0, 0};
 
 SIGNAL status_throttle;
 
@@ -40,7 +40,7 @@ issue_dma_status_setup()
     /* Fix the transfer registers used */
     __assign_relative_register(&status_issued, STATUS_ISSUE_DMA_START);
 
-    set_alarm(RX_DBG_ISSUE_DMA_INTVL, &status_throttle);
+    set_alarm(NFD_OUT_DBG_ISSUE_DMA_INTVL, &status_throttle);
 }
 
 void
@@ -61,6 +61,6 @@ issue_dma_status()
         /*
          * Reset the alarm
          */
-        set_alarm(RX_DBG_ISSUE_DMA_INTVL, &status_throttle);
+        set_alarm(NFD_OUT_DBG_ISSUE_DMA_INTVL, &status_throttle);
     }
 }

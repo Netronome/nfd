@@ -8,7 +8,7 @@
 #define _BLOCKS__VNIC_PCI_OUT_INTERNAL_H_
 
 
-struct rx_queue_info {
+struct nfd_out_queue_info {
     unsigned int fl_w;
     unsigned int fl_s;
     unsigned int ring_sz_msk;
@@ -30,7 +30,7 @@ struct rx_queue_info {
 /*
  * Freelist descriptor format
  */
-struct nfd_pci_out_fl_desc {
+struct nfd_out_fl_desc {
     union {
         struct {
             unsigned int dd:1;          /* Must be zero */
@@ -45,7 +45,7 @@ struct nfd_pci_out_fl_desc {
 
 
 /* NB: this struct must be compatible with vnic_cfg_msg */
-struct pci_out_cfg_msg {
+struct nfd_out_cfg_msg {
     union {
         struct {
             unsigned int msg_valid:1;
@@ -63,7 +63,7 @@ struct pci_out_cfg_msg {
  * "num" provides the number of packets in this batch.  RX descriptors
  * are only DMA'ed if "send_pktX" is set.
  */
-struct pci_out_desc_batch_msg {
+struct nfd_out_desc_batch_msg {
     union {
         struct {
             unsigned int send_pkt0:1;
@@ -84,7 +84,7 @@ struct pci_out_desc_batch_msg {
 /**
  * Batch header used on the "stage_batch" to "issue_dma" NN ring
  */
-struct pci_out_data_batch_msg {
+struct nfd_out_data_batch_msg {
     union {
         struct {
             unsigned int num;
@@ -99,19 +99,19 @@ struct pci_out_data_batch_msg {
  * and aligning the space.
  * XXX unnecessary...
  */
-#define RX_DATA_DMA_INFO_SZ     16
+#define NFD_OUT_DATA_DMA_INFO_SZ     16
 
 /**
  * Descriptor passed between "stage_batch" and "issue_dma"
  */
-struct pci_out_data_dma_info {
+struct nfd_out_data_dma_info {
     union {
         struct {
-            struct nfd_pci_out_cpp_desc cpp;    /* CPP descriptor */
-            unsigned int rid:8;                 /* Requester ID for the pkt */
+            struct nfd_out_cpp_desc cpp;    /* CPP descriptor */
+            unsigned int rid:8;             /* Requester ID for the pkt */
             unsigned int spare:8;
-            unsigned int data_len:16;           /* Total data length */
-            unsigned int fl_cache_index;        /* FL descriptor index */
+            unsigned int data_len:16;       /* Total data length */
+            unsigned int fl_cache_index;    /* FL descriptor index */
         };
         unsigned int __raw[4];
     };
@@ -121,11 +121,11 @@ struct pci_out_data_dma_info {
 /**
  * Structure for a batch of "stage_batch" to "issue_dma" descriptors
  */
-struct pci_out_data_batch {
-    struct pci_out_data_dma_info pkt0;
-    struct pci_out_data_dma_info pkt1;
-    struct pci_out_data_dma_info pkt2;
-    struct pci_out_data_dma_info pkt3;
+struct nfd_out_data_batch {
+    struct nfd_out_data_dma_info pkt0;
+    struct nfd_out_data_dma_info pkt1;
+    struct nfd_out_data_dma_info pkt2;
+    struct nfd_out_data_dma_info pkt3;
 };
 
 #endif /* __NFP_LANG_MICROC */

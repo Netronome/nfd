@@ -18,48 +18,48 @@
 #include <vnic/shared/qc.h>
 
 
-__shared __lmem struct nfd_ring_info pci_out_ring_info[NFD_MAX_ISL];
+__shared __lmem struct nfd_ring_info nfd_out_ring_info[NFD_MAX_ISL];
 
 #if _nfp_has_island("pcie0")
-NFD_RING_DECLARE(0, pci_out, RX_PCI_OUT_RING_SZ);
+NFD_RING_DECLARE(0, nfd_out, NFD_OUT_RING_SZ);
 #endif
 
 #if _nfp_has_island("pcie1")
-NFD_RING_DECLARE(1, pci_out, RX_PCI_OUT_RING_SZ);
+NFD_RING_DECLARE(1, nfd_out, NFD_OUT_RING_SZ);
 #endif
 
 #if _nfp_has_island("pcie2")
-NFD_RING_DECLARE(2, pci_out, RX_PCI_OUT_RING_SZ);
+NFD_RING_DECLARE(2, nfd_out, NFD_OUT_RING_SZ);
 #endif
 
 #if _nfp_has_island("pcie3")
-NFD_RING_DECLARE(3, pci_out, RX_PCI_OUT_RING_SZ);
+NFD_RING_DECLARE(3, nfd_out, NFD_OUT_RING_SZ);
 #endif
 
 
 __intrinsic void
-nfd_pkt_send_init()
+nfd_out_send_init()
 {
 #if _nfp_has_island("pcie0")
-    NFD_RING_INIT(0, pci_out, 1);
+    NFD_RING_INIT(0, nfd_out, 1);
 #endif
 
 #if _nfp_has_island("pcie1")
-    NFD_RING_INIT(1, pci_out, 1);
+    NFD_RING_INIT(1, nfd_out, 1);
 #endif
 
 #if _nfp_has_island("pcie2")
-    NFD_RING_INIT(2, pci_out, 1);
+    NFD_RING_INIT(2, nfd_out, 1);
 #endif
 
 #if _nfp_has_island("pcie3")
-    NFD_RING_INIT(3, pci_out, 1);
+    NFD_RING_INIT(3, nfd_out, 1);
 #endif
 }
 
 
 unsigned int
-pci_out_map_queue(unsigned int vnic, unsigned int queue)
+nfd_out_map_queue(unsigned int vnic, unsigned int queue)
 {
     unsigned int natural_queue;
 
@@ -72,7 +72,7 @@ pci_out_map_queue(unsigned int vnic, unsigned int queue)
  * XXX this code assumes that credits are forced to start at CTM addr 0.
  */
 __intrinsic void
-__pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
+__nfd_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
                      unsigned int num, __xrw unsigned int *data,
                      sync_t sync, SIGNAL_PAIR *sigpair)
 {
@@ -100,14 +100,14 @@ __pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
 
 
 unsigned int
-pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
+nfd_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
                    unsigned int num)
 {
     __xrw unsigned int data;
     SIGNAL_PAIR sig;
     unsigned int ret;
 
-    __pci_out_get_credit(pcie_isl, bmsk_queue, num, &data, ctx_swap, &sig);
+    __nfd_out_get_credit(pcie_isl, bmsk_queue, num, &data, ctx_swap, &sig);
     ret = data;
 
     return ret;
@@ -115,7 +115,7 @@ pci_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
 
 
 __intrinsic void
-pci_out_fill_desc(__gpr struct nfd_pci_out_input *desc, void *pkt_info,
+nfd_out_fill_desc(__gpr struct nfd_out_input *desc, void *pkt_info,
                   unsigned int nbi, unsigned int ctm_split,
                   unsigned int pkt_start, unsigned int meta_len)
 {
@@ -138,7 +138,7 @@ pci_out_fill_desc(__gpr struct nfd_pci_out_input *desc, void *pkt_info,
 
 
 __intrinsic void
-pci_out_dummy_vlan(__gpr struct nfd_pci_out_input *desc, unsigned int vlan,
+nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc, unsigned int vlan,
                    unsigned int flags)
 {
     desc->rxd.vlan  = vlan;
@@ -151,12 +151,12 @@ pci_out_dummy_vlan(__gpr struct nfd_pci_out_input *desc, unsigned int vlan,
  * This can be optimised for specific use cases, depending on what assumptions
  * the calling applications is able to make. */
 __intrinsic void
-__pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
-               __xrw struct nfd_pci_out_input desc_out[2],
-               __gpr struct nfd_pci_out_input *desc,
+__nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
+               __xrw struct nfd_out_input desc_out[2],
+               __gpr struct nfd_out_input *desc,
                sync_t sync, SIGNAL_PAIR *sigpair)
 {
-    unsigned int desc_sz = sizeof(struct nfd_pci_out_input);
+    unsigned int desc_sz = sizeof(struct nfd_out_input);
     mem_ring_addr_t raddr;
     unsigned int rnum;
 
@@ -164,8 +164,8 @@ __pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
     ctassert(sync == sig_done);
     try_ctassert(pcie_isl < NFD_MAX_ISL);
 
-    raddr = pci_out_ring_info[pcie_isl].addr_hi << 24;
-    rnum = pci_out_ring_info[pcie_isl].rnum;
+    raddr = nfd_out_ring_info[pcie_isl].addr_hi << 24;
+    rnum = nfd_out_ring_info[pcie_isl].rnum;
 
     /* Complete the basic descriptor */
     desc->rxd.dd = 1;
@@ -194,7 +194,7 @@ __pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
 
 
 __intrinsic int
-pci_out_send_test(__xrw struct nfd_pci_out_input desc_out[2])
+nfd_out_send_test(__xrw struct nfd_out_input desc_out[2])
 {
     int result;
 
@@ -204,15 +204,15 @@ pci_out_send_test(__xrw struct nfd_pci_out_input desc_out[2])
 
 
 __intrinsic int
-pci_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
-             __gpr struct nfd_pci_out_input *desc)
+nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
+             __gpr struct nfd_out_input *desc)
 {
-    __xrw struct nfd_pci_out_input data[2];
+    __xrw struct nfd_out_input data[2];
     SIGNAL_PAIR sigpair;
 
-    __pci_out_send(pcie_isl, bmsk_queue, data, desc, sig_done, &sigpair);
+    __nfd_out_send(pcie_isl, bmsk_queue, data, desc, sig_done, &sigpair);
     wait_for_all(&sigpair);
 
-    return pci_out_send_test(data);
+    return nfd_out_send_test(data);
 
 }

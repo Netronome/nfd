@@ -28,11 +28,11 @@
 #include <vnic/utils/qcntl.h>
 
 
-/* #define NFD_PCI_OUT_CREDITS_HOST_ISSUED */
-#define NFD_PCI_OUT_CREDITS_NFP_CACHED
+/* #define NFD_OUT_CREDITS_HOST_ISSUED */
+#define NFD_OUT_CREDITS_NFP_CACHED
 
-#define RX_FL_CACHE_SZ_PER_QUEUE   \
-    (RX_FL_CACHE_BUFS_PER_QUEUE * sizeof(struct nfd_pci_out_fl_desc))
+#define NFD_OUT_FL_CACHE_SZ_PER_QUEUE   \
+    (NFD_OUT_FL_CACHE_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
 
 /*
  * State variables for PCI.OUT queue controller accesses
@@ -51,17 +51,18 @@ __shared __gpr struct qc_bitmask urgent_bmsk;
 /*
  * Memory for PCI.OUT
  */
-__shared __lmem struct rx_queue_info queue_data[MAX_RX_QUEUES];
+__shared __lmem struct nfd_out_queue_info queue_data[NFD_OUT_MAX_QUEUES];
 
-static __shared __lmem unsigned int fl_cache_pending[RX_FL_FETCH_MAX_IN_FLIGHT];
+static __shared __lmem unsigned int
+    fl_cache_pending[NFD_OUT_FL_FETCH_MAX_IN_FLIGHT];
 
 /* NFD credits are fixed at offset zero in CTM */
-NFD_CREDITS_ALLOC(RX_CREDITS_BASE);
+NFD_CREDITS_ALLOC(NFD_OUT_CREDITS_BASE);
 
 
-__export __ctm __align(MAX_RX_QUEUES * RX_FL_CACHE_SZ_PER_QUEUE)
-    struct nfd_pci_out_fl_desc
-    fl_cache_mem[MAX_RX_QUEUES][RX_FL_CACHE_BUFS_PER_QUEUE];
+__export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_CACHE_SZ_PER_QUEUE)
+    struct nfd_out_fl_desc
+    fl_cache_mem[NFD_OUT_MAX_QUEUES][NFD_OUT_FL_CACHE_BUFS_PER_QUEUE];
 
 static __gpr unsigned int fl_cache_mem_addr_lo;
 
@@ -133,14 +134,15 @@ cache_desc_setup_shared()
     init_bitmasks(&active_bmsk);
     init_bitmasks(&urgent_bmsk);
 
-    /* Configure RXQ autopush filters */
+    /* Configure autopush filters */
     init_bitmask_filters(&rx_ap_xfers, &rx_ap_s0, &rx_ap_s1, &rx_ap_s2,
-                         &rx_ap_s3,(RXQ_EVENT_DATA<<6) | RXQ_START,
+                         &rx_ap_s3,(NFD_OUT_Q_EVENT_DATA<<6) | NFD_OUT_Q_START,
                          NFP_EVENT_TYPE_FIFO_ABOVE_WM,
-                         RXQ_EVENT_START);
+                         NFD_OUT_Q_EVENT_START);
 
-    dma_seqn_ap_setup(RX_FL_FETCH_EVENT_FILTER, RX_FL_FETCH_EVENT_FILTER,
-                      RX_FL_FETCH_EVENT_TYPE, &fl_cache_event_xfer,
+    dma_seqn_ap_setup(NFD_OUT_FL_FETCH_EVENT_FILTER,
+                      NFD_OUT_FL_FETCH_EVENT_FILTER,
+                      NFD_OUT_FL_FETCH_EVENT_TYPE, &fl_cache_event_xfer,
                       &fl_cache_event_sig);
 
     /*
@@ -159,7 +161,7 @@ cache_desc_setup_shared()
     /* Ordering settings? */
     cfg.target_64   = 1;
     cfg.cpp_target  = 7;
-    pcie_dma_cfg_set_one(PCIE_ISL, RX_FL_CFG_REG, cfg);
+    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_FL_CFG_REG, cfg);
 
 
     /*
@@ -169,11 +171,11 @@ cache_desc_setup_shared()
      * For dma_mode, we technically only want to overwrite the "source"
      * field, i.e. 12 of the 16 bits.
      */
-    descr_tmp.length = RX_FL_BATCH_SZ * sizeof(struct nfd_pci_out_fl_desc) - 1;
+    descr_tmp.length = NFD_OUT_FL_BATCH_SZ * sizeof(struct nfd_out_fl_desc) - 1;
     descr_tmp.rid_override = 1;
     descr_tmp.trans_class = 0;
     descr_tmp.cpp_token = 0;
-    descr_tmp.dma_cfg_index = RX_FL_CFG_REG;
+    descr_tmp.dma_cfg_index = NFD_OUT_FL_CFG_REG;
     descr_tmp.cpp_addr_hi = (((unsigned long long) fl_cache_mem >> 8) &
                              0xff000000);
 
@@ -221,7 +223,7 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
     bmsk_queue = map_natural_to_bitmask(queue_s);
 
     rxq.watermark    = NFP_QC_STS_HI_WATERMARK_8; /* XXX use 16 instead? */
-    rxq.event_data   = RXQ_EVENT_DATA;
+    rxq.event_data   = NFD_OUT_Q_EVENT_DATA;
     rxq.ptr          = 0;
 
     if (cfg_msg->up_bit) {
@@ -245,11 +247,11 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].rx_w = 0;
 
         /* Reset credits */
-        _zero_imm(RX_CREDITS_BASE, bmsk_queue);
+        _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue);
 
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK;
         rxq.size         = ring_sz - 8; /* XXX add define for size shift */
-        qc_init_queue(PCIE_ISL, (queue_s<<1) | RXQ_START, &rxq);
+        qc_init_queue(PCIE_ISL, (queue_s<<1) | NFD_OUT_Q_START, &rxq);
 
     } else {
         /* XXX consider what is required for PCI.OUT! */
@@ -275,12 +277,12 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].rx_w = 0;
 
         /* Reset credits */
-        _zero_imm(RX_CREDITS_BASE, bmsk_queue);
+        _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue);
 
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
         rxq.size         = 0;
-        qc_init_queue(PCIE_ISL, (queue_s<<1) | RXQ_START, &rxq);
+        qc_init_queue(PCIE_ISL, (queue_s<<1) | NFD_OUT_Q_START, &rxq);
     }
 }
 
@@ -306,11 +308,11 @@ _fetch_fl(__gpr unsigned int *queue)
     int space_chk;
     int ret;        /* Required to ensure __intrinsic_begin|end pairing */
 
-    qc_queue = (map_bitmask_to_natural(*queue) << 1) | RXQ_START;
+    qc_queue = (map_bitmask_to_natural(*queue) << 1) | NFD_OUT_Q_START;
 
     /* Is there a batch to get from this queue?
      * If the queue is active or urgent there should be. */
-    if ((queue_data[*queue].fl_w - queue_data[*queue].fl_s) < RX_FL_BATCH_SZ) {
+    if ((queue_data[*queue].fl_w - queue_data[*queue].fl_s) < NFD_OUT_FL_BATCH_SZ) {
         __xread unsigned int wptr_raw;
         struct nfp_qc_sts_hi wptr;
         unsigned int ptr_inc;
@@ -322,8 +324,8 @@ _fetch_fl(__gpr unsigned int *queue)
         ptr_inc = (unsigned int) wptr.writeptr - queue_data[*queue].fl_w;
         ptr_inc &= queue_data[*queue].ring_sz_msk;
         queue_data[*queue].fl_w += ptr_inc;
-#ifdef NFD_PCI_OUT_CREDITS_HOST_ISSUED
-        _add_imm(RX_CREDITS_BASE, *queue, ptr_inc);
+#ifdef NFD__OUT_CREDITS_HOST_ISSUED
+        _add_imm(NFD_OUT_CREDITS_BASE, *queue, ptr_inc);
 #endif
         if (!wptr.wmreached) {
             /* Mark the queue not urgent
@@ -336,7 +338,7 @@ _fetch_fl(__gpr unsigned int *queue)
 
             /* Mark the queue not active */
             clear_queue(queue, &active_bmsk);
-            qc_ping_queue(PCIE_ISL, qc_queue, RXQ_EVENT_DATA,
+            qc_ping_queue(PCIE_ISL, qc_queue, NFD_OUT_Q_EVENT_DATA,
                           NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK);
 
             /* Indicate work done on queue */
@@ -347,7 +349,7 @@ _fetch_fl(__gpr unsigned int *queue)
     /* We have a batch available, is there space to put it?
      * Space = ring size - (fl_s - rx_w). We require
      * space >= batch size. */
-    space_chk = ((RX_FL_CACHE_BUFS_PER_QUEUE - RX_FL_BATCH_SZ) +
+    space_chk = ((NFD_OUT_FL_CACHE_BUFS_PER_QUEUE - NFD_OUT_FL_BATCH_SZ) +
                  queue_data[*queue].rx_w - queue_data[*queue].fl_s);
     if (space_chk >= 0) {
         __xwrite unsigned int qc_xfer;
@@ -361,18 +363,17 @@ _fetch_fl(__gpr unsigned int *queue)
         /* Compute DMA address offsets */
         pcie_addr_off = (queue_data[*queue].fl_s &
                          queue_data[*queue].ring_sz_msk);
-        pcie_addr_off = pcie_addr_off * sizeof(struct nfd_pci_out_fl_desc);
+        pcie_addr_off = pcie_addr_off * sizeof(struct nfd_out_fl_desc);
 
         /* Complete descriptor */
         descr_tmp.pcie_addr_hi = queue_data[*queue].ring_base_hi;
         descr_tmp.pcie_addr_lo = (queue_data[*queue].ring_base_lo +
                                   pcie_addr_off);
-
         descr_tmp.cpp_addr_lo =
             cache_desc_compute_fl_addr(queue, queue_data[*queue].fl_s);
         descr_tmp.rid = queue_data[*queue].requester_id;
         /* Can replace with ld_field instruction if 8bit seqn is enough */
-        pcie_dma_set_event(&descr_tmp, RX_FL_FETCH_EVENT_TYPE,
+        pcie_dma_set_event(&descr_tmp, NFD_OUT_FL_FETCH_EVENT_TYPE,
                            fl_cache_dma_seq_issued);
         descr = descr_tmp;
 
@@ -381,17 +382,18 @@ _fetch_fl(__gpr unsigned int *queue)
          * overwrite the FL descriptor there, the firmware will overwrite
          * it once it has used the FL descriptor and written the RX descriptor.
          */
-        queue_data[*queue].fl_s += RX_FL_BATCH_SZ;
-        __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, RX_FL_BATCH_SZ, &qc_xfer,
-                        sig_done, &qc_sig);
+        queue_data[*queue].fl_s += NFD_OUT_FL_BATCH_SZ;
+        __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, NFD_OUT_FL_BATCH_SZ,
+                        &qc_xfer, sig_done, &qc_sig);
 
         /* Add batch message to LM queue
          * XXX check defer slots filled */
-        pending_slot = fl_cache_dma_seq_issued & (RX_FL_FETCH_MAX_IN_FLIGHT -1);
+        pending_slot = (fl_cache_dma_seq_issued &
+                        (NFD_OUT_FL_FETCH_MAX_IN_FLIGHT -1));
         fl_cache_pending[pending_slot] = *queue;
 
         /* Issue DMA */
-        __pcie_dma_enq(PCIE_ISL, &descr, RX_FL_FETCH_DMA_QUEUE,
+        __pcie_dma_enq(PCIE_ISL, &descr, NFD_OUT_FL_FETCH_DMA_QUEUE,
                        sig_done, &dma_sig);
         wait_for_all(&dma_sig, &qc_sig);
 
@@ -425,9 +427,9 @@ _complete_fetch()
         dma_seqn_advance(&fl_cache_event_xfer, &fl_cache_dma_seq_compl);
 
         event_cls_autopush_filter_reset(
-            RX_FL_FETCH_EVENT_FILTER,
+            NFD_OUT_FL_FETCH_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            RX_FL_FETCH_EVENT_FILTER);
+            NFD_OUT_FL_FETCH_EVENT_FILTER);
         __implicit_write(&fl_cache_event_sig);
 
         /* XXX how many updates can we receive at once? Do we need to
@@ -439,17 +441,17 @@ _complete_fetch()
 
             /* Extract queue from the fl_cache_pending message */
             pending_slot = (fl_cache_dma_seq_served &
-                            (RX_FL_FETCH_MAX_IN_FLIGHT -1));
+                            (NFD_OUT_FL_FETCH_MAX_IN_FLIGHT -1));
             queue_c = fl_cache_pending[pending_slot];
 
-#ifdef NFD_PCI_OUT_CREDITS_NFP_CACHED
-            _add_imm(RX_CREDITS_BASE, queue_c, RX_FL_BATCH_SZ);
+#ifdef NFD_OUT_CREDITS_NFP_CACHED
+            _add_imm(NFD_OUT_CREDITS_BASE, queue_c, NFD_OUT_FL_BATCH_SZ);
 #endif
 
             /* Increment queue available pointer by one batch
              * NB: If NFP cached credits are not used, there is nothing to
              * fill the LM pointer usage slots */
-            queue_data[queue_c].fl_a += RX_FL_BATCH_SZ;
+            queue_data[queue_c].fl_a += NFD_OUT_FL_BATCH_SZ;
         }
     }
 }
@@ -478,13 +480,13 @@ cache_desc()
 
     /* Check bitmasks */
     check_bitmask_filters(&active_bmsk, &rx_ap_xfers, &rx_ap_s0, &rx_ap_s1,
-              &rx_ap_s2, &rx_ap_s3, RXQ_EVENT_START);
+              &rx_ap_s2, &rx_ap_s3, NFD_OUT_Q_EVENT_START);
 
     /* Process up to the latest fl_cache_dma_seq_compl */
     _complete_fetch();
 
     if ((fl_cache_dma_seq_issued - fl_cache_dma_seq_served) <
-        RX_FL_FETCH_MAX_IN_FLIGHT) {
+        NFD_OUT_FL_FETCH_MAX_IN_FLIGHT) {
         __critical_path();
 
         /* Check urgent queues */
@@ -504,10 +506,10 @@ cache_desc()
                 /* Work has been done on a queue */
                 break;
             }
-        } while (count < RX_MAX_RETRIES);
+        } while (count < NFD_OUT_MAX_RETRIES);
 
         /* Check active queues */
-        while (count < RX_MAX_RETRIES) {
+        while (count < NFD_OUT_MAX_RETRIES) {
             count++;
 
             /* Simultaneously test last active test and prior urgent tests */
@@ -540,9 +542,9 @@ cache_desc_compute_fl_addr(__gpr unsigned int *queue, unsigned int seq)
 {
     unsigned int ret;
 
-    ret = seq & (RX_FL_CACHE_BUFS_PER_QUEUE - 1);
-    ret *= sizeof(struct nfd_pci_out_fl_desc);
-    ret |= (*queue * RX_FL_CACHE_SZ_PER_QUEUE );
+    ret = seq & (NFD_OUT_FL_CACHE_BUFS_PER_QUEUE - 1);
+    ret *= sizeof(struct nfd_out_fl_desc);
+    ret |= (*queue * NFD_OUT_FL_CACHE_SZ_PER_QUEUE );
     ret |= fl_cache_mem_addr_lo;
 
     return ret;

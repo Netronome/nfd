@@ -52,8 +52,8 @@ static SIGNAL send_order_sig;
 void main(void)
 {
     __xread struct nfd_in_pkt_desc nfd_in_meta;
-    __gpr struct nfd_pci_out_input pci_out_desc;
-    __xrw struct nfd_pci_out_input pci_out_desc_xfer[2];
+    __gpr struct nfd_out_input nfd_out_desc;
+    __xrw struct nfd_out_input nfd_out_desc_xfer[2];
     __gpr struct nbi_meta_pkt_info pkt_info;
     unsigned int queue;
     unsigned int queue_credits;
@@ -80,7 +80,7 @@ void main(void)
         local_csr_write(NFP_MECSR_MAILBOX_2, 0);
 
         nfd_in_recv_init();
-        nfd_pkt_send_init();
+        nfd_out_send_init();
     }
 
     /* Manual delay to allow work queues
@@ -109,7 +109,7 @@ void main(void)
         /* Increment the queue number within the vnic */
         nfd_in_map_queue(&vnic, &queue, nfd_in_meta.q_num);
         queue = queue + 1;
-        queue = pci_out_map_queue(vnic, queue);
+        queue = nfd_out_map_queue(vnic, queue);
 
 
         /* Check cached credits and update if necessary */
@@ -121,7 +121,7 @@ void main(void)
         } else {
             /* Poll for credits */
             while (queue_credits == 0) {
-                __pci_out_get_credit(PCIE_ISL, queue, CREDIT_BATCH, &credit,
+                __nfd_out_get_credit(PCIE_ISL, queue, CREDIT_BATCH, &credit,
                                      ctx_swap, &credit_sig);
                 if (credit >= CREDIT_BATCH) {
                     queue_credits += CREDIT_BATCH;
@@ -139,17 +139,17 @@ void main(void)
         cached_credits[queue] = queue_credits;
 
         /* Return the packet */
-        pci_out_fill_desc(&pci_out_desc, &pkt_info, 0, 0, NFD_IN_DATA_OFFSET,
+        nfd_out_fill_desc(&nfd_out_desc, &pkt_info, 0, 0, NFD_IN_DATA_OFFSET,
                           nfd_in_meta.offset);
 
-        pci_out_dummy_vlan(&pci_out_desc, nfd_in_meta.vlan,
+        nfd_out_dummy_vlan(&nfd_out_desc, nfd_in_meta.vlan,
                            nfd_in_meta.flags);
 
-        __pci_out_send(PCIE_ISL, queue, pci_out_desc_xfer, &pci_out_desc,
+        __nfd_out_send(PCIE_ISL, queue, nfd_out_desc_xfer, &nfd_out_desc,
                        sig_done, &send_sig);
         wait_for_all(&send_sig, &send_order_sig);
         signal_next_ctx(__signal_number(&send_order_sig));
-        ret = pci_out_send_test(pci_out_desc_xfer);
+        ret = nfd_out_send_test(nfd_out_desc_xfer);
         if (ret >= 0) {
             nsent++;
         } else {
@@ -161,4 +161,3 @@ void main(void)
         /* local_csr_write(NFP_MECSR_MAILBOX_2, nfail); */
     }
 }
-

@@ -73,7 +73,7 @@ do {                                                                    \
  * simpler and more efficient throughout the system.
  */
 #define NFD_CREDITS_ALLOC_IND(_off)                                    \
-     _alloc_mem("nfd_pci_out_credits ctm+" #_off " island 256")
+     _alloc_mem("nfd_out_credits ctm+" #_off " island 256")
 #define NFD_CREDITS_ALLOC(_off) NFD_CREDITS_ALLOC_IND(_off)
 
 

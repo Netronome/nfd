@@ -49,8 +49,8 @@ void main(void)
     __xread struct nbi_meta_null nbi_meta;
     __xread struct nbi_meta_pkt_info *pi = &nbi_meta.pkt_info;
 
-    __gpr struct nfd_pci_out_input pci_out_desc;
-    __xwrite struct nfd_pci_out_input tmp;
+    __gpr struct nfd_out_input nfd_out_desc;
+    __xwrite struct nfd_out_input tmp;
     unsigned int queue;
     int ret;
 
@@ -78,11 +78,11 @@ void main(void)
         nrecv++;
         local_csr_write(NFP_MECSR_MAILBOX_0, nrecv);
 
-        pci_out_fill_desc(&pci_out_desc, pi, 0, 0, PKT_NBI_OFFSET, 0);
-        pci_out_dummy_vlan(&pci_out_desc, 0x1234, 0xd);
+        nfd_out_fill_desc(&nfd_out_desc, pi, 0, 0, PKT_NBI_OFFSET, 0);
+        nfd_out_dummy_vlan(&nfd_out_desc, 0x1234, 0xd);
 
-        queue = pci_out_map_queue(0, 0);
-        ret = pci_out_send(PCIE_ISL, queue, &pci_out_desc);
+        queue = nfd_out_map_queue(0, 0);
+        ret = nfd_out_send(PCIE_ISL, queue, &nfd_out_desc);
 
 
 /*         /\* pbuf = pkt_ctm_ptr40(pi->isl, pi->pnum, 0); *\/ */

@@ -20,7 +20,7 @@
 /**
  * Per queue state to show
  */
-extern __shared __lmem struct rx_queue_info queue_data[64];
+extern __shared __lmem struct nfd_out_queue_info queue_data[64];
 
 
 /**
@@ -54,9 +54,9 @@ extern __shared __gpr unsigned int desc_dma_safe;
  * Xfers to display state
  */
 static __xread unsigned int status_queue_sel = 0;
-static __xwrite struct rx_queue_info status_queue_info = _ZERO_ARRAY;
-static __xwrite struct rx_cache_desc_status status_cache_desc = _ZERO_ARRAY;
-static __xwrite struct rx_stage_batch_status status_stage = _ZERO_ARRAY;
+static __xwrite struct nfd_out_queue_info status_queue_info = _ZERO_ARRAY;
+static __xwrite struct nfd_out_cache_desc_status status_cache_desc = _ZERO_ARRAY;
+static __xwrite struct nfd_out_stage_batch_status status_stage = _ZERO_ARRAY;
 
 SIGNAL status_throttle;
 
@@ -72,7 +72,7 @@ cache_desc_status_setup()
     __assign_relative_register(&status_queue_info, STATUS_Q_INFO_START);
     __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
 
-    set_alarm(RX_DBG_CACHE_DESC_INTVL, &status_throttle);
+    set_alarm(NFD_OUT_DBG_CACHE_DESC_INTVL, &status_throttle);
 }
 
 
@@ -127,6 +127,6 @@ cache_desc_status()
         /*
          * Reset the alarm
          */
-        set_alarm(RX_DBG_CACHE_DESC_INTVL, &status_throttle);
+        set_alarm(NFD_OUT_DBG_CACHE_DESC_INTVL, &status_throttle);
     }
 }

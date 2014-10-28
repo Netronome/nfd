@@ -13,7 +13,7 @@
 #define STATUS_Q_SEL_START      31
 
 
-struct rx_cache_desc_status {
+struct nfd_out_cache_desc_status {
     unsigned int active_bmsk_hi;
     unsigned int active_bmsk_lo;
     unsigned int urgent_bmsk_hi;
@@ -24,7 +24,7 @@ struct rx_cache_desc_status {
     unsigned int spare;
 };
 
-struct rx_stage_batch_status {
+struct nfd_out_stage_batch_status {
     unsigned int batch_issued;
     unsigned int batch_safe;
     unsigned int data_dma_compl;

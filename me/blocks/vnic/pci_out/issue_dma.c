@@ -36,10 +36,10 @@ struct _dma_desc_batch {
 };
 
 struct _cpp_desc_batch {
-    struct nfd_pci_out_cpp_desc pkt0;
-    struct nfd_pci_out_cpp_desc pkt1;
-    struct nfd_pci_out_cpp_desc pkt2;
-    struct nfd_pci_out_cpp_desc pkt3;
+    struct nfd_out_cpp_desc pkt0;
+    struct nfd_out_cpp_desc pkt1;
+    struct nfd_out_cpp_desc pkt2;
+    struct nfd_out_cpp_desc pkt3;
 };
 
 
@@ -47,7 +47,7 @@ struct _cpp_desc_batch {
  * Rings and queues
  */
 static __shared __lmem struct _cpp_desc_batch
-    cpp_desc_ring[RX_CPP_BATCH_RING_BAT];
+    cpp_desc_ring[NFD_OUT_CPP_BATCH_RING_BAT];
 
 /*
  * Sequence numbers
@@ -64,7 +64,7 @@ static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 static __xwrite struct _dma_desc_batch dma_out_main;
 static __xwrite struct _dma_desc_batch dma_out_res;
 
-static __xread struct nfd_pci_out_fl_desc fl_entries[4];
+static __xread struct nfd_out_fl_desc fl_entries[4];
 
 static SIGNAL data_sig0, data_sig1, data_sig2, data_sig3;
 static SIGNAL_MASK data_wait_msk = 0;
@@ -73,8 +73,8 @@ static SIGNAL_MASK fl_wait_msk = 0;
 
 SIGNAL get_order_sig, issue_order_sig;
 
-__visible volatile __xread unsigned int rx_data_compl_reflect_xread = 0;
-__visible volatile SIGNAL rx_data_compl_reflect_sig;
+__visible volatile __xread unsigned int nfd_out_data_compl_reflect_xread = 0;
+__visible volatile SIGNAL nfd_out_data_compl_reflect_sig;
 
 
 /*
@@ -133,11 +133,11 @@ issue_dma_setup_shared()
     cfg_tmp.cpp_target_even = 7;
     cfg = cfg_tmp;
 
-    pcie_dma_cfg_set_pair(PCIE_ISL, RX_DATA_CFG_REG, &cfg);
+    pcie_dma_cfg_set_pair(PCIE_ISL, NFD_OUT_DATA_CFG_REG, &cfg);
 
     /* Kick off ordering */
-    reorder_start(RX_ISSUE_START_CTX, &get_order_sig);
-    reorder_start(RX_ISSUE_START_CTX, &issue_order_sig);
+    reorder_start(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
+    reorder_start(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
 }
 
 
@@ -153,11 +153,11 @@ issue_dma_setup()
      * technically only want to overwrite the "source" field, i.e. 12 of the 16
      * bits.
      */
-    descr_tmp.length = sizeof(struct nfd_pci_out_rx_desc) - 1;
+    descr_tmp.length = sizeof(struct nfd_out_rx_desc) - 1;
     descr_tmp.rid_override = 1;
     descr_tmp.trans_class = 0;
-    descr_tmp.cpp_token = RX_DATA_DMA_TOKEN;
-    descr_tmp.dma_cfg_index = RX_DATA_CFG_REG;
+    descr_tmp.cpp_token = NFD_OUT_DATA_DMA_TOKEN;
+    descr_tmp.dma_cfg_index = NFD_OUT_DATA_CFG_REG;
 
     /* Expect a full batch by default */
     data_wait_msk = __signals(&get_order_sig);
@@ -174,10 +174,12 @@ issue_dma_setup()
 void
 _recompute_safe()
 {
-    unsigned int cpp_batch_safe = data_dma_seq_served + RX_CPP_BATCH_RING_BAT;
+    unsigned int cpp_batch_safe = (data_dma_seq_served +
+                                   NFD_OUT_CPP_BATCH_RING_BAT);
     /* A single descriptor may require 2 DMAs */
-    unsigned int dma_batch_safe = data_dma_seq_compl + (RX_DATA_MAX_IN_FLIGHT /
-                                                         (MAX_RX_BATCH_SZ * 2));
+    unsigned int dma_batch_safe = (data_dma_seq_compl +
+                                   (NFD_OUT_DATA_MAX_IN_FLIGHT /
+                                    (NFD_OUT_MAX_BATCH_SZ * 2)));
 
     data_dma_seq_safe = dma_batch_safe;
     if (cpp_batch_safe < dma_batch_safe) {
@@ -193,8 +195,8 @@ _recompute_safe()
 void
 issue_dma_check_compl()
 {
-    if (signal_test(&rx_data_compl_reflect_sig)) {
-        data_dma_seq_compl = rx_data_compl_reflect_xread;
+    if (signal_test(&nfd_out_data_compl_reflect_sig)) {
+        data_dma_seq_compl = nfd_out_data_compl_reflect_xread;
         _recompute_safe();
     }
 }
@@ -208,12 +210,12 @@ issue_dma_check_compl()
  * @param sig       Signal to use for the read
  */
 __intrinsic void
-_get_fl_entry(__xread struct nfd_pci_out_fl_desc *entry,
-              struct pci_out_data_dma_info *info,
+_get_fl_entry(__xread struct nfd_out_fl_desc *entry,
+              struct nfd_out_data_dma_info *info,
               sync_t sync, SIGNAL *sig)
 {
     unsigned int index = info->fl_cache_index;
-    unsigned int count = sizeof(struct nfd_pci_out_fl_desc) >> 3;
+    unsigned int count = sizeof(struct nfd_out_fl_desc) >> 3;
 
     ctassert(sync == sig_done);
     __asm mem[read, *entry, 0, index, count], sig_done[*sig];
@@ -246,7 +248,7 @@ do {                                             \
  */
 __intrinsic void
 _get_ctm_addr(__gpr struct nfp_pcie_dma_cmd *descr,
-              struct pci_out_data_dma_info *info)
+              struct nfd_out_data_dma_info *info)
 {
     descr->cpp_addr_hi = 0x80 | info->cpp.isl;
     descr->cpp_addr_lo = ((1 << 31) | (info->cpp.pktnum << 16) |
@@ -297,11 +299,12 @@ do {                                                                    \
                     descr_tmp.length = PCIE_DMA_MAX_SZ - 1;             \
                 }                                                       \
                 descr_tmp.length -= ctm_bytes;                          \
-                pcie_dma_set_event(&descr_tmp, RX_DATA_IGN_EVENT_TYPE, 0); \
+                pcie_dma_set_event(&descr_tmp,                          \
+                                   NFD_OUT_DATA_IGN_EVENT_TYPE, 0);     \
                                                                         \
                 dma_out_res.pkt##_pkt = descr_tmp;                      \
                 pcie_dma_enq_no_sig(PCIE_ISL, &dma_out_res.pkt##_pkt##, \
-                                    RX_DATA_DMA_QUEUE);                 \
+                                    NFD_OUT_DATA_DMA_QUEUE);            \
                                                                         \
                 /* Issue main DMA */                                    \
                 _get_ctm_addr(&descr_tmp, &in_batch.pkt##_pkt);         \
@@ -312,7 +315,7 @@ do {                                                                    \
                                                                         \
                 dma_out_main.pkt##_pkt = descr_tmp;                     \
                 __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt##,     \
-                               RX_DATA_DMA_QUEUE,                       \
+                               NFD_OUT_DATA_DMA_QUEUE,                  \
                                sig_done, &data_sig##_pkt##);            \
                                                                         \
             } else {                                                    \
@@ -326,7 +329,7 @@ do {                                                                    \
                                                                         \
                 dma_out_main.pkt##_pkt = descr_tmp;                     \
                 __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt##,     \
-                               RX_DATA_DMA_QUEUE,                       \
+                               NFD_OUT_DATA_DMA_QUEUE,                  \
                                sig_done, &data_sig##_pkt##);            \
             }                                                           \
         } else {                                                        \
@@ -351,7 +354,8 @@ do {                                                                    \
                                                                         \
             dma_out_main.pkt##_pkt = descr_tmp;                         \
             __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt##,         \
-                           RX_DATA_DMA_QUEUE, sig_done, &data_sig##_pkt##); \
+                           NFD_OUT_DATA_DMA_QUEUE, sig_done,            \
+                           &data_sig##_pkt##);                          \
         }                                                               \
     } else { /* !SOP */                                                 \
         if (!in_batch.pkt##_pkt##.cpp.down) {                           \
@@ -367,11 +371,12 @@ do {                                                                    \
                 descr_tmp.pcie_addr_lo += (2 * PCIE_DMA_MAX_SZ);        \
                                                                         \
                 descr_tmp.length = len_tmp - (2 * PCIE_DMA_MAX_SZ + 1); \
-                pcie_dma_set_event(&descr_tmp, RX_DATA_IGN_EVENT_TYPE, 0); \
+                pcie_dma_set_event(&descr_tmp, NFD_OUT_DATA_IGN_EVENT_TYPE, \
+                                   0);                                  \
                                                                         \
                 dma_out_res.pkt##_pkt = descr_tmp;                      \
                 pcie_dma_enq_no_sig(PCIE_ISL, &dma_out_res.pkt##_pkt##, \
-                                    RX_DATA_DMA_QUEUE);                 \
+                                    NFD_OUT_DATA_DMA_QUEUE);            \
                                                                         \
                 len_tmp = (2 * PCIE_DMA_MAX_SZ);                        \
                                                                         \
@@ -390,7 +395,8 @@ do {                                                                    \
                                                                         \
             dma_out_main.pkt##_pkt = descr_tmp;                         \
             __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt##,         \
-                           RX_DATA_DMA_QUEUE, sig_done, &data_sig##_pkt##); \
+                           NFD_OUT_DATA_DMA_QUEUE, sig_done,            \
+                           &data_sig##_pkt##);                          \
                                                                         \
         } else { /* Queue down */                                       \
             /* Pass message on to free buffer only */                   \
@@ -401,11 +407,11 @@ do {                                                                    \
             pcie_dma_set_event(&descr_tmp, _type, _src);                \
             descr_tmp.length = 0;                                       \
                                                                         \
-            descr_tmp.dma_cfg_index = RX_DATA_CFG_REG_SIG_ONLY;         \
+            descr_tmp.dma_cfg_index = NFD_OUT_DATA_CFG_REG_SIG_ONLY;    \
             dma_out_main.pkt##_pkt = descr_tmp;                         \
-            descr_tmp.dma_cfg_index = RX_DATA_CFG_REG;                  \
+            descr_tmp.dma_cfg_index = NFD_OUT_DATA_CFG_REG;             \
             __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt,           \
-                           RX_DATA_DMA_QUEUE,                           \
+                           NFD_OUT_DATA_DMA_QUEUE,                      \
                            sig_done, &data_sig##_pkt);                  \
         }                                                               \
     }                                                                   \
@@ -432,7 +438,7 @@ do {                                                                 \
  * Dequeue a message from "stage_batch".
  */
 __intrinsic void
-_nn_get_msg(struct pci_out_data_dma_info *msg)
+_nn_get_msg(struct nfd_out_data_dma_info *msg)
 {
     /* Stage batch may head of line block, while enqueuing a message batch,
      * so while dequeuing we must also head of line block. */
@@ -459,8 +465,8 @@ _nn_get_msg(struct pci_out_data_dma_info *msg)
 void
 issue_dma()
 {
-    struct pci_out_data_batch in_batch;
-    struct pci_out_data_batch_msg msg;
+    struct nfd_out_data_batch in_batch;
+    struct nfd_out_data_batch_msg msg;
     unsigned int n_bat;
     unsigned int cpp_desc_index;
 
@@ -489,7 +495,7 @@ issue_dma()
             _nn_get_msg(&in_batch.pkt2);
             _nn_get_msg(&in_batch.pkt3);
 
-            reorder_done(RX_ISSUE_START_CTX, &get_order_sig);
+            reorder_done(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
 
             _FL_PROC(0);
             _FL_PROC(1);
@@ -506,14 +512,15 @@ issue_dma()
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                                     &issue_order_sig);
 
-            reorder_done(RX_ISSUE_START_CTX, &issue_order_sig);
+            reorder_done(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
 
             data_dma_seq_issued++;
-            cpp_desc_index = data_dma_seq_issued & (RX_CPP_BATCH_RING_BAT - 1);
-            _ISSUE_PROC(0, RX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, RX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(2, RX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(3, RX_DATA_EVENT_TYPE, data_dma_seq_issued);
+            cpp_desc_index = (data_dma_seq_issued &
+                              (NFD_OUT_CPP_BATCH_RING_BAT - 1));
+            _ISSUE_PROC(0, NFD_OUT_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, NFD_OUT_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(2, NFD_OUT_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(3, NFD_OUT_DATA_EVENT_TYPE, data_dma_seq_issued);
 
             break;
         case 3:
@@ -521,7 +528,7 @@ issue_dma()
             _nn_get_msg(&in_batch.pkt1);
             _nn_get_msg(&in_batch.pkt2);
 
-            reorder_done(RX_ISSUE_START_CTX, &get_order_sig);
+            reorder_done(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
 
             _FL_PROC(0);
             _FL_PROC(1);
@@ -539,13 +546,14 @@ issue_dma()
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                                     &issue_order_sig);
 
-            reorder_done(RX_ISSUE_START_CTX, &issue_order_sig);
+            reorder_done(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
 
             data_dma_seq_issued++;
-            cpp_desc_index = data_dma_seq_issued & (RX_CPP_BATCH_RING_BAT - 1);
-            _ISSUE_PROC(0, RX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, RX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(2, RX_DATA_EVENT_TYPE, data_dma_seq_issued);
+            cpp_desc_index = (data_dma_seq_issued &
+                              (NFD_OUT_CPP_BATCH_RING_BAT - 1));
+            _ISSUE_PROC(0, NFD_OUT_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, NFD_OUT_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(2, NFD_OUT_DATA_EVENT_TYPE, data_dma_seq_issued);
 
             _ISSUE_CLR(3);
 
@@ -554,7 +562,7 @@ issue_dma()
             _nn_get_msg(&in_batch.pkt0);
             _nn_get_msg(&in_batch.pkt1);
 
-            reorder_done(RX_ISSUE_START_CTX, &get_order_sig);
+            reorder_done(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
 
             _FL_PROC(0);
             _FL_PROC(1);
@@ -572,12 +580,13 @@ issue_dma()
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                                     &issue_order_sig);
 
-            reorder_done(RX_ISSUE_START_CTX, &issue_order_sig);
+            reorder_done(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
 
             data_dma_seq_issued++;
-            cpp_desc_index = data_dma_seq_issued & (RX_CPP_BATCH_RING_BAT - 1);
-            _ISSUE_PROC(0, RX_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, RX_DATA_EVENT_TYPE, data_dma_seq_issued);
+            cpp_desc_index = (data_dma_seq_issued &
+                              (NFD_OUT_CPP_BATCH_RING_BAT - 1));
+            _ISSUE_PROC(0, NFD_OUT_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, NFD_OUT_DATA_EVENT_TYPE, data_dma_seq_issued);
 
             _ISSUE_CLR(2);
             _ISSUE_CLR(3);
@@ -586,7 +595,7 @@ issue_dma()
         case 1:
             _nn_get_msg(&in_batch.pkt0);
 
-            reorder_done(RX_ISSUE_START_CTX, &get_order_sig);
+            reorder_done(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
 
             _FL_PROC(0);
 
@@ -604,11 +613,12 @@ issue_dma()
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                                     &issue_order_sig);
 
-            reorder_done(RX_ISSUE_START_CTX, &issue_order_sig);
+            reorder_done(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
 
             data_dma_seq_issued++;
-            cpp_desc_index = data_dma_seq_issued & (RX_CPP_BATCH_RING_BAT - 1);
-            _ISSUE_PROC(0, RX_DATA_EVENT_TYPE, data_dma_seq_issued);
+            cpp_desc_index = (data_dma_seq_issued &
+                              (NFD_OUT_CPP_BATCH_RING_BAT - 1));
+            _ISSUE_PROC(0, NFD_OUT_DATA_EVENT_TYPE, data_dma_seq_issued);
 
             _ISSUE_CLR(1);
             _ISSUE_CLR(2);
@@ -636,8 +646,8 @@ issue_dma()
 void
 free_buf_setup()
 {
-    blm_raddr = ((unsigned long long) RX_BLM_RADDR >> 8);
-    blm_rnum_start = NFD_BLM_Q_ALLOC(RX_BLM_POOL_START);
+    blm_raddr = ((unsigned long long) NFD_OUT_BLM_RADDR >> 8);
+    blm_rnum_start = NFD_BLM_Q_ALLOC(NFD_OUT_BLM_POOL_START);
 }
 
 
@@ -646,7 +656,7 @@ free_buf_setup()
  * @param cpp       CPP descriptor containing CTM packet information
  */
 __intrinsic void
-_free_ctm_addr(struct nfd_pci_out_cpp_desc *cpp)
+_free_ctm_addr(struct nfd_out_cpp_desc *cpp)
 {
     unsigned int addr_hi, addr_lo;
 
@@ -662,7 +672,7 @@ _free_ctm_addr(struct nfd_pci_out_cpp_desc *cpp)
  */
 #define _FREE_BUF(_pkt)                                                 \
 do {                                                                    \
-    struct nfd_pci_out_cpp_desc cpp_desc;                               \
+    struct nfd_out_cpp_desc cpp_desc;                                   \
                                                                         \
     cpp_desc = cpp_desc_ring[cpp_desc_index].pkt##_pkt;                 \
                                                                         \
@@ -695,7 +705,7 @@ free_buf()
          * sequence number zero
          */
         data_dma_seq_served++;
-        cpp_desc_index = data_dma_seq_served & (RX_CPP_BATCH_RING_BAT - 1);
+        cpp_desc_index = data_dma_seq_served & (NFD_OUT_CPP_BATCH_RING_BAT - 1);
 
         _FREE_BUF(0);
         _FREE_BUF(1);
