@@ -73,8 +73,7 @@ main(void)
              * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
                 nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_out,
-                                       NFD_CFG_RING_NUM(PCIE_ISL, 0),
-                                       &NFD_CFG_RING_ADDR(PCIE_ISL, 0));
+                                      NFD_CFG_RING_NUM(PCIE_ISL, 0));
 
                 if (cfg_msg.msg_valid) {
                     nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_OUT);
@@ -84,12 +83,10 @@ main(void)
 
                 if (!cfg_msg.msg_valid) {
                     nfd_cfg_complete_cfg_msg(&cfg_msg,
-                                              &NFD_CFG_SIG_NEXT_ME,
-                                              NFD_CFG_NEXT_ME,
-                                              NFD_CFG_RING_NUM(PCIE_ISL, 1),
-                                              &NFD_CFG_RING_ADDR(PCIE_ISL, 1),
-                                              NFD_CFG_RING_NUM(PCIE_ISL, 0),
-                                              &NFD_CFG_RING_ADDR(PCIE_ISL, 0));
+                                             &NFD_CFG_SIG_NEXT_ME,
+                                             NFD_CFG_NEXT_ME,
+                                             NFD_CFG_RING_NUM(PCIE_ISL, 1),
+                                             NFD_CFG_RING_NUM(PCIE_ISL, 0));
                 }
             }
 

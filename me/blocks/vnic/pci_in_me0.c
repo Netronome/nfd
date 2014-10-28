@@ -122,8 +122,7 @@ main(void)
                     nfd_cfg_start_cfg_msg(&cfg_msg,
                                           &nfd_cfg_sig_pci_out,
                                           NFD_CFG_NEXT_ME(PCIE_ISL, 0),
-                                          NFD_CFG_RING_NUM(PCIE_ISL, 0),
-                                          &NFD_CFG_RING_ADDR(PCIE_ISL, 0));
+                                          NFD_CFG_RING_NUM(PCIE_ISL, 0));
                 }
             }
 

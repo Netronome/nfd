@@ -13,11 +13,15 @@
 #define NFD_PCIE1_EMEM      0
 #define NFD_PCIE2_EMEM      1
 #define NFD_PCIE3_EMEM      1
+#define NFD_CFG_RING_EMEM   2
 
 #define NFD_EMEM_IND2(_emem) __LoadTimeConstant("__addr_emem" #_emem)
 #define NFD_EMEM_IND1(_emem) NFD_EMEM_IND2(_emem)
 #define NFD_EMEM_IND0(_isl) NFD_EMEM_IND1(NFD_PCIE##_isl##_EMEM)
 #define NFD_EMEM(_isl) NFD_EMEM_IND0(_isl)
+
+
+#define NFD_CFG_EMEM NFD_EMEM_IND1(NFD_CFG_RING_EMEM)
 
 #ifndef NFD_WQ_SZ
 #define NFD_WQ_SZ           (16 * 1024)
@@ -37,12 +41,12 @@
     NFD_RING_DECLARE_IND0(_isl, _comp, _sz)
 
 
-#define NFD_RING_ALLOC_IND2(_isl, _emem, _name, _num)           \
+#define NFD_RING_ALLOC_IND2(_emem, _name, _num)                 \
 _alloc_resource(_name emem##_emem##_queues global _num _num)
-#define NFD_RING_ALLOC_IND1(_isl, _emem, _name, _num)           \
-    NFD_RING_ALLOC_IND2(_isl, _emem, _name, _num)
+#define NFD_RING_ALLOC_IND1(_emem, _name, _num)                 \
+    NFD_RING_ALLOC_IND2(_emem, _name, _num)
 #define NFD_RING_ALLOC_IND0(_isl, _comp, _num)                  \
-    NFD_RING_ALLOC_IND1(_isl, NFD_PCIE##_isl##_EMEM,            \
+    NFD_RING_ALLOC_IND1(NFD_PCIE##_isl##_EMEM,                  \
                         _comp##_num_start_isl##_isl, _num)
 #define NFD_RING_ALLOC(_isl, _comp, _num)                       \
     NFD_RING_ALLOC_IND0(_isl, _comp, _num)

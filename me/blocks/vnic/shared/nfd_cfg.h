@@ -10,6 +10,7 @@
 #include <nfp/mem_ring.h>
 #include <ns_vnic_ctrl.h>
 
+#include <vnic/shared/nfd_shared.h>
 
 /* _declare_resource("clsrings island 16") */
 
@@ -36,10 +37,9 @@
 #define NFD_CFG_VF_OFFSET       64
 
 /* Minimum size configuration rings are fine */
-#define NFD_CFG_RING_SZ         512
-
-/* XXX allocated this via generic resource allocation */
-#define NFD_CFG_RING_NUM_START  256
+#define NFD_CFG_TOTAL_RINGS     16
+#define NFD_CFG_NUM_RINGS       4
+#define NFD_CFG_RING_SZ         (4 * 512)
 
 #define NFD_CFG_QUEUE           1
 #define NFD_CFG_EVENT_DATA      (2<<4)
@@ -58,16 +58,22 @@
 #define NFD_CFG_NEXT_ME(_isl, _me) NFD_CFG_NEXT_ME_IND0(_isl, _me)
 #endif
 
-#define NFD_CFG_RING_ADDR_IND(_isl, _num) nfd_cfg_pcie##_isl##_ring##_num
-#define NFD_CFG_RING_ADDR(_isl, _num) NFD_CFG_RING_ADDR_IND(_isl, _num)
 
-#define NFD_CFG_RING_NUM_IND(_isl, _num)        \
-    (NFD_CFG_RING_NUM_START + 4 * _isl + _num)
+#define NFD_CFG_RING_ALLOC                                              \
+NFD_RING_ALLOC_IND1(NFD_CFG_RING_EMEM, nfd_cfg_num_start, NFD_CFG_TOTAL_RINGS)
+
+#define NFD_CFG_RING_NUM_IND(_isl, _num)                    \
+    (NFD_CFG_RING_ALLOC | _isl * NFD_CFG_NUM_RINGS | _num)
 #define NFD_CFG_RING_NUM(_isl, _num) NFD_CFG_RING_NUM_IND(_isl, _num)
 
-MEM_RING_DECLARE(NFD_CFG_RING_ADDR(PCIE_ISL, 0), NFD_CFG_RING_SZ);
-MEM_RING_DECLARE(NFD_CFG_RING_ADDR(PCIE_ISL, 1), NFD_CFG_RING_SZ);
-MEM_RING_DECLARE(NFD_CFG_RING_ADDR(PCIE_ISL, 2), NFD_CFG_RING_SZ);
+#define NFD_CFG_BASE_IND(_x) nfd_cfg_base##_x
+#define NFD_CFG_BASE(_x) NFD_CFG_BASE_IND(_x)
+
+
+/* XXX remove EMU specification */
+#define NFD_CFG_BASE_DECLARE(_isl)                                  \
+    __export __emem_n(2) __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS)    \
+        char NFD_CFG_BASE(_isl)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
 
 /**
  * @param msg_valid     message contains valid information
@@ -152,8 +158,7 @@ int nfd_cfg_next_vnic();
  */
 __intrinsic void nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                                        __remote SIGNAL *cfg_sig_remote,
-                                       unsigned int next_me, unsigned int rnum,
-                                       __dram void *rbase);
+                                       unsigned int next_me, unsigned int rnum);
 
 
 /**
@@ -165,23 +170,14 @@ __intrinsic void nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
  */
 __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                                        SIGNAL *cfg_sig,
-                                       unsigned int rnum,
-                                       __dram void *rbase);
+                                       unsigned int rnum);
 
 /**
  * Notify the host that a cfg_msg has been processed
  * @param cfg_msg       message listing the queue that has been configured
  */
-__intrinsic void nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg);
-
-
-/**
- * Read general configuration data from cfg BAR
- * @param cfg_bar_data      read transfer registers for the data
- * @param vnic              vNIC BAR to access
- */
-__intrinsic void nfd_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
-                                          unsigned int vnic);
+__intrinsic void nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
+                                              __dram void *isl_base);
 
 
 /**
@@ -198,9 +194,7 @@ __intrinsic void nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                                           __remote SIGNAL *cfg_sig_remote,
                                           unsigned int next_me,
                                           unsigned int rnum_out,
-                                          __dram void *rbase_out,
-                                           unsigned int rnum_in,
-                                          __dram void *rbase_in);
+                                          unsigned int rnum_in);
 
 /**
  * Read configuration message from BAR and interpret fields

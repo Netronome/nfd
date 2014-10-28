@@ -20,14 +20,21 @@
 
 #include <vnic/shared/nfd_cfg.h>
 
+#include <vnic/shared/nfd_shared.h>
 #include <vnic/shared/qc.h>
 #include <vnic/utils/mem_bulk32.h>
 #include <vnic/utils/qcntl.h>
 
 #include <ns_vnic_ctrl.h>
 
-#define NFD_CFG_BASE_IND(_x) nfd_cfg_pcie##_x##_base
-#define NFD_CFG_BASE(_x) NFD_CFG_BASE_IND(_x)
+
+#define NFD_CFG_RINGS_DECLARE(_emem)            \
+    __export __emem_n(_emem)                                    \
+        __align(NFD_CFG_RING_SZ * NFD_MAX_ISL * NFD_CFG_NUM_RINGS)      \
+        char nfd_cfg_rings[NFD_MAX_ISL][NFD_CFG_NUM_RINGS][NFD_CFG_RING_SZ];
+
+NFD_CFG_RINGS_DECLARE(NFD_CFG_RING_EMEM);
+
 
 /*
  * Compute constants to help map from the configuration bitmask
@@ -66,9 +73,7 @@ __visible SIGNAL NFD_CFG_SIG;
 __remote SIGNAL NFD_CFG_SIG_NEXT_ME;
 #endif
 
-/* XXX remove EMU specification */
-__export __emem_n(2) __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS) char
-    NFD_CFG_BASE(PCIE_ISL)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
+NFD_CFG_BASE_DECLARE(PCIE_ISL);
 
 static unsigned int cfg_ring_enables[2] = {0, 0};
 __xread unsigned int cfg_ring_addr[2] = {0, 0};
@@ -328,14 +333,15 @@ void
 nfd_cfg_setup()
 {
     unsigned int vnic;
+    unsigned int ring;
+    unsigned int ring_num_base = NFD_CFG_RING_NUM(PCIE_ISL, 0);
 
     /* Setup the configuration message rings */
-    MEM_RING_CONFIGURE(NFD_CFG_RING_ADDR(PCIE_ISL, 0),
-                       NFD_CFG_RING_NUM(PCIE_ISL, 0));
-    MEM_RING_CONFIGURE(NFD_CFG_RING_ADDR(PCIE_ISL, 1),
-                       NFD_CFG_RING_NUM(PCIE_ISL, 1));
-    MEM_RING_CONFIGURE(NFD_CFG_RING_ADDR(PCIE_ISL, 2),
-                       NFD_CFG_RING_NUM(PCIE_ISL, 2));
+    for (ring = 0; ring < NFD_CFG_NUM_RINGS; ring++) {
+        mem_workq_setup((ring_num_base | ring),
+                        &nfd_cfg_rings[PCIE_ISL][ring],
+                        NFD_CFG_RING_SZ);
+    }
 
     /* Setup the configuration queues */
     _nfd_cfg_queue_setup();
@@ -439,11 +445,11 @@ nfd_cfg_next_vnic()
 __intrinsic void
 nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                        __remote SIGNAL *cfg_sig_remote,
-                       unsigned int next_me, unsigned int rnum,
-                       __dram void *rbase)
+                       unsigned int next_me, unsigned int rnum)
 {
     struct nfd_cfg_msg cfg_msg_tmp;
     __xrw struct nfd_cfg_msg cfg_msg_wr;
+    mem_ring_addr_t ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
 
     /* Clear the internal state fields and set msg_valid before sending  */
     cfg_msg_tmp.__raw = 0;
@@ -452,8 +458,7 @@ nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
     cfg_msg_tmp.vnic = cfg_msg->vnic;
     cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
-    mem_ring_put(rnum, mem_ring_get_addr(rbase), &cfg_msg_wr,
-                 sizeof cfg_msg_wr);
+    mem_ring_put(rnum, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr);
 
     send_interthread_sig(next_me, 0,
                          __signal_number(cfg_sig_remote, next_me));
@@ -462,8 +467,12 @@ nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
 
 __intrinsic void
 nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
-                       unsigned int rnum, __dram void *rbase)
+                      unsigned int rnum)
 {
+    mem_ring_addr_t ring_addr;
+
+    ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
+
     /* XXX should this method read the vnic config BAR? */
     if (signal_test(cfg_sig)) {
         int ret;
@@ -471,8 +480,7 @@ nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
 
         __implicit_write(cfg_sig);
 
-        ret = mem_ring_get(rnum, mem_ring_get_addr(rbase), &cfg_msg_rd,
-                           sizeof cfg_msg_rd);
+        ret = mem_ring_get(rnum, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd);
 
         if (ret == 0) {
             *cfg_msg = cfg_msg_rd;
@@ -482,9 +490,15 @@ nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
 
 
 __intrinsic void
-nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg)
+nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
+                             __dram void *isl_base)
 {
     __xwrite unsigned int result;
+    __dram char *addr = (__dram char *) isl_base;
+
+    /* Compute the address of the update field */
+    addr += cfg_msg->vnic * NS_VNIC_CFG_BAR_SZ;
+    addr += NS_VNIC_CFG_UPDATE;
 
     if (cfg_msg->error) {
         result = NS_VNIC_CFG_UPDATE_ERR;
@@ -493,32 +507,20 @@ nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg)
         result = 0;
     }
 
-    mem_write32(&result,
-               NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_UPDATE,
-               sizeof(result));
-}
-
-
-__intrinsic void
-nfd_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
-                          unsigned int vnic)
-{
-    mem_read64(cfg_bar_data,
-               NFD_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_CTRL,
-               6 * sizeof(unsigned int));
+    mem_write32(&result, addr, sizeof(result));
 }
 
 
 __intrinsic void
 nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                           __remote SIGNAL *cfg_sig_remote,
-                          unsigned int next_me,
-                          unsigned int rnum_out, __dram void *rbase_out,
-                          unsigned int rnum_in, __dram void *rbase_in)
+                          unsigned int next_me, unsigned int rnum_out,
+                          unsigned int rnum_in)
 {
     struct nfd_cfg_msg cfg_msg_tmp;
     __xrw struct nfd_cfg_msg cfg_msg_wr;
     __xread struct nfd_cfg_msg cfg_msg_rd;
+    mem_ring_addr_t ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
     SIGNAL_PAIR put_sig;
     SIGNAL_PAIR get_sig;
 
@@ -531,11 +533,10 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
 
     /* Put is guaranteed to succeed by design (the ring larger than
      * the number of possible vNICs). */
-    __mem_ring_put(rnum_out, mem_ring_get_addr(rbase_out), &cfg_msg_wr,
-                   sizeof cfg_msg_wr, sizeof cfg_msg_wr, sig_done, &put_sig);
-    __mem_ring_get(rnum_in, mem_ring_get_addr(rbase_in), &cfg_msg_rd,
-                   sizeof cfg_msg_rd, sizeof cfg_msg_rd, sig_done, &get_sig);
-
+    __mem_ring_put(rnum_out, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr,
+                   sizeof cfg_msg_wr, sig_done, &put_sig);
+    __mem_ring_get(rnum_in, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd,
+                   sizeof cfg_msg_rd, sig_done, &get_sig);
     wait_for_all_single(&put_sig.even, &put_sig.odd, &get_sig.even);
 
     /* XXX don't check put return, assume put succeeded. */
