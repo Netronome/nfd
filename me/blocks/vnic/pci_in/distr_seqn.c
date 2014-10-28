@@ -36,9 +36,9 @@ static volatile SIGNAL nfd_in_gather_event_sig;
 static volatile SIGNAL nfd_in_data_event_sig;
 
 /* Transfer registers to use for reflects */
-static __xwrite unsigned int nfd_in_gather_compl_reflect_xwrite = 0;
-static __xwrite unsigned int nfd_in_data_compl_reflect_xwrite = 0;
-static __xwrite unsigned int nfd_in_data_served_reflect_xwrite = 0;
+static __xwrite unsigned int nfd_in_gather_compl_refl_out = 0;
+static __xwrite unsigned int nfd_in_data_compl_refl_out = 0;
+static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
 
 /*
  * Sequence numbers visible to other code on this ME
@@ -50,12 +50,12 @@ __shared __gpr unsigned int data_dma_seq_served = 0;
 static __gpr unsigned int data_dma_seq_sent = 0;
 
 /* Remote transfer registers and signals to use for reflects */
-__remote volatile __xread unsigned int nfd_in_gather_compl_reflect_xread;
-__remote volatile __xread unsigned int nfd_in_data_compl_reflect_xread;
-__remote volatile __xread unsigned int nfd_in_data_served_reflect_xread;
-__remote volatile SIGNAL nfd_in_gather_compl_reflect_sig;
-__remote volatile SIGNAL nfd_in_data_compl_reflect_sig;
-__remote volatile SIGNAL nfd_in_data_served_reflect_sig;
+__remote volatile __xread unsigned int nfd_in_gather_compl_refl_in;
+__remote volatile __xread unsigned int nfd_in_data_compl_refl_in;
+__remote volatile __xread unsigned int nfd_in_data_served_refl_in;
+__remote volatile SIGNAL nfd_in_gather_compl_refl_sig;
+__remote volatile SIGNAL nfd_in_data_compl_refl_sig;
+__remote volatile SIGNAL nfd_in_data_served_refl_sig;
 
 
 /* XXX Move to some sort of CT reflect library */
@@ -131,9 +131,10 @@ distr_seqn_setup()
     event_cls_filter_setup(nfd_in_gather_event_filter,
                            NFP_EM_FILTER_MASK_TYPE_LASTEV,
                            event_match, event_mask, filter_status);
-    event_cls_autopush_signal_setup(NFD_IN_GATHER_EVENT_FILTER, meid, ctx,
-                                    __signal_number(&nfd_in_gather_event_sig),
-                                    __xfer_reg_number(&nfd_in_gather_event_xfer));
+    event_cls_autopush_signal_setup(
+        NFD_IN_GATHER_EVENT_FILTER, meid, ctx,
+        __signal_number(&nfd_in_gather_event_sig),
+        __xfer_reg_number(&nfd_in_gather_event_xfer));
     event_cls_autopush_filter_reset(
         NFD_IN_GATHER_EVENT_FILTER,
         NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
@@ -142,14 +143,16 @@ distr_seqn_setup()
     /*
      * Setup data filter
      */
-    nfd_in_data_event_filter = event_cls_filter_handle(NFD_IN_DATA_EVENT_FILTER);
+    nfd_in_data_event_filter =
+        event_cls_filter_handle(NFD_IN_DATA_EVENT_FILTER);
     event_match = NFP_EVENT_MATCH(pcie_provider, 0, NFD_IN_DATA_EVENT_TYPE);
     event_cls_filter_setup(nfd_in_data_event_filter,
                            NFP_EM_FILTER_MASK_TYPE_LASTEV,
                            event_match, event_mask, filter_status);
-    event_cls_autopush_signal_setup(NFD_IN_DATA_EVENT_FILTER, meid, ctx,
-                                    __signal_number(&nfd_in_data_event_sig),
-                                    __xfer_reg_number(&nfd_in_data_event_xfer));
+    event_cls_autopush_signal_setup(
+        NFD_IN_DATA_EVENT_FILTER, meid, ctx,
+        __signal_number(&nfd_in_data_event_sig),
+        __xfer_reg_number(&nfd_in_data_event_xfer));
     event_cls_autopush_filter_reset(
         NFD_IN_DATA_EVENT_FILTER,
         NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
@@ -176,7 +179,7 @@ distr_seqn()
 
     /* Gather */
     if (signal_test(&nfd_in_gather_event_sig)) {
-        __implicit_read(&nfd_in_gather_compl_reflect_xwrite);
+        __implicit_read(&nfd_in_gather_compl_refl_out);
 
         /* Compute increase and update gather_dma_seq_compl */
         /* XXX use dma_seqn_advance API */
@@ -185,14 +188,14 @@ distr_seqn()
         gather_dma_seq_compl += seqn_inc;
 
         /* Mirror to remote ME */
-        nfd_in_gather_compl_reflect_xwrite = gather_dma_seq_compl;
+        nfd_in_gather_compl_refl_out = gather_dma_seq_compl;
         reflect_data(NFD_IN_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_in_gather_compl_reflect_xread,
+                     __xfer_reg_number(&nfd_in_gather_compl_refl_in,
                                        NFD_IN_DATA_DMA_ME),
-                     __signal_number(&nfd_in_gather_compl_reflect_sig,
+                     __signal_number(&nfd_in_gather_compl_refl_sig,
                                      NFD_IN_DATA_DMA_ME),
-                     &nfd_in_gather_compl_reflect_xwrite,
-                     sizeof nfd_in_gather_compl_reflect_xwrite);
+                     &nfd_in_gather_compl_refl_out,
+                     sizeof nfd_in_gather_compl_refl_out);
 
         /* Reset autopush */
         event_cls_autopush_filter_reset(
@@ -203,7 +206,7 @@ distr_seqn()
 
     /* Data */
     if (signal_test(&nfd_in_data_event_sig)) {
-        __implicit_read(&nfd_in_data_compl_reflect_xwrite);
+        __implicit_read(&nfd_in_data_compl_refl_out);
 
         /* Compute increase and update gather_dma_seq_compl */
         /* XXX use dma_seqn_advance API */
@@ -212,14 +215,14 @@ distr_seqn()
         data_dma_seq_compl += seqn_inc;
 
         /* Mirror to remote ME */
-        nfd_in_data_compl_reflect_xwrite = data_dma_seq_compl;
+        nfd_in_data_compl_refl_out = data_dma_seq_compl;
         reflect_data(NFD_IN_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_in_data_compl_reflect_xread,
+                     __xfer_reg_number(&nfd_in_data_compl_refl_in,
                                        NFD_IN_DATA_DMA_ME),
-                     __signal_number(&nfd_in_data_compl_reflect_sig,
+                     __signal_number(&nfd_in_data_compl_refl_sig,
                                      NFD_IN_DATA_DMA_ME),
-                     &nfd_in_data_compl_reflect_xwrite,
-                     sizeof nfd_in_data_compl_reflect_xwrite);
+                     &nfd_in_data_compl_refl_out,
+                     sizeof nfd_in_data_compl_refl_out);
         /* Reset autopush */
         event_cls_autopush_filter_reset(
             NFD_IN_DATA_EVENT_FILTER,
@@ -229,18 +232,17 @@ distr_seqn()
 
     /* XXX possibly throttle these reflects further */
     if (data_dma_seq_served != data_dma_seq_sent) {
-        __implicit_read(&nfd_in_data_served_reflect_xwrite);
+        __implicit_read(&nfd_in_data_served_refl_out);
 
         data_dma_seq_sent = data_dma_seq_served;
 
-        nfd_in_data_served_reflect_xwrite = data_dma_seq_sent;
+        nfd_in_data_served_refl_out = data_dma_seq_sent;
         reflect_data(NFD_IN_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_in_data_served_reflect_xread,
+                     __xfer_reg_number(&nfd_in_data_served_refl_in,
                                        NFD_IN_DATA_DMA_ME),
-                     __signal_number(&nfd_in_data_served_reflect_sig,
+                     __signal_number(&nfd_in_data_served_refl_sig,
                                      NFD_IN_DATA_DMA_ME),
-                     &nfd_in_data_served_reflect_xwrite,
-                     sizeof nfd_in_data_served_reflect_xwrite);
+                     &nfd_in_data_served_refl_out,
+                     sizeof nfd_in_data_served_refl_out);
     }
 }
-

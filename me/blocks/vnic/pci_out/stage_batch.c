@@ -82,9 +82,9 @@ static volatile __xread unsigned int desc_dma_event_xfer;
 static SIGNAL data_dma_event_sig;
 static SIGNAL desc_dma_event_sig;
 
-static __xwrite unsigned int nfd_out_data_compl_reflect_xwrite = 0;
-__remote volatile __xread unsigned int nfd_out_data_compl_reflect_xread;
-__remote volatile SIGNAL nfd_out_data_compl_reflect_sig;
+static __xwrite unsigned int nfd_out_data_compl_refl_out = 0;
+__remote volatile __xread unsigned int nfd_out_data_compl_refl_in;
+__remote volatile SIGNAL nfd_out_data_compl_refl_sig;
 
 
 /*
@@ -197,7 +197,7 @@ _fl_avail_check(__gpr unsigned int queue)
     /* Only test for fl entries on fast path as it serves as a proxy
      * for the queue being up as well. */
     if ((queue_data[queue].fl_a - queue_data[queue].fl_u) <
-        NFD_OUT_FL_CACHE_SOFT_THRESH) {
+        NFD_OUT_FL_SOFT_THRESH) {
         set_queue(&queue, &urgent_bmsk);
 
         /* XXX check that this code actually rereads the LM values... */
@@ -476,19 +476,19 @@ distr_seqn()
     }
 
     if (signal_test(&data_dma_event_sig)) {
-        __implicit_read(&nfd_out_data_compl_reflect_xwrite);
+        __implicit_read(&nfd_out_data_compl_refl_out);
 
         dma_seqn_advance(&data_dma_event_xfer, &data_dma_compl);
 
         /* Mirror to remote ME */
-        nfd_out_data_compl_reflect_xwrite = data_dma_compl;
+        nfd_out_data_compl_refl_out = data_dma_compl;
         reflect_data(NFD_OUT_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_out_data_compl_reflect_xread,
+                     __xfer_reg_number(&nfd_out_data_compl_refl_in,
                                        NFD_OUT_DATA_DMA_ME),
-                     __signal_number(&nfd_out_data_compl_reflect_sig,
+                     __signal_number(&nfd_out_data_compl_refl_sig,
                                      NFD_OUT_DATA_DMA_ME),
-                     &nfd_out_data_compl_reflect_xwrite,
-                     sizeof nfd_out_data_compl_reflect_xwrite);
+                     &nfd_out_data_compl_refl_out,
+                     sizeof nfd_out_data_compl_refl_out);
 
         event_cls_autopush_filter_reset(
             NFD_OUT_DATA_EVENT_FILTER,

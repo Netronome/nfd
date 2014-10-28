@@ -71,8 +71,8 @@ static SIGNAL_MASK fl_wait_msk = 0;
 
 SIGNAL get_order_sig, issue_order_sig;
 
-__visible volatile __xread unsigned int nfd_out_data_compl_reflect_xread = 0;
-__visible volatile SIGNAL nfd_out_data_compl_reflect_sig;
+__visible volatile __xread unsigned int nfd_out_data_compl_refl_in = 0;
+__visible volatile SIGNAL nfd_out_data_compl_refl_sig;
 
 
 /*
@@ -193,8 +193,8 @@ _recompute_safe()
 void
 issue_dma_check_compl()
 {
-    if (signal_test(&nfd_out_data_compl_reflect_sig)) {
-        data_dma_seq_compl = nfd_out_data_compl_reflect_xread;
+    if (signal_test(&nfd_out_data_compl_refl_sig)) {
+        data_dma_seq_compl = nfd_out_data_compl_refl_in;
         _recompute_safe();
     }
 }

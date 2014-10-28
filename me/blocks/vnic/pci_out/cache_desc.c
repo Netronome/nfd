@@ -28,8 +28,8 @@
 /* #define NFD_OUT_CREDITS_HOST_ISSUED */
 #define NFD_OUT_CREDITS_NFP_CACHED
 
-#define NFD_OUT_FL_CACHE_SZ_PER_QUEUE   \
-    (NFD_OUT_FL_CACHE_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
+#define NFD_OUT_FL_SZ_PER_QUEUE   \
+    (NFD_OUT_FL_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
 
 
 /* XXX remove and just call _alloc_mem directly? */
@@ -63,15 +63,15 @@ __shared __gpr struct qc_bitmask urgent_bmsk;
 __shared __lmem struct nfd_out_queue_info queue_data[NFD_OUT_MAX_QUEUES];
 
 static __shared __lmem unsigned int
-    fl_cache_pending[NFD_OUT_FL_FETCH_MAX_IN_FLIGHT];
+    fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
 
 /* NFD credits are fixed at offset zero in CTM */
 NFD_CREDITS_ALLOC(NFD_OUT_CREDITS_BASE);
 
 
-__export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_CACHE_SZ_PER_QUEUE)
+__export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_SZ_PER_QUEUE)
     struct nfd_out_fl_desc
-    fl_cache_mem[NFD_OUT_MAX_QUEUES][NFD_OUT_FL_CACHE_BUFS_PER_QUEUE];
+    fl_cache_mem[NFD_OUT_MAX_QUEUES][NFD_OUT_FL_BUFS_PER_QUEUE];
 
 static __gpr unsigned int fl_cache_mem_addr_lo;
 
@@ -149,9 +149,8 @@ cache_desc_setup_shared()
                          NFP_EVENT_TYPE_FIFO_ABOVE_WM,
                          NFD_OUT_Q_EVENT_START);
 
-    dma_seqn_ap_setup(NFD_OUT_FL_FETCH_EVENT_FILTER,
-                      NFD_OUT_FL_FETCH_EVENT_FILTER,
-                      NFD_OUT_FL_FETCH_EVENT_TYPE, &fl_cache_event_xfer,
+    dma_seqn_ap_setup(NFD_OUT_FL_EVENT_FILTER, NFD_OUT_FL_EVENT_FILTER,
+                      NFD_OUT_FL_EVENT_TYPE, &fl_cache_event_xfer,
                       &fl_cache_event_sig);
 
     /*
@@ -321,7 +320,8 @@ _fetch_fl(__gpr unsigned int *queue)
 
     /* Is there a batch to get from this queue?
      * If the queue is active or urgent there should be. */
-    if ((queue_data[*queue].fl_w - queue_data[*queue].fl_s) < NFD_OUT_FL_BATCH_SZ) {
+    if ((queue_data[*queue].fl_w - queue_data[*queue].fl_s) <
+        NFD_OUT_FL_BATCH_SZ) {
         __xread unsigned int wptr_raw;
         struct nfp_qc_sts_hi wptr;
         unsigned int ptr_inc;
@@ -358,7 +358,7 @@ _fetch_fl(__gpr unsigned int *queue)
     /* We have a batch available, is there space to put it?
      * Space = ring size - (fl_s - rx_w). We require
      * space >= batch size. */
-    space_chk = ((NFD_OUT_FL_CACHE_BUFS_PER_QUEUE - NFD_OUT_FL_BATCH_SZ) +
+    space_chk = ((NFD_OUT_FL_BUFS_PER_QUEUE - NFD_OUT_FL_BATCH_SZ) +
                  queue_data[*queue].rx_w - queue_data[*queue].fl_s);
     if (space_chk >= 0) {
         __xwrite unsigned int qc_xfer;
@@ -382,7 +382,7 @@ _fetch_fl(__gpr unsigned int *queue)
             cache_desc_compute_fl_addr(queue, queue_data[*queue].fl_s);
         descr_tmp.rid = queue_data[*queue].requester_id;
         /* Can replace with ld_field instruction if 8bit seqn is enough */
-        pcie_dma_set_event(&descr_tmp, NFD_OUT_FL_FETCH_EVENT_TYPE,
+        pcie_dma_set_event(&descr_tmp, NFD_OUT_FL_EVENT_TYPE,
                            fl_cache_dma_seq_issued);
         descr = descr_tmp;
 
@@ -397,12 +397,11 @@ _fetch_fl(__gpr unsigned int *queue)
 
         /* Add batch message to LM queue
          * XXX check defer slots filled */
-        pending_slot = (fl_cache_dma_seq_issued &
-                        (NFD_OUT_FL_FETCH_MAX_IN_FLIGHT -1));
+        pending_slot = (fl_cache_dma_seq_issued & (NFD_OUT_FL_MAX_IN_FLIGHT -1));
         fl_cache_pending[pending_slot] = *queue;
 
         /* Issue DMA */
-        __pcie_dma_enq(PCIE_ISL, &descr, NFD_OUT_FL_FETCH_DMA_QUEUE,
+        __pcie_dma_enq(PCIE_ISL, &descr, NFD_OUT_FL_DMA_QUEUE,
                        sig_done, &dma_sig);
         wait_for_all(&dma_sig, &qc_sig);
 
@@ -436,9 +435,9 @@ _complete_fetch()
         dma_seqn_advance(&fl_cache_event_xfer, &fl_cache_dma_seq_compl);
 
         event_cls_autopush_filter_reset(
-            NFD_OUT_FL_FETCH_EVENT_FILTER,
+            NFD_OUT_FL_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            NFD_OUT_FL_FETCH_EVENT_FILTER);
+            NFD_OUT_FL_EVENT_FILTER);
         __implicit_write(&fl_cache_event_sig);
 
         /* XXX how many updates can we receive at once? Do we need to
@@ -450,7 +449,7 @@ _complete_fetch()
 
             /* Extract queue from the fl_cache_pending message */
             pending_slot = (fl_cache_dma_seq_served &
-                            (NFD_OUT_FL_FETCH_MAX_IN_FLIGHT -1));
+                            (NFD_OUT_FL_MAX_IN_FLIGHT -1));
             queue_c = fl_cache_pending[pending_slot];
 
 #ifdef NFD_OUT_CREDITS_NFP_CACHED
@@ -495,7 +494,7 @@ cache_desc()
     _complete_fetch();
 
     if ((fl_cache_dma_seq_issued - fl_cache_dma_seq_served) <
-        NFD_OUT_FL_FETCH_MAX_IN_FLIGHT) {
+        NFD_OUT_FL_MAX_IN_FLIGHT) {
         __critical_path();
 
         /* Check urgent queues */
@@ -551,9 +550,9 @@ cache_desc_compute_fl_addr(__gpr unsigned int *queue, unsigned int seq)
 {
     unsigned int ret;
 
-    ret = seq & (NFD_OUT_FL_CACHE_BUFS_PER_QUEUE - 1);
+    ret = seq & (NFD_OUT_FL_BUFS_PER_QUEUE - 1);
     ret *= sizeof(struct nfd_out_fl_desc);
-    ret |= (*queue * NFD_OUT_FL_CACHE_SZ_PER_QUEUE );
+    ret |= (*queue * NFD_OUT_FL_SZ_PER_QUEUE );
     ret |= fl_cache_mem_addr_lo;
 
     return ret;
