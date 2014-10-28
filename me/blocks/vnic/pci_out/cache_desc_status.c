@@ -12,8 +12,9 @@
 
 #include <vnic/pci_out/cache_desc_status.h>
 
-#include <vnic/pci_out_cfg.h>
-#include <vnic/pci_out/pci_out_internal.h>
+/* #include <vnic/pci_out_cfg.h> */
+/* #include <vnic/pci_out/pci_out_internal.h> */
+#include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/qc.h>
 
 

@@ -15,11 +15,11 @@
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_qc.h>
 
-#include <vnic/pci_out/cache_desc.h>
+/* #include <vnic/pci_out/cache_desc.h> */
 
 #include <vnic/pci_out.h>
-#include <vnic/pci_out_cfg.h>
-#include <vnic/pci_out/pci_out_internal.h>
+/* #include <vnic/pci_out_cfg.h> */
+/* #include <vnic/pci_out/pci_out_internal.h> */
 /* #include <vnic/shared/nfd_shared.h> */
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>

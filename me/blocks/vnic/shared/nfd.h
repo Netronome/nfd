@@ -18,8 +18,6 @@
 #define NFD_PCIE3_EMEM      1
 
 
-
-
 /* Helper macros */
 #define NFD_EMEM_IND2(_emem) __LoadTimeConstant("__addr_emem" #_emem)
 #define NFD_EMEM_IND1(_emem) NFD_EMEM_IND2(_emem)

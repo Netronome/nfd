@@ -12,7 +12,7 @@
 
 #include <vnic/pci_out/issue_dma_status.h>
 
-#include <vnic/pci_out_cfg.h>
+#include <vnic/shared/nfd_internal.h>
 
 
 /* NB PCI.OUT issue_dma has no per queue state */

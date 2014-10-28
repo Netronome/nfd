@@ -17,6 +17,9 @@
  * so that the ring fits easily in the direct access memory */
 #define NFD_OUT_RING_SZ  (16 * 64 * 256)
 
+
+#define NFD_OUT_MAX_QUEUES              64
+
 /*
  * RX descriptor format
  *

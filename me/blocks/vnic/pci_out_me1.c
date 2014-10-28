@@ -10,8 +10,8 @@
 
 #include <nfp/me.h>
 
-#include <vnic/pci_out/issue_dma.h>
-#include <vnic/pci_out/issue_dma_status.h>
+#include <vnic/pci_out/issue_dma.c>
+#include <vnic/pci_out/issue_dma_status.c>
 
 
 int
