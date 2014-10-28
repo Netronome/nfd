@@ -7,8 +7,6 @@
 #ifndef _BLOCKS__SHARED_NFD_INTERNAL_H_
 #define _BLOCKS__SHARED_NFD_INTERNAL_H_
 
-#include <vnic/shared/nfcc_chipres.h>
-
 
 /* Tuning constants */
 /* nfd_cfg */
@@ -125,34 +123,6 @@
 
 
 
-/* Helper macros */
-/* XXX can provide an extra _pool parameter here if required */
-#define NFD_BLM_Q_ALLOC_IND(_name)                  \
-    _alloc_resource(_name BLQ_EMU_RINGS global 1)
-#define NFD_BLM_Q_ALLOC(_name) NFD_BLM_Q_ALLOC_IND(_name)
-
-#define NFD_RING_BASE_IND(_isl, _comp)   _comp##_ring_isl##_isl
-#define NFD_RING_BASE(_isl, _comp)       NFD_RING_BASE_IND(_isl, _comp)
-
-#define NFD_RING_DECLARE_IND1(_isl, _emem, _comp, _sz)                  \
-    __export __emem_n(_emem) __align(_sz)                               \
-    unsigned char NFD_RING_BASE(_isl, _comp)##[_sz]
-#define NFD_RING_DECLARE_IND0(_isl, _comp, _sz)                         \
-    NFD_RING_DECLARE_IND1(_isl, NFD_PCIE##_isl##_EMEM, _comp, _sz)
-#define NFD_RING_DECLARE(_isl, _comp, _sz)                              \
-    NFD_RING_DECLARE_IND0(_isl, _comp, _sz)
-
-
-/* Check for consistency of defines */
-#if defined NFD_VNIC_PF && defined NFD_VNIC_VF
-#error "Incompatible defines: NFD_VNIC_PF and NFD_VNIC_VF both set"
-#endif
-
-#if !defined NFD_VNIC_PF && !defined NFD_VNIC_VF
-#error "Incompatible defines: Neither NFD_VNIC_PF nor NFD_VNIC_VF set"
-#endif
-
-
 /* nfd_cfg internal structures */
 enum nfd_cfg_component {
     NFD_CFG_PCI_IN,
@@ -259,7 +229,11 @@ struct nfd_out_queue_info {
     unsigned int rx_w;
 };
 
+#if defined(__NFP_LANG_MICROC)
 #include <vnic/pci_out.h>
+#else
+#include <pci_out.h>
+#endif
 
 /*
  * Freelist descriptor format
@@ -342,5 +316,37 @@ struct nfd_out_data_batch {
 };
 
 
+#if defined(__NFP_LANG_MICROC)
+
+#include <vnic/shared/nfcc_chipres.h>
+
+/* Helper macros */
+/* XXX can provide an extra _pool parameter here if required */
+#define NFD_BLM_Q_ALLOC_IND(_name)                  \
+    _alloc_resource(_name BLQ_EMU_RINGS global 1)
+#define NFD_BLM_Q_ALLOC(_name) NFD_BLM_Q_ALLOC_IND(_name)
+
+#define NFD_RING_BASE_IND(_isl, _comp)   _comp##_ring_isl##_isl
+#define NFD_RING_BASE(_isl, _comp)       NFD_RING_BASE_IND(_isl, _comp)
+
+#define NFD_RING_DECLARE_IND1(_isl, _emem, _comp, _sz)                  \
+    __export __emem_n(_emem) __align(_sz)                               \
+    unsigned char NFD_RING_BASE(_isl, _comp)##[_sz]
+#define NFD_RING_DECLARE_IND0(_isl, _comp, _sz)                         \
+    NFD_RING_DECLARE_IND1(_isl, NFD_PCIE##_isl##_EMEM, _comp, _sz)
+#define NFD_RING_DECLARE(_isl, _comp, _sz)                              \
+    NFD_RING_DECLARE_IND0(_isl, _comp, _sz)
+
+
+/* Check for consistency of defines */
+#if defined NFD_VNIC_PF && defined NFD_VNIC_VF
+#error "Incompatible defines: NFD_VNIC_PF and NFD_VNIC_VF both set"
+#endif
+
+#if !defined NFD_VNIC_PF && !defined NFD_VNIC_VF
+#error "Incompatible defines: Neither NFD_VNIC_PF nor NFD_VNIC_VF set"
+#endif
+
+#endif /* __NFP_LANG_MICROC */
 
 #endif /* !_BLOCKS__SHARED_NFD_INTERNAL_H_ */

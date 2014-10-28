@@ -7,8 +7,6 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_H_
 #define _BLOCKS__VNIC_PCI_OUT_H_
 
-#include <pkt/pkt.h>
-
 
 /* XXX rename */
 /* #define NFD_OUT_RING_SZ  (4 * 16 * 1024 *1024) */
@@ -90,6 +88,10 @@ struct nfd_out_input {
     struct nfd_out_rx_desc rxd;
 };
 
+
+#if defined(__NFP_LANG_MICROC)
+
+#include <pkt/pkt.h>
 
 /**
  * Prepare ME data structures required to send packets to NFD
@@ -194,5 +196,7 @@ __intrinsic int nfd_out_send_test(__xrw struct nfd_out_input desc_out[2]);
  */
 __intrinsic int nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
                              __gpr struct nfd_out_input *desc);
+
+#endif /* __NFP_LANG_MICROC */
 
 #endif /* !_BLOCKS__VNIC_PCI_OUT_H_ */
