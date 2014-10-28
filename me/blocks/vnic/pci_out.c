@@ -20,22 +20,6 @@
 
 __shared __lmem struct nfd_ring_info nfd_out_ring_info[NFD_MAX_ISL];
 
-#if _nfp_has_island("pcie0")
-NFD_RING_DECLARE(0, nfd_out, NFD_OUT_RING_SZ);
-#endif
-
-#if _nfp_has_island("pcie1")
-NFD_RING_DECLARE(1, nfd_out, NFD_OUT_RING_SZ);
-#endif
-
-#if _nfp_has_island("pcie2")
-NFD_RING_DECLARE(2, nfd_out, NFD_OUT_RING_SZ);
-#endif
-
-#if _nfp_has_island("pcie3")
-NFD_RING_DECLARE(3, nfd_out, NFD_OUT_RING_SZ);
-#endif
-
 
 __intrinsic void
 nfd_out_send_init()

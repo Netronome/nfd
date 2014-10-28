@@ -6,7 +6,7 @@
  */
 
 #include <assert.h>
-#include <nfcc_chipres.h>
+#include <vnic/shared/nfcc_chipres.h>
 #include <nfp.h>
 
 #include <nfp/me.h>

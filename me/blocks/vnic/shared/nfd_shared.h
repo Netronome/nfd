@@ -7,30 +7,32 @@
 #ifndef _BLOCKS__VNIC_SHARED_NFD_SHARED_H_
 #define _BLOCKS__VNIC_SHARED_NFD_SHARED_H_
 
-#include <nfcc_chipres.h>
+#include <vnic/shared/nfcc_chipres.h>
 
+/* USER CONFIGURES */
 #define NFD_PCIE0_EMEM      0
 #define NFD_PCIE1_EMEM      0
 #define NFD_PCIE2_EMEM      1
 #define NFD_PCIE3_EMEM      1
-#define NFD_CFG_RING_EMEM   2
 
+/* USER CALLS */
 #define NFD_EMEM_IND2(_emem) __LoadTimeConstant("__addr_emem" #_emem)
 #define NFD_EMEM_IND1(_emem) NFD_EMEM_IND2(_emem)
 #define NFD_EMEM_IND0(_isl) NFD_EMEM_IND1(NFD_PCIE##_isl##_EMEM)
 #define NFD_EMEM(_isl) NFD_EMEM_IND0(_isl)
 
-
-#define NFD_CFG_EMEM NFD_EMEM_IND1(NFD_CFG_RING_EMEM)
-
+/* USER CONFIGURES */
 #ifndef NFD_WQ_SZ
 #define NFD_WQ_SZ           (16 * 1024)
 #endif
 
+/* USER CONFIGURES */
 #define NFD_NUM_WQS         8
 
+/* INTERNAL USE */
 #define NFD_RING_BASE_IND(_isl, _comp)   _comp##_ring_isl##_isl
 #define NFD_RING_BASE(_isl, _comp)       NFD_RING_BASE_IND(_isl, _comp)
+
 
 #define NFD_RING_DECLARE_IND1(_isl, _emem, _comp, _sz)                  \
     __export __emem_n(_emem) __align(_sz)                               \

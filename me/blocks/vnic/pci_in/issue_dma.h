@@ -9,6 +9,10 @@
 #define _BLOCKS__VNIC_PCI_IN_ISSUE_DMA_H_
 
 
+/* XXX TEMP */
+#define NFD_CFG_VF_OFFSET       64
+
+
 /**
  * Perform shared configuration for issue_dma
  */

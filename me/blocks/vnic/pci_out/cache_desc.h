@@ -9,6 +9,16 @@
 
 #include <vnic/shared/nfd_cfg.h>
 
+/* XXX TEMP */
+#define NFD_CFG_VF_OFFSET       64
+
+__intrinsic void nfd_cfg_proc_msg(struct nfd_cfg_msg *cfg_msg,
+                                  unsigned int *queue,
+                                  unsigned char *ring_sz,
+                                  unsigned int ring_base[2],
+                                  enum nfd_cfg_component comp);
+
+
 extern void cache_desc_setup_shared();
 
 extern void cache_desc_setup();

@@ -7,7 +7,7 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_STAGE_BATCH_H_
 #define _BLOCKS__VNIC_PCI_OUT_STAGE_BATCH_H_
 
-#include <nfcc_chipres.h>
+#include <vnic/shared/nfcc_chipres.h>
 
 #include <vnic/pci_out_cfg.h>
 

@@ -5,7 +5,7 @@
  * @brief         Fill the local (LM) cache of MU buffers
  */
 
-#include <nfcc_chipres.h>
+#include <vnic/shared/nfcc_chipres.h>
 #include <nfp.h>
 #include <assert.h>
 

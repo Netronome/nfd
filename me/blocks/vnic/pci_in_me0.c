@@ -17,7 +17,7 @@
 #include <vnic/pci_in/gather_status.h>
 #include <vnic/pci_in/notify.h>
 #include <vnic/pci_in/service_qc.h>
-#include <vnic/shared/nfd_cfg.h>
+#include <vnic/shared/nfd_cfg_internal.c>
 
 /*
  * Temporary header includes
