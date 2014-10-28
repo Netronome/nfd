@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
  *
- * @file          blocks/vnic/shared/qc.c
+ * @file          blocks/vnic/utils/qc.c
  * @brief         An API to manage queue controller accesses in NFD
  */
 
@@ -12,7 +12,7 @@
 
 #include <nfp6000/nfp_cls.h>
 
-#include <vnic/shared/qc.h>
+#include <vnic/utils/qc.h>
 
 /*
  * Temporary header includes

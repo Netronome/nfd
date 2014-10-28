@@ -14,8 +14,9 @@
 #include <std/reg_utils.h>
 
 #include <vnic/pci_out.h>
-#include <vnic/shared/nfd_shared.h>
-#include <vnic/shared/qc.h>
+/* #include <vnic/shared/nfd_shared.h> */
+#include <vnic/shared/nfd.h>
+#include <vnic/utils/qc.h>
 
 
 __shared __lmem struct nfd_ring_info nfd_out_ring_info[NFD_MAX_ISL];

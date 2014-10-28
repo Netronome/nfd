@@ -19,6 +19,7 @@
 #include "_c/nn_ring.c"
 #include "_c/ordering.c"
 #include "_c/pcie.c"
+#include "_c/qc.c"
 #include "_c/qcntl.c"
 
 #endif /* !_BLOCKS__VNIC_LIBSTD_C_ */

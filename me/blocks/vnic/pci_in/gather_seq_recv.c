@@ -8,15 +8,17 @@
 #include <assert.h>
 #include <nfp.h>
 
-#include "gather_seq_recv.h"
+/* #include "gather_seq_recv.h" */
 
-#include <vnic/pci_in/precache_bufs.h>
+#include <vnic/shared/nfd_internal.h>
+
+/* #include <vnic/pci_in/precache_bufs.h> */
 
 
-struct seq_recv_state {
-    unsigned int recompute_seq_safe:1;
-    unsigned int spare:31;
-};
+/* struct seq_recv_state { */
+/*     unsigned int recompute_seq_safe:1; */
+/*     unsigned int spare:31; */
+/* }; */
 
 __visible volatile __xread unsigned int nfd_in_gather_compl_reflect_xread;
 __visible volatile __xread unsigned int nfd_in_data_compl_reflect_xread;
@@ -29,9 +31,13 @@ __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
 
 
-static struct seq_recv_state state = {0, 0};
+static struct nfd_in_me1_state state = {0, 0, 0};
 
 
+/**
+ * Check for sequence number reflects from "distr_seqn" and copy to shared
+ * registers.  Recompute data_dma_seq_safe if necessary.
+ */
 void
 gather_seq_recv()
 {

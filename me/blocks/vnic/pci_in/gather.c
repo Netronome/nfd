@@ -8,14 +8,15 @@
 #include <assert.h>
 #include <nfp.h>
 
-#include <vnic/pci_in/gather.h>
+/* #include <vnic/pci_in/gather.h> */
 
 #include <vnic/pci_in.h>
-#include <vnic/pci_in_cfg.h>
-#include <vnic/pci_in/pci_in_internal.h>
-#include <vnic/shared/qc.h>
-#include <vnic/utils/pcie.h>
+/* #include <vnic/pci_in_cfg.h> */
+/* #include <vnic/pci_in/pci_in_internal.h> */
+#include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/nn_ring.h>
+#include <vnic/utils/pcie.h>
+#include <vnic/utils/qc.h>
 
 
 /*
@@ -39,6 +40,9 @@ __export __shared __cls __align(DESC_RING_SZ) struct nfd_in_tx_desc
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
 
+/**
+ * Perform shared initialisation of the gather block.
+ */
 void
 gather_setup_shared()
 {
@@ -69,6 +73,9 @@ gather_setup_shared()
 }
 
 
+/**
+ * Perform per context initialisation (for CTX 1 to 7)
+ */
 void
 gather_setup()
 {
@@ -87,6 +94,15 @@ gather_setup()
 }
 
 
+/**
+ * Examine pending bitmasks and queue state to determine whether there are
+ * any outstanding packets to process.  If there are, form a work batch
+ * containing packets from the first queue with packets.  A batch may contain
+ * up to MAX_TX_BATCH_SZ packets from a single queue.
+ *
+ * A batch message is placed in the next-neighbour ring for the ME, and the
+ * descriptors are DMA'ed into the next slot in the CLS "desc_ring".
+ */
 int
 gather()
 {
@@ -136,7 +152,7 @@ gather()
             /*
              * There is. Put a message on the work_ring.
              */
-            struct batch_desc batch;
+            struct nfd_in_batch_desc batch;
             unsigned int dma_cmd_sz;
             unsigned int pcie_addr_off;
             unsigned int desc_ring_off;

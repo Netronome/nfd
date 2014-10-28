@@ -1,11 +1,11 @@
 /*
  * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
  *
- * @file          blocks/vnic/shared/qc.h
+ * @file          blocks/vnic/utils/qc.h
  * @brief         An API to manage queue controller accesses in NFD
  */
-#ifndef _BLOCKS__VNIC_SHARED_QC_H_
-#define _BLOCKS__VNIC_SHARED_QC_H_
+#ifndef _BLOCKS__VNIC_UTILS_QC_H_
+#define _BLOCKS__VNIC_UTILS_QC_H_
 
 
 /* XXX Host code may need access to the map_xxx_to_yyy methods
@@ -233,4 +233,4 @@ __intrinsic void set_Qctl8bitQnum();
 
 #endif /* __NFP_LANG_MICROC */
 
-#endif /* !_BLOCKS__VNIC_SHARED_QC_H_ */
+#endif /* !_BLOCKS__VNIC_UTILS_QC_H_ */

@@ -14,7 +14,7 @@
 
 #include <vnic/pci_out_cfg.h>
 #include <vnic/pci_out/pci_out_internal.h>
-#include <vnic/shared/qc.h>
+#include <vnic/utils/qc.h>
 
 
 /**

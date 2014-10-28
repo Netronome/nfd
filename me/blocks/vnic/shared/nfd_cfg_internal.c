@@ -22,9 +22,10 @@
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_cfg.h>
 
-#include <vnic/shared/nfd_shared.h>
-#include <vnic/shared/qc.h>
+/* #include <vnic/shared/nfd_shared.h> */
+#include <vnic/shared/nfd.h>
 #include <vnic/utils/mem_bulk32.h>
+#include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 
 #include <ns_vnic_ctrl.h>

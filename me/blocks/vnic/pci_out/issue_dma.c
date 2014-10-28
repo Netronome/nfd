@@ -21,11 +21,14 @@
 #include <vnic/pci_out.h>
 #include <vnic/pci_out_cfg.h>
 #include <vnic/pci_out/pci_out_internal.h>
-#include <vnic/shared/nfd_shared.h>
-#include <vnic/shared/qc.h>
+/* #include <vnic/shared/nfd_shared.h> */
+#include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/pcie.h>
+#include <vnic/utils/qc.h>
+
 
 /* XXX move somewhere shared? */
 struct _dma_desc_batch {

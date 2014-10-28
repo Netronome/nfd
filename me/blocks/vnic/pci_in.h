@@ -9,6 +9,26 @@
 
 #include <pkt/pkt.h>
 
+#ifndef NFD_IN_DATA_OFFSET
+#define NFD_IN_DATA_OFFSET          64
+#endif
+
+#ifndef NFD_IN_WQ_SZ
+#define NFD_IN_WQ_SZ           (16 * 1024)
+#endif
+
+#ifndef NFD_IN_NUM_WQS
+#define NFD_IN_NUM_WQS         8
+#endif
+
+/* XXX expose to the APP */
+#define NFD_IN_BLM_BLS          0
+#define NFD_IN_BLM_POOL         BLM_NBI8_BLQ0_EMU_QID
+#define NFD_IN_BLM_RADDR        __LoadTimeConstant("__addr_emem1")
+
+
+#define NFD_IN_MAX_QUEUES   64
+
 
 /**
  * PCI.in TX descriptor format

@@ -20,11 +20,13 @@
 #include <vnic/pci_out.h>
 #include <vnic/pci_out_cfg.h>
 #include <vnic/pci_out/pci_out_internal.h>
-#include <vnic/shared/qc.h>
-#include <vnic/shared/nfd_shared.h>
+/* #include <vnic/shared/nfd_shared.h> */
+#include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/pcie.h>
+#include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 
 
@@ -33,6 +35,18 @@
 
 #define NFD_OUT_FL_CACHE_SZ_PER_QUEUE   \
     (NFD_OUT_FL_CACHE_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
+
+
+/* XXX remove and just call _alloc_mem directly? */
+/*
+ * Allocate 256B (64 x 4B) of memory at offset 0 in CTM for credits.
+ * Forcing this to zero on all PCIe islands makes code to access credits
+ * simpler and more efficient throughout the system.
+ */
+#define NFD_CREDITS_ALLOC_IND(_off)                                    \
+     _alloc_mem("nfd_out_credits ctm+" #_off " island 256")
+#define NFD_CREDITS_ALLOC(_off) NFD_CREDITS_ALLOC_IND(_off)
+
 
 /*
  * State variables for PCI.OUT queue controller accesses

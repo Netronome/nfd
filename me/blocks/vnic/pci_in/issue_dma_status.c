@@ -12,10 +12,11 @@
 
 #include <vnic/pci_in/issue_dma_status.h>
 
-#include <vnic/pci_in_cfg.h>
-#include <vnic/pci_in/pci_in_internal.h>
-#include <vnic/pci_in/precache_bufs.h>
-#include <vnic/shared/qc.h>
+#include <vnic/shared/nfd_internal.h>
+/* #include <vnic/pci_in_cfg.h> */
+/* #include <vnic/pci_in/pci_in_internal.h> */
+/* #include <vnic/pci_in/precache_bufs.h> */
+#include <vnic/utils/qc.h>
 
 
 /**

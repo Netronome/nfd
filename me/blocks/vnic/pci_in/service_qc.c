@@ -11,12 +11,16 @@
 
 #include <nfp6000/nfp_event.h>
 
-#include <vnic/pci_in/service_qc.h>
+/* #include <vnic/pci_in/service_qc.h> */
 
-#include <vnic/pci_in_cfg.h>
-#include <vnic/pci_in/pci_in_internal.h>
-#include <vnic/shared/qc.h>
+#include <vnic/pci_in.h>
+
+/* #include <vnic/pci_in_cfg.h> */
+/* #include <vnic/pci_in/pci_in_internal.h> */
 #include <vnic/shared/nfd_cfg.h>
+#include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_internal.h>
+#include <vnic/utils/qc.h>
 
 /**
  * State variables for PCI.IN queue controller accesses
@@ -34,6 +38,9 @@ __shared __gpr struct qc_bitmask pending_bmsk;
 __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
 
 /* XXX rename */
+/**
+ * Initialise the PCI.IN queue controller queues
+ */
 void
 service_qc_setup ()
 {
@@ -69,6 +76,15 @@ service_qc_setup ()
 }
 
 
+/**
+ * Change the configuration of the queues and rings associated with a vNIC
+ * @param cfg_msg       configuration information concerning the change
+ *
+ * This method performs changes to the local state for a vNIC.  The 'cfg_msg'
+ * struct is used in conjunction with 'nfd_cfg_proc_msg' and internal nfd_cfg
+ * state to determine a particular queue to change each time this method is
+ * called.  See nfd_cfg.h for further information.
+ */
 __intrinsic void
 service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 {
@@ -134,6 +150,10 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     }
 }
 
+
+/**
+ * Use API provided by shared/qc to update queue state
+ */
 void
 service_qc()
 {

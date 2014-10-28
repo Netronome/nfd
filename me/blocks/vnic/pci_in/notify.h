@@ -11,6 +11,7 @@
 #include <vnic/pci_in_cfg.h>
 #include <vnic/pci_in/pci_in_internal.h>
 
+/* XXX NFD_WQ macros seem unused */
 #define NFD_WQ_BASE_IND(_isl)       nfd_wq_base_pcie##_isl
 #define NFD_WQ_BASE(_isl)           NFD_WQ_BASE_IND(_isl)
 

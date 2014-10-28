@@ -14,9 +14,10 @@
 #include <std/reg_utils.h>
 
 #include <vnic/pci_in.h>
-#include <vnic/pci_in_cfg.h>
-#include <vnic/shared/nfd_shared.h>
-#include <vnic/shared/qc.h>
+/* #include <vnic/pci_in_cfg.h> */
+/* #include <vnic/shared/nfd_shared.h> */
+#include <vnic/shared/nfd.h>
+#include <vnic/utils/qc.h>
 
 
 __shared __lmem struct nfd_ring_info nfd_in_ring_info[NFD_MAX_ISL];
@@ -26,19 +27,19 @@ __intrinsic void
 nfd_in_recv_init()
 {
 #if _nfp_has_island("pcie0")
-    NFD_RING_INIT(0, nfd_in, NFD_NUM_WQS);
+    NFD_RING_INIT(0, nfd_in, NFD_IN_NUM_WQS);
 #endif
 
 #if _nfp_has_island("pcie1")
-    NFD_RING_INIT(1, nfd_in, NFD_NUM_WQS);
+    NFD_RING_INIT(1, nfd_in, NFD_IN_NUM_WQS);
 #endif
 
 #if _nfp_has_island("pcie2")
-    NFD_RING_INIT(2, nfd_in, NFD_NUM_WQS);
+    NFD_RING_INIT(2, nfd_in, NFD_IN_NUM_WQS);
 #endif
 
 #if _nfp_has_island("pcie3")
-    NFD_RING_INIT(3, nfd_in, NFD_NUM_WQS);
+    NFD_RING_INIT(3, nfd_in, NFD_IN_NUM_WQS);
 #endif
 }
 

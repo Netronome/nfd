@@ -23,12 +23,14 @@
 #include <vnic/pci_out_cfg.h>
 #include <vnic/pci_out/cache_desc.h>
 #include <vnic/pci_out/pci_out_internal.h>
-#include <vnic/shared/nfd_shared.h>
-#include <vnic/shared/qc.h>
+/* #include <vnic/shared/nfd_shared.h> */
+#include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/pcie.h>
+#include <vnic/utils/qc.h>
 
 
 /* XXX move somewhere shared? */
@@ -153,7 +155,8 @@ stage_batch_setup_rings()
 {
     /* Input ring */
     in_ring_num = NFD_RING_ALLOC(PCIE_ISL, nfd_out, 1);
-    NFD_RING_CONFIGURE(PCIE_ISL, nfd_out);
+    /* NFD_RING_CONFIGURE(PCIE_ISL, nfd_out); */
+    MEM_RING_CONFIGURE(NFD_RING_BASE(PCIE_ISL, nfd_out), in_ring_num);
 }
 
 /**

@@ -12,17 +12,22 @@
 
 #include <nfp6000/nfp_me.h>
 
-#include <vnic/pci_in/notify.h>
+/* #include <vnic/pci_in/notify.h> */
 
 #include <nfp/mem_ring.h>
 
 #include <vnic/pci_in.h>
-#include <vnic/pci_in_cfg.h>
-#include <vnic/pci_in/pci_in_internal.h>
-#include <vnic/shared/nfd_shared.h>
-#include <vnic/shared/qc.h>
+#include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_internal.h>
+
+/* #include <vnic/pci_in.h> */
+/* #include <vnic/pci_in_cfg.h> */
+/* #include <vnic/pci_in/pci_in_internal.h> */
+/* #include <vnic/shared/nfd_shared.h> */
+
 /*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
 #include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
+#include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 
 /* XXX assume this runs on PCI.IN ME0 */
@@ -58,26 +63,34 @@ __export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING_SZ
 
 /* XXX declare dst_q counters in LM */
 
-NFD_RING_DECLARE(PCIE_ISL, nfd_in, NFD_NUM_WQS * NFD_WQ_SZ);
+NFD_RING_DECLARE(PCIE_ISL, nfd_in, NFD_IN_NUM_WQS * NFD_IN_WQ_SZ);
 static __shared mem_ring_addr_t wq_raddr;
 static __shared unsigned int wq_num_base;
 
+
+/**
+ * Perform shared configuration for notify
+ */
 void
 notify_setup_shared()
 {
     unsigned int wq;
-    wq_num_base = NFD_RING_ALLOC(PCIE_ISL, nfd_in, NFD_NUM_WQS);
+    wq_num_base = NFD_RING_ALLOC(PCIE_ISL, nfd_in, NFD_IN_NUM_WQS);
 
-    for (wq = 0; wq < NFD_NUM_WQS; wq++) {
+    for (wq = 0; wq < NFD_IN_NUM_WQS; wq++) {
         mem_workq_setup((wq_num_base | wq),
-                        &NFD_RING_BASE(PCIE_ISL, nfd_in)[wq * NFD_WQ_SZ /
+                        &NFD_RING_BASE(PCIE_ISL, nfd_in)[wq * NFD_IN_WQ_SZ /
                                                          sizeof(unsigned int)],
-                        NFD_WQ_SZ);
+                        NFD_IN_WQ_SZ);
     }
 
     wq_raddr = (unsigned long long) NFD_EMEM(PCIE_ISL) >> 8;
 }
 
+
+/**
+ * Perform per context initialisation (for CTX 1 to 7)
+ */
 void
 notify_setup()
 {
@@ -106,6 +119,13 @@ do {                                                                    \
 } while (0)
 
 
+/**
+ * Dequeue a batch of "issue_dma" messages and process that batch, incrementing
+ * TX.R for the queue and adding an output message to one of the PCI.IN work
+ * queueus.  An output message is only sent for the final message for a packet
+ * (EOP bit set).  A count of the total number of descriptors in the batch is
+ * added by the "issue_dma" block.
+ */
 void
 notify()
 {

@@ -15,20 +15,25 @@
 
 #include <nfp6000/nfp_me.h>
 
-#include <vnic/pci_in/issue_dma.h>
+/* #include <vnic/pci_in/issue_dma.h> */
+
+/* #include <vnic/pci_in.h> */
+/* #include <vnic/pci_in_cfg.h> */
+/* #include <vnic/pci_in/pci_in_internal.h> */
 
 #include <vnic/pci_in.h>
-#include <vnic/pci_in_cfg.h>
-#include <vnic/pci_in/pci_in_internal.h>
-#include <vnic/pci_in/precache_bufs.h>
-#include <vnic/shared/qc.h>
-#include <vnic/shared/nfd_cfg.h>
+#include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_internal.h>
+
+/* #include <vnic/pci_in/precache_bufs.h> */
+
+/* #include <vnic/shared/nfd_cfg.h> */
 /*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
 #include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
-#include <vnic/utils/pcie.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
-
+#include <vnic/utils/qc.h>
+#include <vnic/utils/pcie.h>
 
 struct _tx_desc_batch {
     struct nfd_in_tx_desc pkt0;
@@ -92,6 +97,9 @@ NN_RING_ZERO_PTRS;
 NN_RING_EMPTY_ASSERT_SET(0);
 
 
+/**
+ * Perform shared configuration for issue_dma
+ */
 void
 issue_dma_setup_shared()
 {
@@ -155,6 +163,10 @@ issue_dma_setup_shared()
     reorder_start(NFD_IN_ISSUE_START_CTX, &dma_order_sig);
 }
 
+
+/**
+ * Perform per context initialisation (for CTX 1 to 7)
+ */
 void
 issue_dma_setup()
 {
@@ -257,6 +269,15 @@ do {                                                                    \
 } while (0)
 
 
+/**
+ * Fetch batch messages from the NN ring and process them, issuing up to
+ * PCI_IN_MAX_BATCH_SZ DMAs, and placing a batch of messages onto the
+ * "nfd_in_issued_ring".  Messages are only dequeued from the NN ring when the
+ * "gather_dma_seq_compl" sequence number indicates that it is safe to do so.
+ * The message processing stalls until "data_dma_seq_safe" and
+ * "data_dma_seq_issued" indicate that it is safe to continue.  Two ordering
+ * stages ensure that packet DMAs are issued in sequence.
+ */
 void
 issue_dma()
 {
@@ -266,7 +287,7 @@ issue_dma()
 
     __gpr struct nfd_in_issued_desc issued_tmp;
 
-    struct batch_desc batch;
+    struct nfd_in_batch_desc batch;
     unsigned int queue;
 
 

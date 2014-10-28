@@ -11,10 +11,10 @@
 #include <nfp/me.h>
 #include <nfp/mem_ring.h>
 
-#include <vnic/pci_in/gather_seq_recv.h>
-#include <vnic/pci_in/issue_dma.h>
-#include <vnic/pci_in/issue_dma_status.h>
-#include <vnic/pci_in/precache_bufs.h>
+#include <vnic/pci_in/gather_seq_recv.c>
+#include <vnic/pci_in/issue_dma.c>
+#include <vnic/pci_in/issue_dma_status.c>
+#include <vnic/pci_in/precache_bufs.c>
 /* #include <vnic/shared/nfd_cfg.h> */
 
 int

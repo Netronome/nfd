@@ -12,11 +12,11 @@
 
 #include <nfp6000/nfp_qc.h>
 
-#include <vnic/pci_in/distr_seqn.h>
-#include <vnic/pci_in/gather.h>
-#include <vnic/pci_in/gather_status.h>
-#include <vnic/pci_in/notify.h>
-#include <vnic/pci_in/service_qc.h>
+#include <vnic/pci_in/distr_seqn.c>
+#include <vnic/pci_in/gather.c>
+#include <vnic/pci_in/gather_status.c>
+#include <vnic/pci_in/notify.c>
+#include <vnic/pci_in/service_qc.c>
 #include <vnic/shared/nfd_cfg_internal.c>
 
 /*

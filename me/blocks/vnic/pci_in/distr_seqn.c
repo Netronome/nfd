@@ -12,15 +12,26 @@
 
 #include <nfp6000/nfp_cls.h>
 
-#include <vnic/pci_in/distr_seqn.h>
+/* #include <vnic/pci_in/distr_seqn.h> */
 
-#include <vnic/pci_in_cfg.h>
+/* #include <vnic/pci_in_cfg.h> */
+
+#include <vnic/shared/nfd_internal.h>
 
 /*
  * Temporary header includes
  */
 #include <nfp/me.h>             /* TEMP */
 #include <nfp6000/nfp_me.h>     /* TEMP */
+
+
+/**
+ * The distr_seqn block declares three sequence numbers: "gather_dma_seq_compl",
+ * "data_dma_seq_compl", and "data_dma_seq_served".  The "compl" sequence
+ * numbers are reconstructed from DMA events in this block.  The "served"
+ * sequence number is taken from the "notify" block.  It is pushed if it has
+ * changed.
+ */
 
 /* Signals and transfer registers for receiving DMA events */
 static volatile __xread unsigned int nfd_in_gather_event_xfer;
@@ -83,6 +94,14 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
     };
 }
 
+
+/**
+ * Initialise DMA sequence number distribution state
+ *
+ * This method sets up the shared transfer registers and autopushes
+ * necessary for monitoring and distributing DMA sequence numbers.
+ */
+
 void
 distr_seqn_setup()
 {
@@ -141,6 +160,13 @@ distr_seqn_setup()
         NFD_IN_DATA_EVENT_FILTER);
 }
 
+
+/**
+ * Distribute DMA sequence numbers
+ *
+ * Checks for new sequence number events, updates internal state and
+ * pushes the sequence number to listening MEs.
+ */
 void
 distr_seqn()
 {

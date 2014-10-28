@@ -12,9 +12,11 @@
 
 #include <vnic/pci_in/gather_status.h>
 
-#include <vnic/pci_in_cfg.h>
-#include <vnic/pci_in/pci_in_internal.h>
-#include <vnic/shared/qc.h>
+/* #include <vnic/pci_in_cfg.h> */
+/* #include <vnic/pci_in/pci_in_internal.h> */
+#include <vnic/pci_in.h>
+#include <vnic/shared/nfd_internal.h>
+#include <vnic/utils/qc.h>
 
 /**
  * Gather state
