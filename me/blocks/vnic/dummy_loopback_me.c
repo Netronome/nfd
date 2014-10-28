@@ -39,8 +39,8 @@
 __shared unsigned long long nrecv = 0;
 __shared unsigned long long nsent = 0;
 volatile __shared unsigned long long nfail = 0;
-__shared __lmem unsigned int cached_credits[MAX_TX_QUEUES];
-__shared __lmem unsigned int fetched_credits[MAX_TX_QUEUES];
+__shared __lmem unsigned int cached_credits[NFD_IN_MAX_QUEUES];
+__shared __lmem unsigned int fetched_credits[NFD_IN_MAX_QUEUES];
 
 
 /* Ordering  */
@@ -51,7 +51,7 @@ static SIGNAL send_order_sig;
 
 void main(void)
 {
-    __xread struct nfd_pci_in_pkt_desc pci_in_meta;
+    __xread struct nfd_in_pkt_desc nfd_in_meta;
     __gpr struct nfd_pci_out_input pci_out_desc;
     __xrw struct nfd_pci_out_input pci_out_desc_xfer[2];
     __gpr struct nbi_meta_pkt_info pkt_info;
@@ -79,7 +79,7 @@ void main(void)
         local_csr_write(NFP_MECSR_MAILBOX_1, 0);
         local_csr_write(NFP_MECSR_MAILBOX_2, 0);
 
-        nfd_pkt_recv_init();
+        nfd_in_recv_init();
         nfd_pkt_send_init();
     }
 
@@ -94,7 +94,7 @@ void main(void)
 
     for (;;) {
         /* Receive a packet */
-        __nfd_pkt_recv(PCIE_ISL, DUMMY_LOOPBACK_WQ, &pci_in_meta,
+        __nfd_in_recv(PCIE_ISL, DUMMY_LOOPBACK_WQ, &nfd_in_meta,
                        sig_done, &get_sig);
         wait_for_all(&get_sig, &get_order_sig);
         signal_next_ctx(__signal_number(&get_order_sig));
@@ -104,10 +104,10 @@ void main(void)
         local_csr_write(NFP_MECSR_MAILBOX_1, nrecv & 0xffffffff);
 
         /* Extract pkt_info */
-        nfd_fill_meta(&pkt_info, &pci_in_meta);
+        nfd_in_fill_meta(&pkt_info, &nfd_in_meta);
 
         /* Increment the queue number within the vnic */
-        pci_in_map_queue(&vnic, &queue, pci_in_meta.q_num);
+        nfd_in_map_queue(&vnic, &queue, nfd_in_meta.q_num);
         queue = queue + 1;
         queue = pci_out_map_queue(vnic, queue);
 
@@ -139,11 +139,11 @@ void main(void)
         cached_credits[queue] = queue_credits;
 
         /* Return the packet */
-        pci_out_fill_desc(&pci_out_desc, &pkt_info, 0, 0, TX_DATA_OFFSET,
-                          pci_in_meta.offset);
+        pci_out_fill_desc(&pci_out_desc, &pkt_info, 0, 0, NFD_IN_DATA_OFFSET,
+                          nfd_in_meta.offset);
 
-        pci_out_dummy_vlan(&pci_out_desc, pci_in_meta.vlan,
-                           pci_in_meta.flags);
+        pci_out_dummy_vlan(&pci_out_desc, nfd_in_meta.vlan,
+                           nfd_in_meta.flags);
 
         __pci_out_send(PCIE_ISL, queue, pci_out_desc_xfer, &pci_out_desc,
                        sig_done, &send_sig);

@@ -11,7 +11,7 @@
 #define STATUS_QUEUE_START1      20 /* XXX avoid name clash, add rtsym rather */
 #define STATUS_Q_SEL_START       31
 
-struct tx_issue_dma_status {
+struct nfd_in_issue_dma_status {
     unsigned int gather_dma_seq_compl;
     unsigned int gather_dma_seq_serv;
     unsigned int spare;

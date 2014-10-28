@@ -31,7 +31,7 @@ static volatile SIGNAL tx_ap_s3;
 __shared __gpr struct qc_bitmask active_bmsk;
 __shared __gpr struct qc_bitmask pending_bmsk;
 
-__shared __lmem struct tx_queue_info queue_data[MAX_TX_QUEUES];
+__shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
 
 /* XXX rename */
 void
@@ -50,11 +50,12 @@ service_qc_setup ()
     init_bitmasks(&active_bmsk);
     init_bitmasks(&pending_bmsk);
 
-    /* Configure TXQ autopush filters */
-    init_bitmask_filters(&tx_ap_xfers, &tx_ap_s0, &tx_ap_s1, &tx_ap_s2,
-                         &tx_ap_s3,(TXQ_EVENT_DATA<<6) | TXQ_START,
+    /* Configure nfd_in autopush filters */
+    init_bitmask_filters(&tx_ap_xfers, &tx_ap_s0, &tx_ap_s1,
+                         &tx_ap_s2, &tx_ap_s3,
+                         (NFD_IN_Q_EVENT_DATA<<6) | NFD_IN_Q_START,
                          NFP_EVENT_TYPE_FIFO_NOT_EMPTY,
-                         TXQ_EVENT_START);
+                         NFD_IN_Q_EVENT_START);
 
 
     /* XXX temporarily setup a general last event filter to see what events
@@ -87,7 +88,7 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
     bmsk_queue = map_natural_to_bitmask(queue);
 
     txq.watermark    = NFP_QC_STS_HI_WATERMARK_4;
-    txq.event_data   = TXQ_EVENT_DATA;
+    txq.event_data   = NFD_IN_Q_EVENT_DATA;
     txq.ptr          = 0;
 
     if (cfg_msg->up_bit) {
@@ -108,7 +109,7 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
 
         txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY;
         txq.size         = ring_sz - 8; /* XXX add define for size shift */
-        qc_init_queue(PCIE_ISL, (queue<<1) | TXQ_START, &txq);
+        qc_init_queue(PCIE_ISL, (queue<<1) | NFD_IN_Q_START, &txq);
     } else {
         /* Down the queue:
          * - Prevent it issuing events
@@ -129,7 +130,7 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
         txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
         txq.size         = 0;
-        qc_init_queue(PCIE_ISL, (queue<<1) | TXQ_START, &txq);
+        qc_init_queue(PCIE_ISL, (queue<<1) | NFD_IN_Q_START, &txq);
     }
 }
 
@@ -140,15 +141,15 @@ service_qc()
 
     /* Check bitmasks */
     check_bitmask_filters(&active_bmsk, &tx_ap_xfers, &tx_ap_s0, &tx_ap_s1,
-              &tx_ap_s2, &tx_ap_s3, TXQ_EVENT_START);
+              &tx_ap_s2, &tx_ap_s3, NFD_IN_Q_EVENT_START);
 
     /* Check queues */
     c.pcie_isl =       PCIE_ISL;
-    c.max_retries =    TX_MAX_RETRIES;
-    c.batch_sz =       TX_BATCH_SZ;
-    c.base_queue_num = TXQ_START;
-    c.pending_test =   TX_PENDING_TEST;
-    c.event_data =     TXQ_EVENT_DATA;
+    c.max_retries =    NFD_IN_MAX_RETRIES;
+    c.batch_sz =       NFD_IN_BATCH_SZ;
+    c.base_queue_num = NFD_IN_Q_START;
+    c.pending_test =   NFD_IN_PENDING_TEST;
+    c.event_data =     NFD_IN_Q_EVENT_DATA;
     c.event_type =     NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY;
     check_queues(&queue_data, &active_bmsk, &pending_bmsk, &c);
 }

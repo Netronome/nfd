@@ -18,10 +18,10 @@
 #define NFD_WQ_NUM_IND(_isl, _q)    (NFD_WQS_NUM_PCIE##_isl | _q)
 #define NFD_WQ_NUM(_isl, _q)        NFD_WQ_NUM_IND(_isl, _q)
 
-#define NFD_WQS_DECLARE_IND(_isl)                                   \
-  __export __emem __align(NFD_NUM_WQS * NFD_WQ_SZ *                 \
-                          sizeof(struct nfd_pci_in_issued_desc))    \
-      struct nfd_pci_in_issued_desc                                 \
+#define NFD_WQS_DECLARE_IND(_isl)                               \
+  __export __emem __align(NFD_NUM_WQS * NFD_WQ_SZ *             \
+                          sizeof(struct nfd_in_issued_desc))    \
+      struct nfd_in_issued_desc                                 \
       NFD_WQ_BASE(_isl)[NFD_NUM_WQS][NFD_WQ_SZ]
 
 #define NFD_WQS_DECLARE(_isl) NFD_WQS_DECLARE_IND(_isl)

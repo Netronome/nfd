@@ -27,7 +27,7 @@
  *      sp0 - sp3 -> spare
  *      E -> End of packet
  */
-struct nfd_pci_in_tx_desc {
+struct nfd_in_tx_desc {
     union {
         struct {
             unsigned int eop:1;
@@ -67,7 +67,7 @@ struct nfd_pci_in_tx_desc {
  *      sp0 - sp3 -> spare
  * XXX use compact buffer address?
  */
-struct nfd_pci_in_pkt_desc {
+struct nfd_in_pkt_desc {
     union {
         struct {
             unsigned int intf:2;
@@ -92,35 +92,35 @@ struct nfd_pci_in_pkt_desc {
  *
  * This method should be called from a single context, during initialisation.
  */
-__intrinsic void nfd_pkt_recv_init();
+__intrinsic void nfd_in_recv_init();
 
 
 /**
  * Receive a packet from PCI.IN
  * @param pcie_isl      PCIe island to access
  * @param workq         work queue from the given island to access
- * @param pci_in_meta   PCI.IN descriptor for the packet
+ * @param nfd_in_meta   PCI.IN descriptor for the packet
  * @param sync          type of synchronization
  * @param sig           signal to report completion
  */
-__intrinsic void __nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
-                                __xread struct nfd_pci_in_pkt_desc *pci_in_meta,
-                                sync_t sync, SIGNAL *sig);
+__intrinsic void __nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
+                               __xread struct nfd_in_pkt_desc *nfd_in_meta,
+                               sync_t sync, SIGNAL *sig);
 
-__intrinsic void nfd_pkt_recv(unsigned int pcie_isl, unsigned int workq,
-                              __xread struct nfd_pci_in_pkt_desc *pci_in_meta);
+__intrinsic void nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
+                             __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
 
 /**
- * Populate a nfd_pci_in_pkt_desc struct from the NFD meta data
+ * Populate a nfd_in_pkt_desc struct from the NFD meta data
  * @param desc      PCI.IN descriptor for the packet
  * @param pkt_info  nbi_meta_pkt_info struct for the packet
  *
  * "pkt_info->isl", "pkt_info->pnum", and "pkt_info->split" are set to zero
  * as PCI.IN returns an "MU only" packet.
  */
-__intrinsic void nfd_fill_meta(void *pkt_info,
-                               __xread struct nfd_pci_in_pkt_desc *pci_in_meta);
+__intrinsic void nfd_in_fill_meta(void *pkt_info,
+                                  __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
 
 /**
@@ -129,11 +129,11 @@ __intrinsic void nfd_fill_meta(void *pkt_info,
  * @param queue     queue number within the vNIC
  * @param nfd_queue queue number within NFD "bitmask" numbering system
  */
-void pci_in_map_queue(unsigned int *vnic, unsigned int *queue,
+void nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
                       unsigned int nfd_queue);
 
-__intrinsic unsigned int pci_in_pkt_len(
-    __xread struct nfd_pci_in_pkt_desc *pci_in_meta);
+__intrinsic unsigned int nfd_in_pkt_len(
+    __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_H_ */

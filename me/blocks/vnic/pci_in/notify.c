@@ -28,17 +28,17 @@
 /* XXX assume this runs on PCI.IN ME0 */
 
 struct _issued_pkt_batch {
-    struct nfd_pci_in_issued_desc pkt0;
-    struct nfd_pci_in_issued_desc pkt1;
-    struct nfd_pci_in_issued_desc pkt2;
-    struct nfd_pci_in_issued_desc pkt3;
+    struct nfd_in_issued_desc pkt0;
+    struct nfd_in_issued_desc pkt1;
+    struct nfd_in_issued_desc pkt2;
+    struct nfd_in_issued_desc pkt3;
 };
 
 struct _pkt_desc_batch {
-    struct nfd_pci_in_pkt_desc pkt0;
-    struct nfd_pci_in_pkt_desc pkt1;
-    struct nfd_pci_in_pkt_desc pkt2;
-    struct nfd_pci_in_pkt_desc pkt3;
+    struct nfd_in_pkt_desc pkt0;
+    struct nfd_in_pkt_desc pkt1;
+    struct nfd_in_pkt_desc pkt2;
+    struct nfd_in_pkt_desc pkt3;
 };
 
 extern __shared __gpr unsigned int data_dma_seq_served;
@@ -53,13 +53,12 @@ __xwrite unsigned int qc_xfer;
 
 /* XXX use CLS ring API when available */
 /* XXX THS-50 workaround, use CTM instead of CLS rings */
-__export __ctm
-    __align(sizeof(struct nfd_pci_in_issued_desc) * TX_ISSUED_RING_SZ)
-    struct nfd_pci_in_issued_desc tx_issued_ring[TX_ISSUED_RING_SZ];
+__export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING_SZ)
+    struct nfd_in_issued_desc nfd_in_issued_ring[NFD_IN_ISSUED_RING_SZ];
 
 /* XXX declare dst_q counters in LM */
 
-NFD_RING_DECLARE(PCIE_ISL, pci_in, NFD_NUM_WQS * NFD_WQ_SZ);
+NFD_RING_DECLARE(PCIE_ISL, nfd_in, NFD_NUM_WQS * NFD_WQ_SZ);
 static __shared mem_ring_addr_t wq_raddr;
 static __shared unsigned int wq_num_base;
 
@@ -67,11 +66,11 @@ void
 notify_setup_shared()
 {
     unsigned int wq;
-    wq_num_base = NFD_RING_ALLOC(PCIE_ISL, pci_in, NFD_NUM_WQS);
+    wq_num_base = NFD_RING_ALLOC(PCIE_ISL, nfd_in, NFD_NUM_WQS);
 
     for (wq = 0; wq < NFD_NUM_WQS; wq++) {
         mem_workq_setup((wq_num_base | wq),
-                        &NFD_RING_BASE(PCIE_ISL, pci_in)[wq * NFD_WQ_SZ /
+                        &NFD_RING_BASE(PCIE_ISL, nfd_in)[wq * NFD_WQ_SZ /
                                                          sizeof(unsigned int)],
                         NFD_WQ_SZ);
     }
@@ -116,11 +115,11 @@ notify()
     unsigned int qc_queue;
 
     unsigned int dst_q;
-    unsigned int out_msg_sz = sizeof(struct nfd_pci_in_pkt_desc);
+    unsigned int out_msg_sz = sizeof(struct nfd_in_pkt_desc);
 
     __xread struct _issued_pkt_batch batch_in;
     struct _pkt_desc_batch batch_tmp;
-    struct nfd_pci_in_pkt_desc pkt_desc_tmp;
+    struct nfd_in_pkt_desc pkt_desc_tmp;
 
 
     /* Is there a batch to process
@@ -134,9 +133,10 @@ notify()
         data_dma_seq_served += 1;
 
         /* XXX THS-50 workaround */
-        /* cls_ring_get(TX_ISSUED_RING_NUM, &batch_in, sizeof batch_in, */
+        /* cls_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in, sizeof batch_in, */
         /*              &msg_sig); */
-        ctm_ring_get(TX_ISSUED_RING_NUM, &batch_in, sizeof batch_in, &msg_sig);
+        ctm_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in, sizeof batch_in,
+                     &msg_sig);
 
         __asm {
             ctx_arb[--], defer[1];
@@ -156,7 +156,7 @@ notify()
         n_batch = batch_in.pkt0.num_batch;
 
 #ifdef NFD_VNIC_DBG_CHKS
-        if (n_batch == 0 || n_batch > MAX_TX_BATCH_SZ) {
+        if (n_batch == 0 || n_batch > NFD_IN_MAX_BATCH_SZ) {
             halt();
         }
 #endif

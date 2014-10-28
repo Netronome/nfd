@@ -32,7 +32,7 @@ extern __shared __gpr unsigned int data_dma_seq_safe;
 /**
  * Per queue state to show
  */
-extern __shared __lmem struct tx_dma_state queue_data[MAX_TX_QUEUES];
+extern __shared __lmem struct nfd_in_dma_state queue_data[NFD_IN_MAX_QUEUES];
 
 
 #define _ZERO_ARRAY     {0, 0, 0, 0, 0, 0, 0, 0}
@@ -41,8 +41,8 @@ extern __shared __lmem struct tx_dma_state queue_data[MAX_TX_QUEUES];
  * Xfers to display state
  */
 static __xread unsigned int status_queue_sel = 0;
-static __xwrite struct tx_dma_state status_queue_info = {0, 0, 0, 0};
-static __xwrite struct tx_issue_dma_status status_issued = _ZERO_ARRAY;
+static __xwrite struct nfd_in_dma_state status_queue_info = {0, 0, 0, 0};
+static __xwrite struct nfd_in_issue_dma_status status_issued = _ZERO_ARRAY;
 
 SIGNAL status_throttle;
 
@@ -57,7 +57,7 @@ issue_dma_status_setup()
     __assign_relative_register(&status_issued, STATUS_ISSUE_DMA_START);
     __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
 
-    set_alarm(TX_DBG_ISSUE_DMA_INTVL, &status_throttle);
+    set_alarm(NFD_IN_DBG_ISSUE_DMA_INTVL, &status_throttle);
 }
 
 
@@ -97,6 +97,6 @@ issue_dma_status()
         /*
          * Reset the alarm
          */
-        set_alarm(TX_DBG_ISSUE_DMA_INTVL, &status_throttle);
+        set_alarm(NFD_IN_DBG_ISSUE_DMA_INTVL, &status_throttle);
     }
 }

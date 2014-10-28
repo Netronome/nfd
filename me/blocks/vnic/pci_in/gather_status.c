@@ -27,7 +27,7 @@ extern __shared __gpr unsigned int gather_dma_seq_compl;
 /**
  * Per queue state to show
  */
-extern __shared __lmem struct tx_queue_info queue_data[MAX_TX_QUEUES];
+extern __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
 
 /**
  * Notify state
@@ -42,9 +42,9 @@ extern __shared __gpr unsigned int data_dma_seq_served;
  * Xfers to display state
  */
 static __xread unsigned int status_queue_sel = 0;
-static __xwrite struct tx_queue_info status_queue_info = _ZERO_ARRAY;
-static __xwrite struct tx_gather_status status_gather = _ZERO_ARRAY;
-static __xwrite struct tx_notify_status status_notify = {0, 0};
+static __xwrite struct nfd_in_queue_info status_queue_info = _ZERO_ARRAY;
+static __xwrite struct nfd_in_gather_status status_gather = _ZERO_ARRAY;
+static __xwrite struct nfd_in_notify_status status_notify = {0, 0};
 
 SIGNAL status_throttle;
 
@@ -60,7 +60,7 @@ gather_status_setup()
     __assign_relative_register(&status_notify, STATUS_NOTIFY_START);
     __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
 
-    set_alarm(TX_DBG_GATHER_INTVL, &status_throttle);
+    set_alarm(NFD_IN_DBG_GATHER_INTVL, &status_throttle);
 }
 
 
@@ -108,6 +108,6 @@ gather_status()
         /*
          * Reset the alarm
          */
-        set_alarm(TX_DBG_GATHER_INTVL, &status_throttle);
+        set_alarm(NFD_IN_DBG_GATHER_INTVL, &status_throttle);
     }
 }

@@ -22,7 +22,7 @@
 
 /* Configure *l$index3 to be a global pointer, and
  * set up a convenience define */
-#define TX_BUF_STORE_PTR *l$index3
+#define NFD_IN_BUF_STORE_PTR *l$index3
 _init_csr("mecsr:CtxEnables.LMAddr3Global 1");
 
 struct precache_state {
@@ -31,12 +31,12 @@ struct precache_state {
 };
 
 
-__shared __lmem unsigned int buf_store[TX_BUF_STORE_SZ];
+__shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
 static struct precache_state state = {0, 0};
 static SIGNAL_PAIR precache_sig;
 
-static __xread unsigned int bufs_rd[TX_BUF_RECACHE_WM];
+static __xread unsigned int bufs_rd[NFD_IN_BUF_RECACHE_WM];
 static unsigned int blm_queue_addr;
 static unsigned int blm_queue_num;
 
@@ -57,9 +57,9 @@ __shared __gpr unsigned int data_dma_seq_safe = 0;
  *
  * In this scheme, buf_store[0] never holds a valid buffer.  The number
  * of buffers available is (buf_store_curr - &buf_store[1])/4.  The
- * number of buffers that can be added is (TX_BUF_STORE_SZ -
+ * number of buffers that can be added is (NFD_IN_BUF_STORE_SZ -
  * buf_store_curr + &buf_store[0])/4.  Refills are done if this exceeds
- * TX_BUF_RECACHE_WM/4, where the "/4" can be dropped through out.
+ * NFD_IN_BUF_RECACHE_WM/4, where the "/4" can be dropped through out.
  *
  * No count of the buffers available is maintained.  Instead, the
  * number of buffers on hand is periodically used to compute a "safe
@@ -73,7 +73,7 @@ _precache_buf_bytes_used()
     unsigned int ret;
 
     ret = local_csr_read(NFP_MECSR_ACTIVE_LM_ADDR_3);
-    ret = (sizeof(unsigned int) * TX_BUF_STORE_SZ) - (ret - buf_store_start);
+    ret = (sizeof(unsigned int) * NFD_IN_BUF_STORE_SZ) - (ret - buf_store_start);
     return ret;
 }
 
@@ -85,29 +85,29 @@ _precache_bufs_copy(unsigned int num)
     ctassert((num == 16) || (num == 8) || (num == 4));
 
     /* Move to empty slot */
-    __asm alu[--, --, b, TX_BUF_STORE_PTR++];
+    __asm alu[--, --, b, NFD_IN_BUF_STORE_PTR++];
 
     /* Perform bulk copy */
     switch(num) {
     case 16:
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
     case 8:
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
     case 4:
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[TX_BUF_STORE_PTR, --, b, *$index];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
+        __asm alu[NFD_IN_BUF_STORE_PTR, --, b, *$index];
     }
 }
 
@@ -122,8 +122,8 @@ precache_bufs_setup()
     cfg.lm_addr_3_glob = 1;
     local_csr_write(NFP_MECSR_CTX_ENABLES, cfg.__raw);
 
-    blm_queue_addr = ((unsigned long long) TX_BLM_RADDR >> 8);
-    blm_queue_num = NFD_BLM_Q_ALLOC(TX_BLM_POOL);
+    blm_queue_addr = ((unsigned long long) NFD_IN_BLM_RADDR >> 8);
+    blm_queue_num = NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 
     buf_store_start = (unsigned int) &buf_store;
     local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, buf_store_start);
@@ -149,7 +149,7 @@ precache_bufs()
 
         if (!signal_test(&precache_sig.odd)) {
             /* Fetch succeeded */
-            _precache_bufs_copy(TX_BUF_RECACHE_WM);
+            _precache_bufs_copy(NFD_IN_BUF_RECACHE_WM);
             __implicit_read(bufs_rd, sizeof bufs_rd);
 
             precache_bufs_compute_seq_safe();
@@ -158,7 +158,7 @@ precache_bufs()
 
     if (!state.pending_fetch) {
         if (_precache_buf_bytes_used() >
-            (sizeof (unsigned int) * TX_BUF_RECACHE_WM)) {
+            (sizeof (unsigned int) * NFD_IN_BUF_RECACHE_WM)) {
             /* Issue the fetch */
             __mem_ring_get(blm_queue_num, blm_queue_addr, bufs_rd,
                            sizeof bufs_rd, sizeof bufs_rd,
@@ -174,7 +174,7 @@ precache_bufs_use()
 {
     unsigned int ret;
 
-    __asm alu[ret, --, b, TX_BUF_STORE_PTR--];
+    __asm alu[ret, --, b, NFD_IN_BUF_STORE_PTR--];
     return ret;
 }
 
@@ -196,11 +196,12 @@ precache_bufs_compute_seq_safe()
 {
     unsigned int min_bat, buf_bat, dma_bat, ring_bat;
 
-    buf_bat = precache_bufs_avail() / MAX_TX_BATCH_SZ;
-    dma_bat = (TX_DATA_MAX_IN_FLIGHT / MAX_TX_BATCH_SZ -
+    buf_bat = precache_bufs_avail() / NFD_IN_MAX_BATCH_SZ;
+    dma_bat = (NFD_IN_DATA_MAX_IN_FLIGHT / NFD_IN_MAX_BATCH_SZ -
                data_dma_seq_issued + data_dma_seq_compl);
-    ring_bat = ((TX_ISSUED_RING_SZ - TX_ISSUED_RING_RES) / MAX_TX_BATCH_SZ -
-                data_dma_seq_issued + data_dma_seq_served);
+    ring_bat = ((NFD_IN_ISSUED_RING_SZ - NFD_IN_ISSUED_RING_RES) /
+                NFD_IN_MAX_BATCH_SZ);
+    ring_bat = ring_bat - data_dma_seq_issued + data_dma_seq_served;
 
     /* Perform min(buf_bat, dma_bat, ring_bat) */
     min_bat = buf_bat;

@@ -13,7 +13,7 @@
 #define STATUS_Q_SEL_START       31
 
 /* XXX the dma_compl value is already in xfers for the reflect */
-struct tx_gather_status {
+struct nfd_in_gather_status {
     unsigned int actv_bmsk_hi;
     unsigned int actv_bmsk_lo;
     unsigned int actv_bmsk_proc;
@@ -25,7 +25,7 @@ struct tx_gather_status {
 };
 
 /* XXX the dma_issued and dma_compl are already in xfers for the reflect */
-struct tx_notify_status {
+struct nfd_in_notify_status {
     unsigned int dma_compl;
     unsigned int dma_served;
 };

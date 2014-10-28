@@ -7,7 +7,7 @@
 #ifndef _BLOCKS__VNIC_PCI_IN_INTERNAL_H_
 #define _BLOCKS__VNIC_PCI_IN_INTERNAL_H_
 
-struct tx_queue_info {
+struct nfd_in_queue_info {
     unsigned int tx_w;
     unsigned int tx_s;
     unsigned int ring_sz_msk;
@@ -19,7 +19,7 @@ struct tx_queue_info {
 };
 
 
-struct tx_dma_state {
+struct nfd_in_dma_state {
     unsigned int sp0:24;
     unsigned int rid:8;
     unsigned int cont:1;
@@ -60,7 +60,7 @@ struct batch_desc {
  *      sp0 - sp3 -> spare
  *      E -> End of packet
  */
-struct nfd_pci_in_issued_desc {
+struct nfd_in_issued_desc {
     union {
         struct {
             unsigned int eop:1;
