@@ -83,7 +83,7 @@ struct nfd_in_issued_desc {
 };
 
 
-/* NB: this struct must be compatible with vnic_cfg_msg */
+/* NB: this struct must be compatible with nfd_cfg_msg */
 struct pci_in_cfg_msg {
     union {
         struct {

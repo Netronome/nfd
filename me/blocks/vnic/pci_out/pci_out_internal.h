@@ -44,7 +44,7 @@ struct nfd_out_fl_desc {
 };
 
 
-/* NB: this struct must be compatible with vnic_cfg_msg */
+/* NB: this struct must be compatible with nfd_cfg_msg */
 struct nfd_out_cfg_msg {
     union {
         struct {

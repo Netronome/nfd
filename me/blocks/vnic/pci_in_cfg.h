@@ -64,7 +64,7 @@
 #define NFD_IN_DATA_EVENT_FILTER    10
 
 /* XXX move */
-#define VNIC_CFG_PCI_OUT(_x)    __nfp_idstr2meid("pcie##_x##.me0")
+#define NFD_CFG_PCI_OUT(_x)          __nfp_idstr2meid("pcie##_x##.me0")
 
 
 /* Debug defines */

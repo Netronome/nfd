@@ -16,7 +16,7 @@
 #include <vnic/pci_in_cfg.h>
 #include <vnic/pci_in/pci_in_internal.h>
 #include <vnic/shared/qc.h>
-#include <vnic/shared/vnic_cfg.h>
+#include <vnic/shared/nfd_cfg.h>
 
 /**
  * State variables for PCI.IN queue controller accesses
@@ -70,7 +70,7 @@ service_qc_setup ()
 
 
 __intrinsic void
-service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
+service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 {
     struct qc_queue_config txq;
     unsigned int queue;
@@ -78,7 +78,7 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
     unsigned int ring_base[2];
     __gpr unsigned int bmsk_queue;
 
-    vnic_cfg_proc_msg(cfg_msg, &queue, &ring_sz, ring_base, VNIC_CFG_PCI_IN);
+    nfd_cfg_proc_msg(cfg_msg, &queue, &ring_sz, ring_base, NFD_CFG_PCI_IN);
 
     if (cfg_msg->error || !cfg_msg->interested) {
         return;
@@ -101,7 +101,7 @@ service_qc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
         queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
 #ifdef NFD_VNIC_VF
-        queue_data[bmsk_queue].requester_id += VNIC_CFG_VF_OFFSET;
+        queue_data[bmsk_queue].requester_id += NFD_CFG_VF_OFFSET;
 #endif
         queue_data[bmsk_queue].spare0 = 0;
         queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;

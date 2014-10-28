@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
  *
- * @file          blocks/vnic/shared/vnic_cfg.c
+ * @file          blocks/vnic/shared/nfd_cfg.c
  * @brief         An API to manage access to NFD configuration data
  */
 
@@ -18,7 +18,7 @@
 #include <nfp6000/nfp_pcie.h>
 #include <nfp6000/nfp_qc.h>
 
-#include <vnic/shared/vnic_cfg.h>
+#include <vnic/shared/nfd_cfg.h>
 
 #include <vnic/shared/qc.h>
 #include <vnic/utils/mem_bulk32.h>
@@ -26,8 +26,8 @@
 
 #include <ns_vnic_ctrl.h>
 
-#define VNIC_CFG_BASE_IND(_x) vnic_cfg_pcie##_x##_base
-#define VNIC_CFG_BASE(_x) VNIC_CFG_BASE_IND(_x)
+#define NFD_CFG_BASE_IND(_x) nfd_cfg_pcie##_x##_base
+#define NFD_CFG_BASE(_x) NFD_CFG_BASE_IND(_x)
 
 /*
  * Compute constants to help map from the configuration bitmask
@@ -38,21 +38,21 @@
  * two vNICs with 32 queues each), so #if-#elif-#else statements are used.
  */
 #if ((MAX_VNICS == 1) || (MAX_VNICS * MAX_VNIC_QUEUES <= 16))
-#define VNIC_CFG_BMSK_TEST_MSK  0
-#define VNIC_CFG_BMSK_SPACING   0
+#define NFD_CFG_BMSK_TEST_MSK  0
+#define NFD_CFG_BMSK_SPACING   0
 
 #elif ((MAX_VNICS == 2) || (MAX_VNICS * MAX_VNIC_QUEUES <= 32))
-#define VNIC_CFG_BMSK_TEST_MSK  1
+#define NFD_CFG_BMSK_TEST_MSK  1
 
 #if MAX_VNIC_QUEUES == 32
-#define VNIC_CFG_BMSK_SPACING   64
+#define NFD_CFG_BMSK_SPACING   64
 #else
-#define VNIC_CFG_BMSK_SPACING   32
+#define NFD_CFG_BMSK_SPACING   32
 #endif
 
 #else
-#define VNIC_CFG_BMSK_TEST_MSK  3
-#define VNIC_CFG_BMSK_SPACING   32
+#define NFD_CFG_BMSK_TEST_MSK  3
+#define NFD_CFG_BMSK_SPACING   32
 #endif
 
 static SIGNAL cfg_ap_sig;
@@ -60,15 +60,15 @@ static __xread unsigned int cfg_ap_xfer;
 static volatile __gpr unsigned int cfg_vnic_bmsk = 0;
 static __gpr unsigned int cfg_vnic_queue_test_cnt = 0;
 
-__visible SIGNAL VNIC_CFG_SIG;
+__visible SIGNAL NFD_CFG_SIG;
 
-#ifdef VNIC_CFG_SIG_NEXT_ME
-__remote SIGNAL VNIC_CFG_SIG_NEXT_ME;
+#ifdef NFD_CFG_SIG_NEXT_ME
+__remote SIGNAL NFD_CFG_SIG_NEXT_ME;
 #endif
 
 /* XXX remove EMU specification */
 __export __emem_n(2) __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS) char
-    VNIC_CFG_BASE(PCIE_ISL)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
+    NFD_CFG_BASE(PCIE_ISL)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
 
 static unsigned int cfg_ring_enables[2] = {0, 0};
 __xread unsigned int cfg_ring_addr[2] = {0, 0};
@@ -124,7 +124,7 @@ _ffs(unsigned int data)
  * gives us more control over the code generated than trying to use a 64bit
  * type and regular c instructions. */
 __intrinsic int
-_ring_enables_test(struct vnic_cfg_msg *cfg_msg)
+_ring_enables_test(struct nfd_cfg_msg *cfg_msg)
 {
     /* XXX handle a few special cases efficiently: <= 32 queues, and 1 queue */
     /* 32 bits per unsigned int */
@@ -144,7 +144,7 @@ _ring_enables_test(struct vnic_cfg_msg *cfg_msg)
 
 
 /*
- * @param cfg_msg   vnic_cfg_msg to extract queue from
+ * @param cfg_msg   nfd_cfg_msg to extract queue from
  *
  * cfg_ring_sizes holds size data for 4 rings, starting from base_q
  * where base_q % 4 = 0.
@@ -152,7 +152,7 @@ _ring_enables_test(struct vnic_cfg_msg *cfg_msg)
  * This method extracts data from the correct offset within the 32bit
  * word.  The correct 32bit word must have been read previously. */
 __intrinsic unsigned char
-_get_ring_sz(struct vnic_cfg_msg *cfg_msg)
+_get_ring_sz(struct nfd_cfg_msg *cfg_msg)
 {
     unsigned char ring_sz;
     unsigned int offset = ((cfg_msg->queue & 3) * 8);
@@ -173,7 +173,7 @@ _bar_addr(struct nfp_pcie_barcfg_p2c *bar, unsigned long long data)
 
 /* XXX TEMP configure wide PF BARs to access config mem and QC  */
 __intrinsic void
-vnic_cfg_setup_pf()
+nfd_cfg_setup_pf()
 {
     __gpr unsigned int addr_hi =  PCIE_ISL << 30;
     unsigned int bar_base_addr;
@@ -186,7 +186,7 @@ vnic_cfg_setup_pf()
     bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_64BIT;
     bar_tmp.target = 7; /* MU CPP target */
     bar_tmp.token = 0;
-    _bar_addr(&bar_tmp, (unsigned long long) VNIC_CFG_BASE(PCIE_ISL));
+    _bar_addr(&bar_tmp, (unsigned long long) NFD_CFG_BASE(PCIE_ISL));
     bar = bar_tmp;
 
     bar_base_addr = NFP_PCIE_BARCFG_P2C(0, 0);
@@ -214,7 +214,7 @@ vnic_cfg_setup_pf()
 
 
 __intrinsic void
-vnic_cfg_setup_vf()
+nfd_cfg_setup_vf()
 {
     __gpr unsigned int addr_hi =  PCIE_ISL << 30;
     unsigned int bar_base_addr;
@@ -230,7 +230,7 @@ vnic_cfg_setup_vf()
     bar_tmp.target = 7; /* MU CPP target */
     bar_tmp.token = 0;
     /* XXX this is A0 specific */
-    bar_tmp.base = (unsigned long long) VNIC_CFG_BASE(PCIE_ISL) >> (40 - 19);
+    bar_tmp.base = (unsigned long long) NFD_CFG_BASE(PCIE_ISL) >> (40 - 19);
     bar = bar_tmp;
 
     bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(0);
@@ -260,9 +260,9 @@ vnic_cfg_setup_vf()
 
 
 void
-_vnic_cfg_queue_setup()
+_nfd_cfg_queue_setup()
 {
-    struct qc_queue_config vnic_cfg_queue;
+    struct qc_queue_config nfd_cfg_queue;
 
     __cls struct event_cls_filter *event_filter;
     struct nfp_em_filter_status status;
@@ -274,22 +274,21 @@ _vnic_cfg_queue_setup()
      */
     unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0xF81, 0xF);
     unsigned int event_match = NFP_EVENT_MATCH(pcie_provider,
-                                               ((VNIC_CFG_EVENT_DATA<<6) |
-                                                VNIC_CFG_QUEUE),
-                                               0);
+                                               ((NFD_CFG_EVENT_DATA<<6) |
+                                                NFD_CFG_QUEUE), 0);
 
     /*
      * Config queues are small and issue events on not empty.
      * The confq for VNIC N is CONFQ_START + N * vnic_block_size.
      * All confqs are monitored by a single bitmask32 filter.
      */
-    vnic_cfg_queue.watermark  = PCIE_QC_WM_4;
-    vnic_cfg_queue.size       = PCIE_QC_SZ_256;
-    vnic_cfg_queue.event_data = VNIC_CFG_EVENT_DATA;
-    vnic_cfg_queue.event_type = PCIE_QC_EVENT_NOT_EMPTY;
-    vnic_cfg_queue.ptr        = 0;
+    nfd_cfg_queue.watermark  = PCIE_QC_WM_4;
+    nfd_cfg_queue.size       = PCIE_QC_SZ_256;
+    nfd_cfg_queue.event_data = NFD_CFG_EVENT_DATA;
+    nfd_cfg_queue.event_type = PCIE_QC_EVENT_NOT_EMPTY;
+    nfd_cfg_queue.ptr        = 0;
 
-    init_qc_queues(PCIE_ISL, &vnic_cfg_queue, VNIC_CFG_QUEUE,
+    init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
                    2 * MAX_VNIC_QUEUES, MAX_VNICS);
 
     /* Setup the Event filter and autopush */
@@ -297,49 +296,49 @@ _vnic_cfg_queue_setup()
     __implicit_write(&cfg_ap_xfer);
 
     status.__raw = 0; /* bitmask32 requires no further settings */
-    event_filter = event_cls_filter_handle(VNIC_CFG_EVENT_FILTER);
+    event_filter = event_cls_filter_handle(NFD_CFG_EVENT_FILTER);
 
     event_cls_filter_setup(event_filter,
                            NFP_EM_FILTER_MASK_TYPE_MASK32,
                            event_match, event_mask, status);
 
-    event_cls_autopush_signal_setup(VNIC_CFG_EVENT_FILTER,
+    event_cls_autopush_signal_setup(NFD_CFG_EVENT_FILTER,
                                     (unsigned int) __MEID,
                                     ctx(),
                                     __signal_number(&cfg_ap_sig),
                                     __xfer_reg_number(&cfg_ap_xfer));
     event_cls_autopush_filter_reset(
-        VNIC_CFG_EVENT_FILTER,
+        NFD_CFG_EVENT_FILTER,
         NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-        VNIC_CFG_EVENT_FILTER);
+        NFD_CFG_EVENT_FILTER);
 }
 
 void
-_vnic_cfg_write_cap(unsigned int vnic)
+_nfd_cfg_write_cap(unsigned int vnic)
 {
-    __xwrite unsigned int cfg[] = {VNIC_CFG_VERSION, 0, VNIC_CFG_CAP,
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_CAP,
                                    MAX_VNIC_QUEUES, MAX_VNIC_QUEUES,
-                                   VNIC_CFG_MAX_MTU};
+                                   NFD_CFG_MAX_MTU};
 
-    mem_write64(&cfg, VNIC_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_VERSION,
+    mem_write64(&cfg, NFD_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_VERSION,
                 sizeof cfg);
 }
 
 void
-vnic_cfg_setup()
+nfd_cfg_setup()
 {
     unsigned int vnic;
 
     /* Setup the configuration message rings */
-    MEM_RING_CONFIGURE(VNIC_CFG_RING_ADDR(PCIE_ISL, 0),
-                       VNIC_CFG_RING_NUM(PCIE_ISL, 0));
-    MEM_RING_CONFIGURE(VNIC_CFG_RING_ADDR(PCIE_ISL, 1),
-                       VNIC_CFG_RING_NUM(PCIE_ISL, 1));
-    MEM_RING_CONFIGURE(VNIC_CFG_RING_ADDR(PCIE_ISL, 2),
-                       VNIC_CFG_RING_NUM(PCIE_ISL, 2));
+    MEM_RING_CONFIGURE(NFD_CFG_RING_ADDR(PCIE_ISL, 0),
+                       NFD_CFG_RING_NUM(PCIE_ISL, 0));
+    MEM_RING_CONFIGURE(NFD_CFG_RING_ADDR(PCIE_ISL, 1),
+                       NFD_CFG_RING_NUM(PCIE_ISL, 1));
+    MEM_RING_CONFIGURE(NFD_CFG_RING_ADDR(PCIE_ISL, 2),
+                       NFD_CFG_RING_NUM(PCIE_ISL, 2));
 
     /* Setup the configuration queues */
-    _vnic_cfg_queue_setup();
+    _nfd_cfg_queue_setup();
 
     /*
      * Write compile time configured MAX_VNIC_QUEUES to mem.
@@ -347,12 +346,12 @@ vnic_cfg_setup()
      */
 
     for (vnic = 0; vnic < MAX_VNICS; vnic++) {
-        _vnic_cfg_write_cap(vnic);
+        _nfd_cfg_write_cap(vnic);
     }
 }
 
 __intrinsic void
-vnic_cfg_init_cfg_msg(SIGNAL *cfg_sig, struct vnic_cfg_msg *cfg_msg)
+nfd_cfg_init_cfg_msg(SIGNAL *cfg_sig, struct nfd_cfg_msg *cfg_msg)
 {
     __implicit_write(cfg_sig);
 
@@ -360,7 +359,7 @@ vnic_cfg_init_cfg_msg(SIGNAL *cfg_sig, struct vnic_cfg_msg *cfg_msg)
 }
 
 void
-vnic_cfg_check_cfg_ap()
+nfd_cfg_check_cfg_ap()
 {
     if (signal_test(&cfg_ap_sig)) {
         /* Set the active bitmask */
@@ -374,7 +373,7 @@ vnic_cfg_check_cfg_ap()
 }
 
 int
-vnic_cfg_next_vnic()
+nfd_cfg_next_vnic()
 {
     int curr_bit;
     int queue;
@@ -398,13 +397,13 @@ vnic_cfg_next_vnic()
      * When masked_test_cnt == 0, we have checked every queue associated
      * with the bitmask. */
     cfg_vnic_queue_test_cnt++;
-    masked_test_cnt = cfg_vnic_queue_test_cnt & VNIC_CFG_BMSK_TEST_MSK;
-    queue = curr_bit | (masked_test_cnt * VNIC_CFG_BMSK_SPACING);
+    masked_test_cnt = cfg_vnic_queue_test_cnt & NFD_CFG_BMSK_TEST_MSK;
+    queue = curr_bit | (masked_test_cnt * NFD_CFG_BMSK_SPACING);
 
     /* Compute vNIC and increment QC read pointer.
      * If there is not a one-to-one mapping between queues and bits,
      * first test whether the queue is empty. */
-#if VNIC_CFG_BMSK_TEST_MSK == 0
+#if NFD_CFG_BMSK_TEST_MSK == 0
     vnic = queue / (2 * MAX_VNIC_QUEUES);
     qc_add_to_ptr(PCIE_ISL, queue, QC_RPTR, 1);
 #else
@@ -428,9 +427,9 @@ vnic_cfg_next_vnic()
     /* Test the bitmask to determine whether to reset the autopush. */
     if (cfg_vnic_bmsk == 0) {
         event_cls_autopush_filter_reset(
-            VNIC_CFG_EVENT_FILTER,
+            NFD_CFG_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            VNIC_CFG_EVENT_FILTER);
+            NFD_CFG_EVENT_FILTER);
     }
 
     return vnic;
@@ -438,13 +437,13 @@ vnic_cfg_next_vnic()
 
 
 __intrinsic void
-vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
+nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                        __remote SIGNAL *cfg_sig_remote,
                        unsigned int next_me, unsigned int rnum,
                        __dram void *rbase)
 {
-    struct vnic_cfg_msg cfg_msg_tmp;
-    __xrw struct vnic_cfg_msg cfg_msg_wr;
+    struct nfd_cfg_msg cfg_msg_tmp;
+    __xrw struct nfd_cfg_msg cfg_msg_wr;
 
     /* Clear the internal state fields and set msg_valid before sending  */
     cfg_msg_tmp.__raw = 0;
@@ -462,13 +461,13 @@ vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
 
 
 __intrinsic void
-vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
+nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
                        unsigned int rnum, __dram void *rbase)
 {
     /* XXX should this method read the vnic config BAR? */
     if (signal_test(cfg_sig)) {
         int ret;
-        __xread struct vnic_cfg_msg cfg_msg_rd;
+        __xread struct nfd_cfg_msg cfg_msg_rd;
 
         __implicit_write(cfg_sig);
 
@@ -483,7 +482,7 @@ vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
 
 
 __intrinsic void
-vnic_cfg_app_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg)
+nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg)
 {
     __xwrite unsigned int result;
 
@@ -495,31 +494,31 @@ vnic_cfg_app_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg)
     }
 
     mem_write32(&result,
-               VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_UPDATE,
+               NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_UPDATE,
                sizeof(result));
 }
 
 
 __intrinsic void
-vnic_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
+nfd_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
                           unsigned int vnic)
 {
     mem_read64(cfg_bar_data,
-               VNIC_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_CTRL,
+               NFD_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_CTRL,
                6 * sizeof(unsigned int));
 }
 
 
 __intrinsic void
-vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
+nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                           __remote SIGNAL *cfg_sig_remote,
                           unsigned int next_me,
                           unsigned int rnum_out, __dram void *rbase_out,
                           unsigned int rnum_in, __dram void *rbase_in)
 {
-    struct vnic_cfg_msg cfg_msg_tmp;
-    __xrw struct vnic_cfg_msg cfg_msg_wr;
-    __xread struct vnic_cfg_msg cfg_msg_rd;
+    struct nfd_cfg_msg cfg_msg_tmp;
+    __xrw struct nfd_cfg_msg cfg_msg_wr;
+    __xread struct nfd_cfg_msg cfg_msg_rd;
     SIGNAL_PAIR put_sig;
     SIGNAL_PAIR get_sig;
 
@@ -550,7 +549,7 @@ vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
 }
 
 __intrinsic void
-vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
+nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
 {
     /* XXX rewrite to set a signal mask so that we can leave
      * address and size access to complete. */
@@ -560,27 +559,27 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
     ctassert(__is_ct_const(comp));
 
     /* XXX do we want to use this method for the APP master as well? */
-    if (comp == VNIC_CFG_PCI_OUT) {
+    if (comp == NFD_CFG_PCI_OUT) {
         /* Need RXRS_ENABLES, at 0x10 */
         mem_read64(cfg_bar_data,
-                 VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_CTRL,
+                 NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_CTRL,
                  6 * sizeof(unsigned int));
     } else {
         /* Only need TXRS_ENABLES, at 0x08 */
         mem_read64(cfg_bar_data,
-                 VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_CTRL,
+                 NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_CTRL,
                  4 * sizeof(unsigned int));
     }
 
     /* Check capabilities */
-    if (cfg_bar_data[NS_VNIC_CFG_CTRL] & ~VNIC_CFG_CAP) {
+    if (cfg_bar_data[NS_VNIC_CFG_CTRL] & ~NFD_CFG_CAP) {
         /* Mark an error and abort processing */
         cfg_msg->error = 1;
         return;
     }
 
     /* Check if change affects this component */
-    if (comp == VNIC_CFG_PCI_IN || comp == VNIC_CFG_PCI_OUT) {
+    if (comp == NFD_CFG_PCI_IN || comp == NFD_CFG_PCI_OUT) {
         /* Only interested in the change if it contains a general update */
         if (cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2] & NS_VNIC_CFG_UPDATE_RING) {
             cfg_msg->interested = 1;
@@ -598,7 +597,7 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
     if (cfg_bar_data[NS_VNIC_CFG_CTRL] & NS_VNIC_CFG_CTRL_ENABLE) {
         unsigned int enables_ind, addr_off, sz_off;
 
-        if (comp == VNIC_CFG_PCI_OUT) {
+        if (comp == NFD_CFG_PCI_OUT) {
             enables_ind = NS_VNIC_CFG_RXRS_ENABLE >> 2;
             addr_off =    NS_VNIC_CFG_RXR_ADDR(0);
             sz_off =      NS_VNIC_CFG_RXR_SZ(0);
@@ -614,10 +613,10 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
 
         /* Cache next ring address and size */
         mem_read64(&cfg_ring_addr,
-                   VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + addr_off,
+                   NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + addr_off,
                    sizeof(cfg_ring_addr));
         mem_read32(&cfg_ring_sizes,
-                   VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + sz_off,
+                   NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + sz_off,
                    sizeof(cfg_ring_sizes));
     } else {
         /* All rings are set disabled, we won't need any addresses or sizes */
@@ -627,9 +626,9 @@ vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg, enum vnic_cfg_component comp)
 }
 
 __intrinsic void
-vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned int *queue,
+nfd_cfg_proc_msg(struct nfd_cfg_msg *cfg_msg, unsigned int *queue,
                   unsigned char *ring_sz, unsigned int ring_base[2],
-                  enum vnic_cfg_component comp)
+                  enum nfd_cfg_component comp)
 {
     unsigned int next_addr_off, next_sz_off;
 
@@ -664,7 +663,7 @@ vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned int *queue,
     }
 
     /* Read values for next queue(s) */
-    if (comp == VNIC_CFG_PCI_OUT) {
+    if (comp == NFD_CFG_PCI_OUT) {
         next_addr_off = NS_VNIC_CFG_RXR_ADDR(cfg_msg->queue);
         next_sz_off =   NS_VNIC_CFG_RXR_SZ(cfg_msg->queue);
     } else {
@@ -676,15 +675,14 @@ vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg, unsigned int *queue,
      * Otherwise suppress read to save CPP bandwidth. */
     if (_ring_enables_test(cfg_msg)) {
         mem_read64(&cfg_ring_addr,
-                   VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_addr_off,
+                   NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_addr_off,
                    sizeof(cfg_ring_addr));
     }
 
     /* Sizes packed 4 per register, so reread every 4th queue */
     if ((cfg_msg->queue & 3) == 0) {
         mem_read32(&cfg_ring_sizes,
-                   VNIC_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_sz_off,
+                   NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_sz_off,
                    sizeof(cfg_ring_sizes));
     }
-
 }

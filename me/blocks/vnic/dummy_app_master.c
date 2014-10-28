@@ -13,11 +13,11 @@
 
 #include <nfp6000/nfp_me.h>
 
-#include <vnic/shared/vnic_cfg.h>
+#include <vnic/shared/nfd_cfg.h>
 
-__visible SIGNAL vnic_cfg_sig_app_master1;
+__visible SIGNAL nfd_cfg_sig_app_master1;
 
-struct vnic_cfg_msg cfg_msg;
+struct nfd_cfg_msg cfg_msg;
 
 /* Cheap ordering mechanism */
 __shared __gpr int ring_wait = 0;
@@ -68,7 +68,7 @@ main(void)
 
         ring_wait = 1;
 
-        vnic_cfg_init_cfg_msg(&vnic_cfg_sig_app_master1, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_app_master1, &cfg_msg);
     } else {
         unsigned int buf_base;
         /* unsigned int ctx_of; */
@@ -98,12 +98,12 @@ main(void)
     for (;;) {
         if (ctx() == 0) {
             if (!cfg_msg.msg_valid) {
-                vnic_cfg_check_cfg_msg(&cfg_msg, &vnic_cfg_sig_app_master1,
-                                       VNIC_CFG_RING_NUM(PCIE_ISL, 1),
-                                       &VNIC_CFG_RING_ADDR(PCIE_ISL, 1));
+                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_app_master1,
+                                       NFD_CFG_RING_NUM(PCIE_ISL, 1),
+                                       &NFD_CFG_RING_ADDR(PCIE_ISL, 1));
 
                 if (cfg_msg.msg_valid) {
-                    vnic_cfg_app_read_general(cfg_bar_data, cfg_msg.vnic);
+                    nfd_cfg_app_read_general(cfg_bar_data, cfg_msg.vnic);
                 }
             } else {
                 __implicit_read(cfg_bar_data, 6);
@@ -112,7 +112,7 @@ main(void)
                 local_csr_write(NFP_MECSR_MAILBOX_1, cfg_bar_data[0]);
 
                 cfg_msg.msg_valid = 0;
-                vnic_cfg_app_complete_cfg_msg(&cfg_msg);
+                nfd_cfg_app_complete_cfg_msg(&cfg_msg);
             }
 
             ctx_swap();

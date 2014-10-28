@@ -15,11 +15,11 @@
 #include <vnic/pci_out/cache_desc.h>
 #include <vnic/pci_out/cache_desc_status.h>
 #include <vnic/pci_out/stage_batch.h>
-#include <vnic/shared/vnic_cfg.h>
+#include <vnic/shared/nfd_cfg.h>
 
-VNIC_CFG_DECLARE(vnic_cfg_sig_pci_out, VNIC_CFG_SIG_NEXT_ME);
+NFD_CFG_DECLARE(nfd_cfg_sig_pci_out, NFD_CFG_SIG_NEXT_ME);
 
-struct vnic_cfg_msg cfg_msg;
+struct nfd_cfg_msg cfg_msg;
 
 int
 main(void)
@@ -28,7 +28,7 @@ main(void)
     if (ctx() == 0) {
         ctassert(MAX_VNICS * MAX_VNIC_QUEUES <= 64);
 
-        vnic_cfg_init_cfg_msg(&vnic_cfg_sig_pci_out, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_out, &cfg_msg);
 
         /* Ensure rings are safe to use ASAP */
         stage_batch_setup_rings();
@@ -72,24 +72,24 @@ main(void)
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
-                vnic_cfg_check_cfg_msg(&cfg_msg, &vnic_cfg_sig_pci_out,
-                                       VNIC_CFG_RING_NUM(PCIE_ISL, 0),
-                                       &VNIC_CFG_RING_ADDR(PCIE_ISL, 0));
+                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_out,
+                                       NFD_CFG_RING_NUM(PCIE_ISL, 0),
+                                       &NFD_CFG_RING_ADDR(PCIE_ISL, 0));
 
                 if (cfg_msg.msg_valid) {
-                    vnic_cfg_parse_msg((void *) &cfg_msg, VNIC_CFG_PCI_OUT);
+                    nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_OUT);
                 }
             } else {
                 cache_desc_vnic_setup((void *) &cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
-                    vnic_cfg_complete_cfg_msg(&cfg_msg,
-                                              &VNIC_CFG_SIG_NEXT_ME,
-                                              VNIC_CFG_NEXT_ME,
-                                              VNIC_CFG_RING_NUM(PCIE_ISL, 1),
-                                              &VNIC_CFG_RING_ADDR(PCIE_ISL, 1),
-                                              VNIC_CFG_RING_NUM(PCIE_ISL, 0),
-                                              &VNIC_CFG_RING_ADDR(PCIE_ISL, 0));
+                    nfd_cfg_complete_cfg_msg(&cfg_msg,
+                                              &NFD_CFG_SIG_NEXT_ME,
+                                              NFD_CFG_NEXT_ME,
+                                              NFD_CFG_RING_NUM(PCIE_ISL, 1),
+                                              &NFD_CFG_RING_ADDR(PCIE_ISL, 1),
+                                              NFD_CFG_RING_NUM(PCIE_ISL, 0),
+                                              &NFD_CFG_RING_ADDR(PCIE_ISL, 0));
                 }
             }
 

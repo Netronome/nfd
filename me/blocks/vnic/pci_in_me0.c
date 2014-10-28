@@ -17,16 +17,16 @@
 #include <vnic/pci_in/gather_status.h>
 #include <vnic/pci_in/notify.h>
 #include <vnic/pci_in/service_qc.h>
-#include <vnic/shared/vnic_cfg.h>
+#include <vnic/shared/nfd_cfg.h>
 
 /*
  * Temporary header includes
  */
 #include <std/event.h>                  /* TEMP */
 
-VNIC_CFG_DECLARE(vnic_cfg_sig_pci_in, vnic_cfg_sig_pci_out);
+NFD_CFG_DECLARE(nfd_cfg_sig_pci_in, nfd_cfg_sig_pci_out);
 
-struct vnic_cfg_msg cfg_msg;
+struct nfd_cfg_msg cfg_msg;
 
 int
 main(void)
@@ -43,22 +43,22 @@ main(void)
         ctassert(MAX_VNICS * MAX_VNIC_QUEUES <= 64);
 
         /* Initialisation that does not swap */
-        vnic_cfg_init_cfg_msg(&vnic_cfg_sig_pci_out, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_out, &cfg_msg);
         gather_setup_shared();
         gather_status_setup();
 
         /* Initialisation that swaps and takes longer */
 #ifdef NFD_VNIC_PF
-        vnic_cfg_setup_pf();
+        nfd_cfg_setup_pf();
 #endif
 
 #ifdef NFD_VNIC_VF
-        vnic_cfg_setup_vf();
+        nfd_cfg_setup_vf();
 #endif
 
         service_qc_setup();
         distr_seqn_setup();
-        vnic_cfg_setup();
+        nfd_cfg_setup();
 
         notify_setup_shared();
 
@@ -97,7 +97,7 @@ main(void)
 
             distr_seqn();
 
-            vnic_cfg_check_cfg_ap();
+            nfd_cfg_check_cfg_ap();
 
             gather_status();
 
@@ -106,24 +106,24 @@ main(void)
             if (!cfg_msg.msg_valid) {
                 int curr_vnic;
 
-                curr_vnic = vnic_cfg_next_vnic();
+                curr_vnic = nfd_cfg_next_vnic();
 
                 if (curr_vnic >= 0) {
                     cfg_msg.__raw = 0;
                     cfg_msg.vnic = curr_vnic;
                     cfg_msg.msg_valid = 1;
 
-                    vnic_cfg_parse_msg((void *) &cfg_msg, VNIC_CFG_PCI_IN);
+                    nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_IN);
                 }
             } else {
                 service_qc_vnic_setup(&cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
-                    vnic_cfg_start_cfg_msg(&cfg_msg,
-                                           &vnic_cfg_sig_pci_out,
-                                           VNIC_CFG_NEXT_ME(PCIE_ISL, 0),
-                                           VNIC_CFG_RING_NUM(PCIE_ISL, 0),
-                                           &VNIC_CFG_RING_ADDR(PCIE_ISL, 0));
+                    nfd_cfg_start_cfg_msg(&cfg_msg,
+                                          &nfd_cfg_sig_pci_out,
+                                          NFD_CFG_NEXT_ME(PCIE_ISL, 0),
+                                          NFD_CFG_RING_NUM(PCIE_ISL, 0),
+                                          &NFD_CFG_RING_ADDR(PCIE_ISL, 0));
                 }
             }
 

@@ -22,7 +22,7 @@
 #include <vnic/pci_out/pci_out_internal.h>
 #include <vnic/shared/qc.h>
 #include <vnic/shared/nfd_shared.h>
-#include <vnic/shared/vnic_cfg.h>
+#include <vnic/shared/nfd_cfg.h>
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/pcie.h>
 #include <vnic/utils/qcntl.h>
@@ -205,7 +205,7 @@ cache_desc_setup()
  * or down.
  */
 __intrinsic void
-cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
+cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 {
     struct qc_queue_config rxq;
     unsigned int queue_s;
@@ -213,7 +213,7 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
     unsigned int ring_base[2];
     __gpr unsigned int bmsk_queue;
 
-    vnic_cfg_proc_msg(cfg_msg, &queue_s, &ring_sz, ring_base, VNIC_CFG_PCI_OUT);
+    nfd_cfg_proc_msg(cfg_msg, &queue_s, &ring_sz, ring_base, NFD_CFG_PCI_OUT);
 
     if (cfg_msg->error || !cfg_msg->interested) {
         return;
@@ -236,7 +236,7 @@ cache_desc_vnic_setup(struct vnic_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
         queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
 #ifdef NFD_VNIC_VF
-        queue_data[bmsk_queue].requester_id += VNIC_CFG_VF_OFFSET;
+        queue_data[bmsk_queue].requester_id += NFD_CFG_VF_OFFSET;
 #endif
         queue_data[bmsk_queue].spare0 = 0;
         queue_data[bmsk_queue].up = 1;

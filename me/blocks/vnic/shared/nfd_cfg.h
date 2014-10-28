@@ -1,11 +1,11 @@
 /*
  * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
  *
- * @file          blocks/vnic/shared/vnic_cfg.h
+ * @file          blocks/vnic/shared/nfd_cfg.h
  * @brief         An API to manage access to NFD configuration data
  */
-#ifndef _BLOCKS__SHARED_VNIC_CFG_H_
-#define _BLOCKS__SHARED_VNIC_CFG_H_
+#ifndef _BLOCKS__SHARED_NFD_CFG_H_
+#define _BLOCKS__SHARED_NFD_CFG_H_
 
 #include <nfp/mem_ring.h>
 #include <ns_vnic_ctrl.h>
@@ -15,59 +15,59 @@
 
 /* XXX Magic number currently
  * Set to official version number before release */
-#define VNIC_CFG_VERSION 0x1248
+#define NFD_CFG_VERSION 0x1248
 
-#ifndef VNIC_CFG_CAP
+#ifndef NFD_CFG_CAP
 /* XXX Set some "random" bits in the capabilities field
  * for testing purposes */
-#define VNIC_CFG_CAP                                            \
+#define NFD_CFG_CAP                                             \
     (NS_VNIC_CFG_CTRL_ENABLE | NS_VNIC_CFG_CTRL_PROMISC |       \
      NS_VNIC_CFG_CTRL_RXCSUM | NS_VNIC_CFG_CTRL_TXCSUM |        \
      NS_VNIC_CFG_CTRL_RXVLAN | NS_VNIC_CFG_CTRL_TXVLAN)
 #endif
 
-#ifndef VNIC_CFG_MAX_MTU
-#define VNIC_CFG_MAX_MTU        1500
+#ifndef NFD_CFG_MAX_MTU
+#define NFD_CFG_MAX_MTU         1500
 #endif
 
 /* XXX allocate using generic resource management */
-#define REQUESTER_ID_BASE       (6<<6)
+/*#define REQUESTER_ID_BASE       (6<<6) */
 
-#define VNIC_CFG_VF_OFFSET      64
+#define NFD_CFG_VF_OFFSET       64
 
 /* Minimum size configuration rings are fine */
-#define VNIC_CFG_RING_SZ        512
+#define NFD_CFG_RING_SZ         512
 
 /* XXX allocated this via generic resource allocation */
-#define VNIC_CFG_RING_NUM_START 256
+#define NFD_CFG_RING_NUM_START  256
 
-#define VNIC_CFG_QUEUE          1
-#define VNIC_CFG_EVENT_DATA     (2<<4)
-#define VNIC_CFG_EVENT_FILTER   14
+#define NFD_CFG_QUEUE           1
+#define NFD_CFG_EVENT_DATA      (2<<4)
+#define NFD_CFG_EVENT_FILTER    14
 
-#define VNIC_CFG_DECLARE(_sig, _next_sig) \
+#define NFD_CFG_DECLARE(_sig, _next_sig)  \
     __visible SIGNAL _sig;                \
     __remote SIGNAL _next_sig;
 
 
-#define VNIC_CFG_NEXT_ME_IND1(_me_str) __nfp_idstr2meid(#_me_str)
-#define VNIC_CFG_NEXT_ME_IND0(_isl, _me)        \
-    VNIC_CFG_NEXT_ME_IND1(pcie##_isl##.me##_me)
+#define NFD_CFG_NEXT_ME_IND1(_me_str) __nfp_idstr2meid(#_me_str)
+#define NFD_CFG_NEXT_ME_IND0(_isl, _me)         \
+    NFD_CFG_NEXT_ME_IND1(pcie##_isl##.me##_me)
 
-#ifndef VNIC_CFG_NEXT_ME
-#define VNIC_CFG_NEXT_ME(_isl, _me) VNIC_CFG_NEXT_ME_IND0(_isl, _me)
+#ifndef NFD_CFG_NEXT_ME
+#define NFD_CFG_NEXT_ME(_isl, _me) NFD_CFG_NEXT_ME_IND0(_isl, _me)
 #endif
 
-#define VNIC_CFG_RING_ADDR_IND(_isl, _num) vnic_cfg_pcie##_isl##_ring##_num
-#define VNIC_CFG_RING_ADDR(_isl, _num) VNIC_CFG_RING_ADDR_IND(_isl, _num)
+#define NFD_CFG_RING_ADDR_IND(_isl, _num) nfd_cfg_pcie##_isl##_ring##_num
+#define NFD_CFG_RING_ADDR(_isl, _num) NFD_CFG_RING_ADDR_IND(_isl, _num)
 
-#define VNIC_CFG_RING_NUM_IND(_isl, _num) \
-    (VNIC_CFG_RING_NUM_START + 4 * _isl + _num)
-#define VNIC_CFG_RING_NUM(_isl, _num) VNIC_CFG_RING_NUM_IND(_isl, _num)
+#define NFD_CFG_RING_NUM_IND(_isl, _num)        \
+    (NFD_CFG_RING_NUM_START + 4 * _isl + _num)
+#define NFD_CFG_RING_NUM(_isl, _num) NFD_CFG_RING_NUM_IND(_isl, _num)
 
-MEM_RING_DECLARE(VNIC_CFG_RING_ADDR(PCIE_ISL, 0), VNIC_CFG_RING_SZ);
-MEM_RING_DECLARE(VNIC_CFG_RING_ADDR(PCIE_ISL, 1), VNIC_CFG_RING_SZ);
-MEM_RING_DECLARE(VNIC_CFG_RING_ADDR(PCIE_ISL, 2), VNIC_CFG_RING_SZ);
+MEM_RING_DECLARE(NFD_CFG_RING_ADDR(PCIE_ISL, 0), NFD_CFG_RING_SZ);
+MEM_RING_DECLARE(NFD_CFG_RING_ADDR(PCIE_ISL, 1), NFD_CFG_RING_SZ);
+MEM_RING_DECLARE(NFD_CFG_RING_ADDR(PCIE_ISL, 2), NFD_CFG_RING_SZ);
 
 /**
  * @param msg_valid     message contains valid information
@@ -86,7 +86,7 @@ MEM_RING_DECLARE(VNIC_CFG_RING_ADDR(PCIE_ISL, 2), VNIC_CFG_RING_SZ);
  * that processing in this stage is complete.  'up_bit' and 'queue' are only
  * valid if 'msg_valid' and 'interested' are set, and 'error' is not set.
  */
-struct vnic_cfg_msg {
+struct nfd_cfg_msg {
     union {
         struct {
             unsigned int msg_valid:1;
@@ -101,26 +101,26 @@ struct vnic_cfg_msg {
     };
 };
 
-enum vnic_cfg_component {
-    VNIC_CFG_PCI_IN,
-    VNIC_CFG_PCI_OUT,
-    VNIC_CFG_APP_MASTER
+enum nfd_cfg_component {
+    NFD_CFG_PCI_IN,
+    NFD_CFG_PCI_OUT,
+    NFD_CFG_APP_MASTER
 };
 
 
 /**
- * Perform per PCIe island vnic_cfg initialisation
+ * Perform per PCIe island nfd_cfg initialisation
  */
-extern void vnic_cfg_setup();
+extern void nfd_cfg_setup();
 
 /**
  * XXX formalise setup_pf and setup_vf methods
  * Configure the PF for use with NFD
  */
-__intrinsic void vnic_cfg_setup_pf();
+__intrinsic void nfd_cfg_setup_pf();
 
 
-__intrinsic void vnic_cfg_setup_vf();
+__intrinsic void nfd_cfg_setup_vf();
 
 
 /**
@@ -128,19 +128,19 @@ __intrinsic void vnic_cfg_setup_vf();
  * @param cfg_sig       signal set to indicate that a message is ready
  * @param cfg_msg       current configuration message and state
  */
-__intrinsic void vnic_cfg_init_cfg_msg(SIGNAL *cfg_sig,
-                                       struct vnic_cfg_msg *cfg_msg);
+__intrinsic void nfd_cfg_init_cfg_msg(SIGNAL *cfg_sig,
+                                      struct nfd_cfg_msg *cfg_msg);
 
 /**
  * Look for notification of configuration events
  */
-void vnic_cfg_check_cfg_ap();
+void nfd_cfg_check_cfg_ap();
 
 /**
  * Find next vNIC to process configuration messages from. Negative return
  * values show no vNIC found.
  */
-int vnic_cfg_next_vnic();
+int nfd_cfg_next_vnic();
 
 /**
  * Add a cfg_msg to the start of the ring pipeline
@@ -150,10 +150,10 @@ int vnic_cfg_next_vnic();
  * @param rnum              ring number to use for the ring put
  * @param rbase             base address of the ring to use
  */
-__intrinsic void vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
-                                        __remote SIGNAL *cfg_sig_remote,
-                                        unsigned int next_me, unsigned int rnum,
-                                        __dram void *rbase);
+__intrinsic void nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
+                                       __remote SIGNAL *cfg_sig_remote,
+                                       unsigned int next_me, unsigned int rnum,
+                                       __dram void *rbase);
 
 
 /**
@@ -163,16 +163,16 @@ __intrinsic void vnic_cfg_start_cfg_msg(struct vnic_cfg_msg *cfg_msg,
  * @param rnum              ring number to fetch messages from
  * @param rbase             base address of the ring to use
  */
-__intrinsic void vnic_cfg_check_cfg_msg(struct vnic_cfg_msg *cfg_msg,
-                                        SIGNAL *cfg_sig,
-                                        unsigned int rnum,
-                                        __dram void *rbase);
+__intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
+                                       SIGNAL *cfg_sig,
+                                       unsigned int rnum,
+                                       __dram void *rbase);
 
 /**
  * Notify the host that a cfg_msg has been processed
  * @param cfg_msg       message listing the queue that has been configured
  */
-__intrinsic void vnic_cfg_app_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg);
+__intrinsic void nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg);
 
 
 /**
@@ -180,8 +180,8 @@ __intrinsic void vnic_cfg_app_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg);
  * @param cfg_bar_data      read transfer registers for the data
  * @param vnic              vNIC BAR to access
  */
-__intrinsic void vnic_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
-                                           unsigned int vnic);
+__intrinsic void nfd_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
+                                          unsigned int vnic);
 
 
 /**
@@ -194,13 +194,13 @@ __intrinsic void vnic_cfg_app_read_general(__xread unsigned int cfg_bar_data[6],
  * @param rnum_in           input ring number
  * @param rbase_in          input ring address
  */
-__intrinsic void vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
-                                           __remote SIGNAL *cfg_sig_remote,
-                                           unsigned int next_me,
-                                           unsigned int rnum_out,
-                                           __dram void *rbase_out,
+__intrinsic void nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
+                                          __remote SIGNAL *cfg_sig_remote,
+                                          unsigned int next_me,
+                                          unsigned int rnum_out,
+                                          __dram void *rbase_out,
                                            unsigned int rnum_in,
-                                           __dram void *rbase_in);
+                                          __dram void *rbase_in);
 
 /**
  * Read configuration message from BAR and interpret fields
@@ -211,10 +211,10 @@ __intrinsic void vnic_cfg_complete_cfg_msg(struct vnic_cfg_msg *cfg_msg,
  * information, and determines whether the message affects the current
  * component.  It sets up internal data such as caching ring enables, and
  * also reads the first ring address and ring sizes (if necessary).  This
- * prepares the internal state for the 'vnic_cfg_proc_msg' method.
+ * prepares the internal state for the 'nfd_cfg_proc_msg' method.
  */
-__intrinsic void vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg,
-                                    enum vnic_cfg_component comp);
+__intrinsic void nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg,
+                                   enum nfd_cfg_component comp);
 
 /**
  * Extract BAR information
@@ -229,9 +229,9 @@ __intrinsic void vnic_cfg_parse_msg(struct vnic_cfg_msg *cfg_msg,
  * indicated through flags in 'cfg_msg', otherwise at least queue will be valid.
  * If the queue must be "up'ed", 'ring_sz' and 'ring_base' will also be valid.
  */
-__intrinsic void vnic_cfg_proc_msg(struct vnic_cfg_msg *cfg_msg,
-                                   unsigned int *queue, unsigned char *ring_sz,
-                                   unsigned int ring_base[2],
-                                   enum vnic_cfg_component comp);
+__intrinsic void nfd_cfg_proc_msg(struct nfd_cfg_msg *cfg_msg,
+                                  unsigned int *queue, unsigned char *ring_sz,
+                                  unsigned int ring_base[2],
+                                  enum nfd_cfg_component comp);
 
-#endif /* !_BLOCKS__SHARED_VNIC_CFG_H_ */
+#endif /* !_BLOCKS__SHARED_NFD_CFG_H_ */

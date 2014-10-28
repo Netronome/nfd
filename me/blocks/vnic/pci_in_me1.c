@@ -15,7 +15,7 @@
 #include <vnic/pci_in/issue_dma.h>
 #include <vnic/pci_in/issue_dma_status.h>
 #include <vnic/pci_in/precache_bufs.h>
-#include <vnic/shared/vnic_cfg.h>
+/* #include <vnic/shared/nfd_cfg.h> */
 
 int
 main(void)
