@@ -101,8 +101,8 @@ issue_dma_setup_shared()
     unsigned int vnic;
     unsigned int vnic_q;
 
-    ctassert(__is_log2(MAX_VNICS));
-    ctassert(__is_log2(MAX_VNIC_QUEUES));
+    ctassert(__is_log2(NFD_MAX_VNICS));
+    ctassert(__is_log2(NFD_MAX_VNIC_QUEUES));
 
     /* XXX THS-50 workaround */
     /* cls_ring_setup(NFD_IN_ISSUED_RING_NUM, nfd_in_issued_ring,
@@ -119,8 +119,8 @@ issue_dma_setup_shared()
     /*
      * Set requester IDs
      */
-    for (queue = 0, vnic = 0; vnic < MAX_VNICS; vnic++) {
-        for (vnic_q = 0; vnic_q < MAX_VNIC_QUEUES; vnic_q++, queue++) {
+    for (queue = 0, vnic = 0; vnic < NFD_MAX_VNICS; vnic++) {
+        for (vnic_q = 0; vnic_q < NFD_MAX_VNIC_QUEUES; vnic_q++, queue++) {
             unsigned int bmsk_queue;
 
             bmsk_queue = map_natural_to_bitmask(queue);

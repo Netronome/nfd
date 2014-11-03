@@ -58,14 +58,14 @@ NFD_CFG_RINGS_DECLARE(NFD_CFG_RING_EMEM);
  * There are a few corner cases to consider (such as the case of
  * two vNICs with 32 queues each), so #if-#elif-#else statements are used.
  */
-#if ((MAX_VNICS == 1) || (MAX_VNICS * MAX_VNIC_QUEUES <= 16))
+#if ((NFD_MAX_VNICS == 1) || (NFD_MAX_VNICS * NFD_MAX_VNIC_QUEUES <= 16))
 #define NFD_CFG_BMSK_TEST_MSK  0
 #define NFD_CFG_BMSK_SPACING   0
 
-#elif ((MAX_VNICS == 2) || (MAX_VNICS * MAX_VNIC_QUEUES <= 32))
+#elif ((NFD_MAX_VNICS == 2) || (NFD_MAX_VNICS * NFD_MAX_VNIC_QUEUES <= 32))
 #define NFD_CFG_BMSK_TEST_MSK  1
 
-#if MAX_VNIC_QUEUES == 32
+#if NFD_MAX_VNIC_QUEUES == 32
 #define NFD_CFG_BMSK_SPACING   64
 #else
 #define NFD_CFG_BMSK_SPACING   32
@@ -312,7 +312,7 @@ _nfd_cfg_queue_setup()
     nfd_cfg_queue.ptr        = 0;
 
     init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
-                   2 * MAX_VNIC_QUEUES, MAX_VNICS);
+                   2 * NFD_MAX_VNIC_QUEUES, NFD_MAX_VNICS);
 
     /* Setup the Event filter and autopush */
     __implicit_write(&cfg_ap_sig);
@@ -340,7 +340,7 @@ void
 _nfd_cfg_write_cap(unsigned int vnic)
 {
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_CAP,
-                                   MAX_VNIC_QUEUES, MAX_VNIC_QUEUES,
+                                   NFD_MAX_VNIC_QUEUES, NFD_MAX_VNIC_QUEUES,
                                    NFD_CFG_MAX_MTU};
 
     mem_write64(&cfg, NFD_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_VERSION,
@@ -369,11 +369,11 @@ nfd_cfg_setup()
     _nfd_cfg_queue_setup();
 
     /*
-     * Write compile time configured MAX_VNIC_QUEUES to mem.
+     * Write compile time configured NFD_MAX_VNIC_QUEUES to mem.
      * XXX Could be .init'ed?
      */
 
-    for (vnic = 0; vnic < MAX_VNICS; vnic++) {
+    for (vnic = 0; vnic < NFD_MAX_VNICS; vnic++) {
         _nfd_cfg_write_cap(vnic);
     }
 }
@@ -433,7 +433,7 @@ nfd_cfg_next_vnic()
      * If there is not a one-to-one mapping between queues and bits,
      * first test whether the queue is empty. */
 #if NFD_CFG_BMSK_TEST_MSK == 0
-    vnic = queue / (2 * MAX_VNIC_QUEUES);
+    vnic = queue / (2 * NFD_MAX_VNIC_QUEUES);
     qc_add_to_ptr(PCIE_ISL, queue, QC_RPTR, 1);
 #else
     __qc_read(PCIE_ISL, queue, QC_RPTR, &cfg_queue_sts.__raw, ctx_swap, &sig);
@@ -441,7 +441,7 @@ nfd_cfg_next_vnic()
         /* We haven't found a vNIC to service this time */
         vnic = -1;
     } else {
-        vnic = queue / (2 * MAX_VNIC_QUEUES);
+        vnic = queue / (2 * NFD_MAX_VNIC_QUEUES);
         qc_add_to_ptr(PCIE_ISL, queue, QC_RPTR, 1);
     }
 #endif
@@ -673,7 +673,7 @@ nfd_cfg_proc_msg(struct nfd_cfg_msg *cfg_msg, unsigned int *queue,
     }
 
     cfg_msg->queue++;
-    if (cfg_msg->queue == MAX_VNIC_QUEUES) {
+    if (cfg_msg->queue == NFD_MAX_VNIC_QUEUES) {
         /* This queue is the last */
         cfg_msg->msg_valid = 0;
         return;

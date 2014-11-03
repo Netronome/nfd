@@ -96,7 +96,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         return;
     }
 
-    queue += cfg_msg->vnic * MAX_VNIC_QUEUES;
+    queue += cfg_msg->vnic * NFD_MAX_VNIC_QUEUES;
     bmsk_queue = map_natural_to_bitmask(queue);
 
     txq.watermark    = NFP_QC_STS_HI_WATERMARK_4;

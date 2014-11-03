@@ -61,9 +61,9 @@ _alloc_resource(_name emem##_emem##_queues global _num _num)
 #define NFD_CFG_BASE(_x) NFD_CFG_BASE_IND(_x)
 
 /* XXX remove EMU specification */
-#define NFD_CFG_BASE_DECLARE(_isl)                                  \
-    __export __emem_n(2) __align(NS_VNIC_CFG_BAR_SZ * MAX_VNICS)    \
-        char NFD_CFG_BASE(_isl)[MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
+#define NFD_CFG_BASE_DECLARE(_isl)                                   \
+    __export __emem_n(2) __align(NS_VNIC_CFG_BAR_SZ * NFD_MAX_VNICS) \
+        char NFD_CFG_BASE(_isl)[NFD_MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
 
 
 

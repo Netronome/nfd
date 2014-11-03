@@ -47,7 +47,8 @@ nfd_out_map_queue(unsigned int vnic, unsigned int queue)
 {
     unsigned int natural_queue;
 
-    natural_queue = (vnic * MAX_VNIC_QUEUES) | (queue & (MAX_VNIC_QUEUES - 1));
+    natural_queue = ((vnic * NFD_MAX_VNIC_QUEUES) |
+                     (queue & (NFD_MAX_VNIC_QUEUES - 1)));
     return map_natural_to_bitmask(natural_queue);
 }
 

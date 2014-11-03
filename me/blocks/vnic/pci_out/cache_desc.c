@@ -227,7 +227,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         return;
     }
 
-    queue_s += cfg_msg->vnic * MAX_VNIC_QUEUES;
+    queue_s += cfg_msg->vnic * NFD_MAX_VNIC_QUEUES;
     bmsk_queue = map_natural_to_bitmask(queue_s);
 
     rxq.watermark    = NFP_QC_STS_HI_WATERMARK_8; /* XXX use 16 instead? */
