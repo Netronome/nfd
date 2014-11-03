@@ -7,14 +7,12 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_H_
 #define _BLOCKS__VNIC_PCI_OUT_H_
 
+#include <vnic/nfd_user_cfg.h>
 
-/* XXX rename */
-/* #define NFD_OUT_RING_SZ  (4 * 16 * 1024 *1024) */
 
-/* Only support up to 256 credits and 64 queues in the PCI.OUT input ring
- * so that the ring fits easily in the direct access memory */
-#define NFD_OUT_RING_SZ  (16 * 64 * 256)
-
+#ifndef NFD_OUT_RING_SZ
+#error "NFD_OUT_RING_SZ must be defined by the user"
+#endif
 
 #define NFD_OUT_MAX_QUEUES              64
 

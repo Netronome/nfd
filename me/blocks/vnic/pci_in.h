@@ -9,22 +9,31 @@
 
 #include <pkt/pkt.h>
 
+#include <vnic/nfd_user_cfg.h>
+
 #ifndef NFD_IN_DATA_OFFSET
 #define NFD_IN_DATA_OFFSET          64
 #endif
 
 #ifndef NFD_IN_WQ_SZ
-#define NFD_IN_WQ_SZ           (16 * 1024)
+#error "NFD_IN_WQ_SZ must be defined by the user"
 #endif
 
 #ifndef NFD_IN_NUM_WQS
 #define NFD_IN_NUM_WQS         8
 #endif
 
-/* XXX expose to the APP */
-#define NFD_IN_BLM_BLS          0
-#define NFD_IN_BLM_POOL         BLM_NBI8_BLQ0_EMU_QID
-#define NFD_IN_BLM_RADDR        __LoadTimeConstant("__addr_emem1")
+#ifndef NFD_IN_BLM_BLS
+#error "NFD_IN_BLM_BLS must be defined by the user"
+#endif
+
+#ifndef NFD_IN_BLM_POOL
+#error "NFD_IN_BLM_POOL must be defined by the user"
+#endif
+
+#ifndef NFD_IN_BLM_RADDR
+#error "NFD_IN_BLM_RADDR must be defined by the user"
+#endif
 
 
 #define NFD_IN_MAX_QUEUES   64

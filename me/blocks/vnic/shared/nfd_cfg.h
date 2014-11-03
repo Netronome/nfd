@@ -12,6 +12,9 @@
 
 #include <vnic/shared/nfcc_chipres.h>
 
+#include <vnic/nfd_user_cfg.h>
+
+
 /* XXX Magic number currently
  * Set to official version number before release */
 #define NFD_CFG_VERSION 0x1248
@@ -29,12 +32,14 @@
 #define NFD_CFG_MAX_MTU         1500
 #endif
 
+#ifndef NFD_CFG_RING_EMEM
+#error "NFD_CFG_RING_EMEM must be defined by the user"
+#endif
 
-/* Minimum size configuration rings are fine */
+
+/* Configuration mechanism memory and ring defines */
 #define NFD_CFG_TOTAL_RINGS     16
 #define NFD_CFG_NUM_RINGS       4
-#define NFD_CFG_RING_EMEM       2
-
 
 #define NFD_CFG_EMEM_IND1(_emem) __LoadTimeConstant("__addr_emem" #_emem)
 #define NFD_CFG_EMEM_IND0(_emem) NFD_CFG_EMEM_IND1(_emem)

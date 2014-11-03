@@ -7,13 +7,8 @@
 #ifndef _BLOCKS__VNIC_SHARED_NFD_H_
 #define _BLOCKS__VNIC_SHARED_NFD_H_
 
+#include <vnic/nfd_user_cfg.h>
 #include <vnic/shared/nfcc_chipres.h>
-
-/* User configuration defines */
-#define NFD_PCIE0_EMEM      0
-#define NFD_PCIE1_EMEM      0
-#define NFD_PCIE2_EMEM      1
-#define NFD_PCIE3_EMEM      1
 
 /* Set defines */
 #define NFD_MAX_ISL     4   /* Maximum number of PCIe islands NFD may support */
@@ -44,6 +39,51 @@ do {                                                                    \
     _comp##_ring_info[_isl].rnum = NFD_RING_ALLOC(_isl, _comp, _num); \
 } while(0)
 
+
+#define NFD_EMEM_CHK_IND(_emem)     "emem" #_emem
+#define NFD_EMEM_CHK(_emem)         NFD_EMEM_CHK_IND(_emem)
+
+
+/* User define consistency checks */
+#if _nfp_has_island("pcie0")
+    #ifndef NFD_PCIE0_EMEM
+        #error "NFD_PCIE0_EMEM must be defined by the user"
+    #else
+        #if !_nfp_has_island(NFD_EMEM_CHK(NFD_PCIE0_EMEM))
+            #error "NFD_PCIE0_EMEM specifies an unavailable EMU"
+        #endif
+    #endif
+#endif
+
+#if _nfp_has_island("pcie1")
+    #ifndef NFD_PCIE1_EMEM
+        #error "NFD_PCIE1_EMEM must be defined by the user"
+    #else
+        #if !_nfp_has_island(NFD_EMEM_CHK(NFD_PCIE1_EMEM))
+            #error "NFD_PCIE1_EMEM specifies an unavailable EMU"
+        #endif
+    #endif
+#endif
+
+#if _nfp_has_island("pcie2")
+    #ifndef NFD_PCIE2_EMEM
+        #error "NFD_PCIE2_EMEM must be defined by the user"
+    #else
+        #if !_nfp_has_island(NFD_EMEM_CHK(NFD_PCIE2_EMEM))
+            #error "NFD_PCIE2_EMEM specifies an unavailable EMU"
+        #endif
+    #endif
+#endif
+
+#if _nfp_has_island("pcie3")
+    #ifndef NFD_PCIE3_EMEM
+        #error "NFD_PCIE3_EMEM must be defined by the user"
+    #else
+        #if !_nfp_has_island(NFD_EMEM_CHK(NFD_PCIE3_EMEM))
+            #error "NFD_PCIE3_EMEM specifies an unavailable EMU"
+        #endif
+    #endif
+#endif
 
 
 /* Shared structures */

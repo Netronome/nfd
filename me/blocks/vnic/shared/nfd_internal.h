@@ -7,6 +7,18 @@
 #ifndef _BLOCKS__SHARED_NFD_INTERNAL_H_
 #define _BLOCKS__SHARED_NFD_INTERNAL_H_
 
+#include <vnic/nfd_user_cfg.h>
+
+
+/* Required user configuration */
+#ifndef NFD_OUT_BLM_POOL_START
+#error "NFD_OUT_BLM_POOL_START must be defined by the user"
+#endif
+
+#ifndef NFD_OUT_BLM_RADDR
+#error "NFD_OUT_BLM_RADDR must be defined by the user"
+#endif
+
 
 /* Tuning constants */
 /* nfd_cfg */
@@ -66,8 +78,6 @@
 /* nfd_out */
 #define NFD_OUT_MAX_BATCH_SZ            4
 
-#define NFD_OUT_BLM_POOL_START          BLM_NBI8_BLQ0_EMU_QID
-#define NFD_OUT_BLM_RADDR               __LoadTimeConstant("__addr_emem1")
 #define NFD_OUT_CREDITS_BASE            0
 
 #define NFD_OUT_Q_EVENT_START           4
