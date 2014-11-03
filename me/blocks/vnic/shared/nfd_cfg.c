@@ -11,10 +11,8 @@
 #include <nfp/mem_bulk.h>
 #include <nfp/mem_ring.h>
 
-#include <vnic/shared/nfd_cfg.h>
-
 #include <vnic/shared/nfd.h>
-#include <vnic/utils/mem_bulk32.h>
+#include <vnic/shared/nfd_cfg.h>
 
 #include <ns_vnic_ctrl.h>
 

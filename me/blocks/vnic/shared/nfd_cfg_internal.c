@@ -22,7 +22,6 @@
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
-#include <vnic/utils/mem_bulk32.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 
