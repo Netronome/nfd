@@ -25,8 +25,19 @@
 #include <vnic/utils/qcntl.h>
 
 
-/* #define NFD_OUT_CREDITS_HOST_ISSUED */
-#define NFD_OUT_CREDITS_NFP_CACHED
+/* Credit define consistency checks */
+#if !defined(NFD_OUT_CREDITS_HOST_ISSUED) && !defined(NFD_OUT_CREDITS_NFP_CACHED)
+#error "NFD credit type not specified"
+#endif
+
+#if defined(NFD_OUT_CREDITS_HOST_ISSUED) && defined(NFD_OUT_CREDITS_NFP_CACHED)
+#error "Only one NFD credit type may be specified"
+#endif
+
+#ifdef NFD_OUT_CREDITS_HOST_ISSUED
+#warning "NFD_OUT_CREDITS_HOST_ISSUED selected, use at own risk!"
+#endif
+
 
 #define NFD_OUT_FL_SZ_PER_QUEUE   \
     (NFD_OUT_FL_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
