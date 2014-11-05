@@ -60,11 +60,18 @@ _alloc_resource(_name emem##_emem##_queues global _num _num)
 #define NFD_CFG_BASE_IND(_x) nfd_cfg_base##_x
 #define NFD_CFG_BASE(_x) NFD_CFG_BASE_IND(_x)
 
-/* XXX remove EMU specification */
-#define NFD_CFG_BASE_DECLARE(_isl)                                   \
-    __export __emem_n(2) __align(NS_VNIC_CFG_BAR_SZ * NFD_MAX_VNICS) \
-        char NFD_CFG_BASE(_isl)[NFD_MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
 
+/* XXX test for chip revision correctly */
+/* Due to THB-350, BARs must be 2M aligned on A0 */
+#if 1
+#define NFD_CFG_BASE_DECLARE(_isl)                                   \
+    __export __emem __align(SZ_2M)                                   \
+        char NFD_CFG_BASE(_isl)[NFD_MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
+#else
+#define NFD_CFG_BASE_DECLARE(_isl)                                   \
+    __export __emem __align(NS_VNIC_CFG_BAR_SZ * NFD_MAX_VNICS)      \
+        char NFD_CFG_BASE(_isl)[NFD_MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
+#endif
 
 
 /**
