@@ -12,7 +12,7 @@
 
 #include <vnic/shared/nfcc_chipres.h>
 
-#include <vnic/nfd_user_cfg.h>
+#include "nfd_user_cfg.h"
 
 
 /* XXX Magic number currently

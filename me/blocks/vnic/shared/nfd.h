@@ -7,7 +7,7 @@
 #ifndef _BLOCKS__VNIC_SHARED_NFD_H_
 #define _BLOCKS__VNIC_SHARED_NFD_H_
 
-#include <vnic/nfd_user_cfg.h>
+#include "nfd_user_cfg.h"
 #include <vnic/shared/nfcc_chipres.h>
 
 /* Set defines */

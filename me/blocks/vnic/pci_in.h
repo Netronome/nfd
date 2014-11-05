@@ -9,7 +9,7 @@
 
 #include <pkt/pkt.h>
 
-#include <vnic/nfd_user_cfg.h>
+#include "nfd_user_cfg.h"
 
 #ifndef NFD_IN_DATA_OFFSET
 #define NFD_IN_DATA_OFFSET          64

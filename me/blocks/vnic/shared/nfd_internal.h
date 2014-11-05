@@ -7,7 +7,7 @@
 #ifndef _BLOCKS__SHARED_NFD_INTERNAL_H_
 #define _BLOCKS__SHARED_NFD_INTERNAL_H_
 
-#include <vnic/nfd_user_cfg.h>
+#include "nfd_user_cfg.h"
 
 
 /* Required user configuration */
