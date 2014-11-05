@@ -114,3 +114,16 @@ nfd_in_pkt_len(__xread struct nfd_in_pkt_desc *nfd_in_meta)
 {
     return nfd_in_meta->data_len - nfd_in_meta->offset;
 }
+
+
+__intrinsic unsigned int
+nfd_in_get_seqn(__xread struct nfd_in_pkt_desc *nfd_in_meta)
+{
+#ifdef NFD_IN_ADD_SEQN
+    /* XXX the sequence number is stored in the reserved field currently */
+    return nfd_in_meta->reserved;
+#else
+    cterror("nfd_in_get_seqn called without NFD_IN_ADD_SEQN defined");
+    return 0; /* Avoid missing return warning */
+#endif
+}

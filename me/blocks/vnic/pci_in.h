@@ -101,7 +101,8 @@ struct nfd_in_pkt_desc {
         struct {
             unsigned int intf:2;
             unsigned int q_num:6;
-            unsigned int sp1:24;
+            unsigned int sp1:8;
+            unsigned int reserved:16;
             unsigned int buf_addr:32;
             unsigned int valid:1;
             unsigned int offset:7;
@@ -164,6 +165,13 @@ void nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
 __intrinsic unsigned int nfd_in_pkt_len(
     __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
+
+/**
+ * Get the dst_q sequence number (if NFD is configured to add it)
+ * @param nfd_in_meta   PCI.IN descriptor for the packet
+ */
+__intrinsic unsigned int nfd_in_get_seqn(
+    __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
 #endif /* !_BLOCKS__VNIC_PCI_IN_H_ */
 

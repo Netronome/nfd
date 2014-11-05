@@ -60,6 +60,38 @@ static __shared mem_ring_addr_t wq_raddr;
 static __shared unsigned int wq_num_base;
 
 
+#ifdef NFD_IN_ADD_SEQN
+#if (NFD_IN_NUM_WQS == 1)
+/* Add sequence numbers, using a shared GPR to store */
+static __shared __gpr dst_q_seqn = 0;
+
+#define NFD_IN_ADD_SEQN_PROC                                            \
+do {                                                                    \
+    pkt_desc_tmp.reserved = dst_q_seqn;                                 \
+    dst_q_seqn++;                                                       \
+} while (0)
+
+#else
+/* Add sequence numbers, using a LM to store */
+static __shared __lmem dst_q_seqn[NFD_IN_NUM_WQS];
+
+#define NFD_IN_ADD_SEQN_PROC                                            \
+do {                                                                    \
+    pkt_desc_tmp.reserved = dst_q_seqn[dst_q];                          \
+    dst_q_seqn[dst_q]++;                                                \
+} while (0)
+
+#endif
+
+#else
+/* Null sequence number add */
+#define NFD_IN_ADD_SEQN_PROC                                            \
+do {                                                                    \
+} while (0)
+
+#endif
+
+
 /**
  * Perform shared configuration for notify
  */
@@ -91,12 +123,17 @@ notify_setup()
     }
 }
 
+
+
+
+
 #define _NOTIFY_PROC(_pkt)                                              \
 do {                                                                    \
     if (batch_in.pkt##_pkt##.eop) {                                     \
         __critical_path();                                              \
-        dst_q = batch_in.pkt##_pkt##.dst_q | wq_num_base;               \
-                                                                        \
+        dst_q = batch_in.pkt##_pkt##.dst_q;                             \
+        NFD_IN_ADD_SEQN_PROC;                                           \
+        dst_q |= wq_num_base;                                           \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];         \
         batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1]; \
         batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2]; \
@@ -177,6 +214,9 @@ notify()
         pkt_desc_tmp.intf = PCIE_ISL;
         pkt_desc_tmp.q_num = q_batch;
         pkt_desc_tmp.sp1 = 0;
+#ifndef NFD_IN_ADD_SEQN
+        pkt_desc_tmp.reserved = 0;
+#endif
 
         _NOTIFY_PROC(0);
         _NOTIFY_PROC(1);
