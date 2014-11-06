@@ -613,6 +613,7 @@ send_desc()
     unsigned int queue;
     unsigned int pcie_addr_off;
     unsigned int desc_batch_index;
+    int test_safe;
 
     /* Wait for previous DMAs to be enqueued */
     __asm {
@@ -625,9 +626,9 @@ send_desc()
     __implicit_read(&desc_sig2);
     __implicit_read(&desc_sig3);
 
-
-   if ((desc_dma_issued != desc_dma_safe) &&
-       (desc_batch_served != data_dma_compl)) {
+    /* XXX THSDK-1813 workaround */
+    test_safe = desc_dma_safe - desc_dma_issued;
+    if ((desc_batch_served != data_dma_compl) && (test_safe > 0)) {
        __critical_path();
 
         desc_dma_wait_msk = __signals(&desc_sig0, &desc_sig1, &desc_sig2,
