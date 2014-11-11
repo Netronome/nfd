@@ -79,6 +79,7 @@
 #define   NS_VNIC_CFG_CTRL_RINGPRIO	  (0x1 << 19) /* Ring priorities */
 #define   NS_VNIC_CFG_CTRL_MSIXAUTO	  (0x1 << 20) /* MSI-X auto-masking */
 #define   NS_VNIC_CFG_CTRL_TXRWB	  (0x1 << 21) /* Write-back of TX ring*/
+#define   NS_VNIC_CFG_CTRL_L2FILTER	  (0x1 << 22) /* L2 filters (VMQ) */
 #define NS_VNIC_CFG_UPDATE		0x0004
 #define   NS_VNIC_CFG_UPDATE_GEN	  (0x1 <<  0) /* General update */
 #define   NS_VNIC_CFG_UPDATE_RING	  (0x1 <<  1) /* Ring config change */
