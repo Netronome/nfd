@@ -142,9 +142,11 @@ precache_bufs()
 
     if (signal_test(&precache_sig.even)) {
         /* Process the fetch */
+        unsigned int bufs_rd_off;
 
         /* Prepare T-INDEX early so usage shadow is filled easily */
-        local_csr_write(NFP_MECSR_T_INDEX, __xfer_reg_number(bufs_rd));
+        bufs_rd_off = MECSR_XFER_INDEX(__xfer_reg_number(bufs_rd));
+        local_csr_write(NFP_MECSR_T_INDEX, bufs_rd_off);
         state.pending_fetch = 0;
 
         if (!signal_test(&precache_sig.odd)) {
