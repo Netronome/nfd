@@ -30,17 +30,15 @@ __intrinsic void
 nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
                       unsigned int rnum)
 {
-    mem_ring_addr_t ring_addr;
-
-    ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
-
     /* XXX should this method read the vnic config BAR? */
     if (signal_test(cfg_sig)) {
         int ret;
         __xread struct nfd_cfg_msg cfg_msg_rd;
+        mem_ring_addr_t ring_addr;
 
         __implicit_write(cfg_sig);
 
+        ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
         ret = mem_ring_get(rnum, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd);
 
         if (ret == 0) {
