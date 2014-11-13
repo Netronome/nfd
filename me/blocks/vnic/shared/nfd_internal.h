@@ -135,7 +135,8 @@
 
 /* nfd_cfg internal structures */
 enum nfd_cfg_component {
-    NFD_CFG_PCI_IN,
+    NFD_CFG_PCI_IN0,
+    NFD_CFG_PCI_IN1,
     NFD_CFG_PCI_OUT
 };
 

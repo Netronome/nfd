@@ -566,7 +566,6 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
 
     ctassert(__is_ct_const(comp));
 
-    /* XXX do we want to use this method for the APP master as well? */
     if (comp == NFD_CFG_PCI_OUT) {
         /* Need RXRS_ENABLES, at 0x10 */
         mem_read64(cfg_bar_data,
@@ -604,23 +603,29 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
             enables_ind = NS_VNIC_CFG_RXRS_ENABLE >> 2;
             addr_off =    NS_VNIC_CFG_RXR_ADDR(0);
             sz_off =      NS_VNIC_CFG_RXR_SZ(0);
-        } else {
+        } else if (comp == NFD_CFG_PCI_IN0) {
             enables_ind = NS_VNIC_CFG_TXRS_ENABLE >> 2;
             addr_off =    NS_VNIC_CFG_TXR_ADDR(0);
             sz_off =      NS_VNIC_CFG_TXR_SZ(0);
+        } else if (comp == NFD_CFG_PCI_IN1) {
+            enables_ind = NS_VNIC_CFG_TXRS_ENABLE >> 2;
+        } else {
+            cterror("Invalid nfd_cfg_component value.");
         }
 
         /* Access ring enables */
         cfg_ring_enables[0] = cfg_bar_data[enables_ind];
         cfg_ring_enables[1] = cfg_bar_data[enables_ind + 1];
 
-        /* Cache next ring address and size */
-        mem_read64(&cfg_ring_addr,
-                   NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + addr_off,
-                   sizeof(cfg_ring_addr));
-        mem_read32(&cfg_ring_sizes,
-                   NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + sz_off,
-                   sizeof(cfg_ring_sizes));
+        if (comp == NFD_CFG_PCI_OUT || comp == NFD_CFG_PCI_IN0) {
+            /* Cache next ring address and size */
+            mem_read64(&cfg_ring_addr,
+                       NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + addr_off,
+                       sizeof(cfg_ring_addr));
+            mem_read32(&cfg_ring_sizes,
+                       NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + sz_off,
+                       sizeof(cfg_ring_sizes));
+        }
     } else {
         /* All rings are set disabled, we won't need any addresses or sizes */
         cfg_ring_enables[0] = 0;
@@ -701,5 +706,34 @@ nfd_cfg_proc_msg(struct nfd_cfg_msg *cfg_msg, unsigned int *queue,
         mem_read32(&cfg_ring_sizes,
                    NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_sz_off,
                    sizeof(cfg_ring_sizes));
+    }
+}
+
+
+__intrinsic void
+nfd_cfg_next_queue(struct nfd_cfg_msg *cfg_msg, unsigned int *queue)
+{
+    /* Mark packet complete if an error is detected,
+     * or if the component is not interested in the change.
+     * XXX Journal the error? */
+    if (cfg_msg->error || !cfg_msg->interested) {
+        cfg_msg->msg_valid = 0;
+        return;
+    }
+
+    *queue = cfg_msg->queue;
+
+    /* Set up values for current queue */
+    if (_ring_enables_test(cfg_msg)) {
+        cfg_msg->up_bit = 1;
+    } else {
+        cfg_msg->up_bit = 0;
+    }
+
+    cfg_msg->queue++;
+    if (cfg_msg->queue == NFD_MAX_VNIC_QUEUES) {
+        /* This queue is the last */
+        cfg_msg->msg_valid = 0;
+        return;
     }
 }

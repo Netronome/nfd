@@ -102,7 +102,7 @@ main(void)
         if (ctx() == 0) {
             if (!cfg_msg.msg_valid) {
                 nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_app_master1,
-                                      NFD_CFG_RING_NUM(PCIE_ISL, 1));
+                                      NFD_CFG_RING_NUM(PCIE_ISL, 2));
 
                 if (cfg_msg.msg_valid) {
                     mem_read64(cfg_bar_data,

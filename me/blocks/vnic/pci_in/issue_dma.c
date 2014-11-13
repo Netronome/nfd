@@ -156,6 +156,22 @@ issue_dma_setup_shared()
 
 
 /**
+ * Setup PCI.IN configuration for the vNIC specified in cfg_msg
+ * @param cfg_msg   Standard configuration message
+ *
+ * This method handles all PCI.IN configuration related to bringing a vNIC up
+ * or down on the "issue_dma" ME.
+ */
+__intrinsic void
+issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
+{
+    unsigned int queue;
+
+    nfd_cfg_next_queue(cfg_msg, &queue);
+}
+
+
+/**
  * Perform per context initialisation (for CTX 1 to 7)
  */
 void

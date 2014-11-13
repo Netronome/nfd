@@ -24,7 +24,7 @@
  */
 #include <std/event.h>                  /* TEMP */
 
-NFD_CFG_DECLARE(nfd_cfg_sig_pci_in, nfd_cfg_sig_pci_out);
+NFD_CFG_DECLARE(nfd_cfg_sig_pci_in0, nfd_cfg_sig_pci_in1);
 
 struct nfd_cfg_msg cfg_msg;
 
@@ -43,7 +43,7 @@ main(void)
         ctassert(NFD_MAX_VNICS * NFD_MAX_VNIC_QUEUES <= 64);
 
         /* Initialisation that does not swap */
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_out, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_in0, &cfg_msg);
         gather_setup_shared();
         gather_status_setup();
 
@@ -113,15 +113,15 @@ main(void)
                     cfg_msg.vnic = curr_vnic;
                     cfg_msg.msg_valid = 1;
 
-                    nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_IN);
+                    nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_IN0);
                 }
             } else {
                 service_qc_vnic_setup(&cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
                     nfd_cfg_start_cfg_msg(&cfg_msg,
-                                          &nfd_cfg_sig_pci_out,
-                                          NFD_CFG_NEXT_ME(PCIE_ISL, 0),
+                                          &nfd_cfg_sig_pci_in1,
+                                          NFD_CFG_NEXT_ME(PCIE_ISL, 3),
                                           NFD_CFG_RING_NUM(PCIE_ISL, 0));
                 }
             }

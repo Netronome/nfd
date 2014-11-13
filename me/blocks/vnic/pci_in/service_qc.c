@@ -90,7 +90,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     unsigned int ring_base[2];
     __gpr unsigned int bmsk_queue;
 
-    nfd_cfg_proc_msg(cfg_msg, &queue, &ring_sz, ring_base, NFD_CFG_PCI_IN);
+    nfd_cfg_proc_msg(cfg_msg, &queue, &ring_sz, ring_base, NFD_CFG_PCI_IN0);
 
     if (cfg_msg->error || !cfg_msg->interested) {
         return;
