@@ -168,12 +168,43 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     bmsk_queue = map_natural_to_bitmask(queue);
 
     if (cfg_msg->up_bit) {
+        /* Initialise queue state */
+        queue_data[bmsk_queue].sp0 = 0;
         queue_data[bmsk_queue].rid = cfg_msg->vnic;
 #ifdef NFD_VNIC_VF
         queue_data[bmsk_queue].rid += NFD_CFG_VF_OFFSET;
 #endif
+        queue_data[bmsk_queue].cont = 0;
+        queue_data[bmsk_queue].up = 1;
+        queue_data[bmsk_queue].curr_buf = 0;
+        queue_data[bmsk_queue].offset = 0;
+        queue_data[bmsk_queue].sp2 = 0;
+
     } else {
+        /* Free the MU buffer */
+        if (queue_data[bmsk_queue].curr_buf != 0) {
+            unsigned int blm_raddr;
+            unsigned int blm_rnum;
+
+            /* XXX possibly move BLM constants to GPRs
+             * if some are available */
+            blm_raddr = ((unsigned long long) NFD_IN_BLM_RADDR >> 8);
+            blm_rnum = NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
+            mem_ring_journal_fast(blm_rnum, blm_raddr,
+                                  queue_data[bmsk_queue].curr_buf);
+        }
+
+        /* Clear queue state */
+        queue_data[bmsk_queue].sp0 = 0;
         /* Leave RID configured after first set */
+        /* "cont" is used as part of the "up" signalling,
+         * to move the "up" test off the fast path. */
+        queue_data[bmsk_queue].cont = 1;
+        queue_data[bmsk_queue].up = 0;
+        queue_data[bmsk_queue].curr_buf = 0;
+        queue_data[bmsk_queue].offset = 0;
+        queue_data[bmsk_queue].sp2 = 0;
+
     }
 }
 
