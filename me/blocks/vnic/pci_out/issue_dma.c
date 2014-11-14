@@ -111,6 +111,8 @@ issue_dma_setup_shared()
 
     /*
      * Setup the DMA configuration registers
+     * XXX PCI.IN and PCI.OUT use the same settings,
+     * could share configuration registers.
      */
     cfg_tmp.__raw = 0;
     /* Signal only configuration for null messages */

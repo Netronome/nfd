@@ -51,8 +51,9 @@
 #define NFD_IN_PENDING_TEST     0
 
 /* DMAConfigReg index allocations */
-#define NFD_IN_GATHER_CFG_REG   0
-#define NFD_IN_DATA_CFG_REG     2
+#define NFD_IN_GATHER_CFG_REG           0
+#define NFD_IN_DATA_CFG_REG             2
+#define NFD_IN_DATA_CFG_REG_SIG_ONLY    3
 
 
 /* DMA defines */
@@ -158,7 +159,8 @@ struct nfd_in_dma_state {
     unsigned int sp0:24;
     unsigned int rid:8;
     unsigned int cont:1;
-    unsigned int sp1:2;
+    unsigned int up:1;
+    unsigned int sp1:1;
     unsigned int curr_buf:29;
     unsigned int offset;
     unsigned int sp2;

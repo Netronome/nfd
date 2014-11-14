@@ -201,11 +201,16 @@ notify()
         __implicit_read(&qc_sig);
         __implicit_read(&msg_sig);
 
-        q_batch = batch_in.pkt0.q_num; /* Batches have a least one packet */
+        /* Batches have a least one packet, but n_batch may still be
+         * zero, meaning that the queue is down.  In this case, EOP for
+         * all the packets should also be zero, so that notify will
+         * essentially skip the batch.
+         */
+        q_batch = batch_in.pkt0.q_num;
         n_batch = batch_in.pkt0.num_batch;
 
 #ifdef NFD_VNIC_DBG_CHKS
-        if (n_batch == 0 || n_batch > NFD_IN_MAX_BATCH_SZ) {
+        if (n_batch > NFD_IN_MAX_BATCH_SZ) {
             halt();
         }
 #endif

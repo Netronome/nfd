@@ -14,9 +14,11 @@
 #include <std/reg_utils.h>
 
 #include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
 
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 
 /*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
@@ -94,15 +96,8 @@ NN_RING_EMPTY_ASSERT_SET(0);
 void
 issue_dma_setup_shared()
 {
-    struct pcie_dma_cfg_one cfg;
-
-    /* XXX complete non-per-queue data */
-    unsigned int queue;
-    unsigned int vnic;
-    unsigned int vnic_q;
-
-    ctassert(__is_log2(NFD_MAX_VNICS));
-    ctassert(__is_log2(NFD_MAX_VNIC_QUEUES));
+    struct nfp_pcie_dma_cfg cfg_tmp;
+    __xwrite struct nfp_pcie_dma_cfg cfg;
 
     /* XXX THS-50 workaround */
     /* cls_ring_setup(NFD_IN_ISSUED_RING_NUM, nfd_in_issued_ring,
@@ -117,37 +112,30 @@ issue_dma_setup_shared()
     desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;
 
     /*
-     * Set requester IDs
+     * Setup the DMA configuration registers
+     * XXX PCI.IN and PCI.OUT use the same settings,
+     * could share configuration registers.
      */
-    for (queue = 0, vnic = 0; vnic < NFD_MAX_VNICS; vnic++) {
-        for (vnic_q = 0; vnic_q < NFD_MAX_VNIC_QUEUES; vnic_q++, queue++) {
-            unsigned int bmsk_queue;
-
-            bmsk_queue = map_natural_to_bitmask(queue);
-            queue_data[bmsk_queue].rid = vnic;
-#ifdef NFD_VNIC_VF
-            queue_data[bmsk_queue].rid += NFD_CFG_VF_OFFSET;
-#endif
-        }
-    }
-
-    /*
-     * Set up NFD_IN_DATA_CFG_REG DMA Config Register
-     */
-    cfg.__raw = 0;
+    cfg_tmp.__raw = 0;
+    /* Signal only configuration for null messages */
+    cfg_tmp.signal_only_odd = 1;
+    cfg_tmp.target_64_odd = 1;
+    cfg_tmp.cpp_target_odd = 7;
+    /* Regular configuration */
 #ifdef NFD_VNIC_NO_HOST
     /* Use signal_only for seqn num generation
      * Don't actually DMA data */
-    cfg.signal_only = 1;
+    cfg_tmp.signal_only_even = 1;
 #else
-    cfg.signal_only = 0;
+    cfg_tmp.signal_only_even = 0;
 #endif
-    cfg.end_pad     = 0;
-    cfg.start_pad   = 0;
-    /* Ordering settings? */
-    cfg.target_64   = 1;
-    cfg.cpp_target  = 7;
-    pcie_dma_cfg_set_one(PCIE_ISL, NFD_IN_DATA_CFG_REG, cfg);
+    cfg_tmp.end_pad_even = 0;
+    cfg_tmp.start_pad_even = 0;
+    cfg_tmp.target_64_even = 1;
+    cfg_tmp.cpp_target_even = 7;
+    cfg = cfg_tmp;
+
+    pcie_dma_cfg_set_pair(PCIE_ISL, NFD_IN_DATA_CFG_REG, &cfg);
 
     /* Kick off ordering */
     reorder_start(NFD_IN_ISSUE_START_CTX, &desc_order_sig);
@@ -166,8 +154,27 @@ __intrinsic void
 issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 {
     unsigned int queue;
+    unsigned int bmsk_queue;
+
+    ctassert(__is_log2(NFD_MAX_VNIC_QUEUES));
 
     nfd_cfg_next_queue(cfg_msg, &queue);
+
+    if (cfg_msg->error || !cfg_msg->interested) {
+        return;
+    }
+
+    queue += cfg_msg->vnic * NFD_MAX_VNIC_QUEUES;
+    bmsk_queue = map_natural_to_bitmask(queue);
+
+    if (cfg_msg->up_bit) {
+        queue_data[bmsk_queue].rid = cfg_msg->vnic;
+#ifdef NFD_VNIC_VF
+        queue_data[bmsk_queue].rid += NFD_CFG_VF_OFFSET;
+#endif
+    } else {
+        /* Leave RID configured after first set */
+    }
 }
 
 
@@ -205,11 +212,83 @@ do {                                                                    \
         /* Fast path, use buf_store data */                             \
         __critical_path();                                              \
                                                                         \
+        /* Set NFP buffer address and offset */                         \
         issued_tmp.buf_addr = precache_bufs_use();                      \
         descr_tmp.cpp_addr_hi = issued_tmp.buf_addr>>21;                \
         descr_tmp.cpp_addr_lo = issued_tmp.buf_addr<<11;                \
         descr_tmp.cpp_addr_lo += NFD_IN_DATA_OFFSET;                    \
         descr_tmp.cpp_addr_lo -= tx_desc.pkt##_pkt##.offset;            \
+                                                                        \
+        /* Set up notify message */                                     \
+        /* NB: EOP is required for all packets */                       \
+        /*     q_num is must be set on pkt0 */                          \
+        /*     notify technically doesn't use the rest unless */        \
+        /*     EOP is set */                                            \
+        issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                       \
+        issued_tmp.sp0 = 0;                                             \
+        issued_tmp.sp1 = 0; /* XXX most efficient value to set? */      \
+        issued_tmp.dst_q = tx_desc.pkt##_pkt##.dst_q;                   \
+                                                                        \
+        /* Apply a standard "recipe" to complete the DMA issue */       \
+        batch_out.pkt##_pkt## = issued_tmp;                             \
+        batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];  \
+        batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
+                                                                        \
+        descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;       \
+        descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;       \
+                                                                        \
+        descr_tmp.rid = queue_data[queue].rid;                          \
+        pcie_dma_set_event(&descr_tmp, _type, _src);                    \
+        descr_tmp.length = dma_len - 1;                                 \
+        dma_out.pkt##_pkt## = descr_tmp;                                \
+                                                                        \
+        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                  \
+                       NFD_IN_DATA_DMA_QUEUE,                           \
+                       sig_done, &dma_sig##_pkt##);                     \
+                                                                        \
+    } else if (!queue_data[queue].up) {                                 \
+        /* Handle down queues off the fast path. */                     \
+        /* As all packets in a batch come from one queue and are */     \
+        /* processed without swapping, all the packets in the batch */  \
+        /* will receive the same treatment.  The batch will still */    \
+        /* use its slot in the DMA sequence numbers and the */          \
+        /* nfd_in_issued_ring. */                                       \
+                                                                        \
+        /* Setting "cont" when the queue is down ensures */             \
+        /* that this processing happens off the fast path. */           \
+                                                                        \
+        /* Flag the packet for notify. */                               \
+        /* Zero EOP and num_batch so that the notify block will not */  \
+        /* produce output to the work queues, and will have no */       \
+        /* effect on the queue controller queue. */                     \
+        /* NB: the rest of the message will be stale. */                \
+        issued_tmp.num_batch = 0;                                       \
+        issued_tmp.eop = 0;                                             \
+        issued_tmp.sp0 = 0;                                             \
+        issued_tmp.sp1 = 0;                                             \
+        issued_tmp.dst_q = 0;                                           \
+        batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];           \
+                                                                        \
+        /* Handle the DMA sequence numbers for the batch */             \
+        if (_pkt == 0) {                                                \
+            descr_tmp.cpp_addr_hi = 0;                                  \
+            descr_tmp.cpp_addr_lo = 0;                                  \
+            descr_tmp.pcie_addr_hi = 0;                                 \
+            descr_tmp.pcie_addr_lo = 0;                                 \
+            pcie_dma_set_event(&descr_tmp, NFD_IN_DATA_EVENT_TYPE,      \
+                               data_dma_seq_issued);                    \
+            descr_tmp.length = 0;                                       \
+                                                                        \
+            descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG_SIG_ONLY;     \
+            dma_out.pkt##_pkt = descr_tmp;                              \
+            descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG;              \
+            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                \
+                           NFD_IN_DATA_DMA_QUEUE,                       \
+                           sig_done, &dma_sig##_pkt);                   \
+                                                                        \
+        } else {                                                        \
+            wait_msk &= ~__signals(&dma_sig##_pkt##);                   \
+        }                                                               \
                                                                         \
     } else {                                                            \
         if (!queue_data[queue].cont) {                                  \
@@ -239,31 +318,35 @@ do {                                                                    \
             queue_data[queue].curr_buf = 0;                             \
             queue_data[queue].offset = 0;                               \
         }                                                               \
+                                                                        \
+        /* Set up notify message */                                     \
+        /* NB: EOP is required for all packets */                       \
+        /*     q_num is must be set on pkt0 */                          \
+        /*     notify technically doesn't use the rest unless */        \
+        /*     EOP is set */                                            \
+        issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                       \
+        issued_tmp.sp0 = 0;                                             \
+        issued_tmp.sp1 = 0; /* XXX most efficient value to set? */      \
+        issued_tmp.dst_q = tx_desc.pkt##_pkt##.dst_q;                   \
+                                                                        \
+        /* Apply a standard "recipe" to complete the DMA issue */       \
+        batch_out.pkt##_pkt## = issued_tmp;                             \
+        batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];  \
+        batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
+                                                                        \
+        descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;       \
+        descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;       \
+                                                                        \
+        descr_tmp.rid = queue_data[queue].rid;                          \
+        pcie_dma_set_event(&descr_tmp, _type, _src);                    \
+        descr_tmp.length = dma_len - 1;                                 \
+        dma_out.pkt##_pkt## = descr_tmp;                                \
+                                                                        \
+        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                  \
+                       NFD_IN_DATA_DMA_QUEUE,                           \
+                       sig_done, &dma_sig##_pkt##);                     \
     }                                                                   \
                                                                         \
-    /* NB: EOP is required for all packets */                           \
-    /*     q_num is must be set on pkt0 */                              \
-    /*     notify technically doesn't use the rest unless */            \
-    /*     EOP is set */                                                \
-    issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                           \
-    issued_tmp.sp0 = 0;                                                 \
-    issued_tmp.sp1 = 0; /* XXX most efficient value to set? */          \
-    issued_tmp.dst_q = tx_desc.pkt##_pkt##.dst_q;                       \
-                                                                        \
-    batch_out.pkt##_pkt## = issued_tmp;                                 \
-    batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];      \
-    batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];      \
-                                                                        \
-    descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;           \
-    descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;           \
-                                                                        \
-    descr_tmp.rid = queue_data[queue].rid;                              \
-    pcie_dma_set_event(&descr_tmp, _type, _src);                        \
-    descr_tmp.length = dma_len - 1;                                     \
-    dma_out.pkt##_pkt## = descr_tmp;                                    \
-                                                                        \
-    __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##, NFD_IN_DATA_DMA_QUEUE, \
-                   sig_done, &dma_sig##_pkt##);                         \
 } while (0)
 
 
