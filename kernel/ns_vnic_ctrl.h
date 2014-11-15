@@ -22,6 +22,7 @@
 #ifndef _NS_VNIC_CTRL_H_
 #define _NS_VNIC_CTRL_H_
 
+
 /**
  * Configuration BAR size.
  *
@@ -33,6 +34,11 @@
 #else
 #define NS_VNIC_CFG_BAR_SZ		(8 * 1024)
 #endif
+
+/**
+ * Offset in Freelist buffer where packet starts on RX
+ */
+#define NS_VNIC_RX_OFFSET		32
 
 /**
  * @NS_VNIC_TXR_MAX:         Maximum number of TX rings
