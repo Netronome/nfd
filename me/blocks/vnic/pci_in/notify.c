@@ -103,8 +103,7 @@ notify_setup_shared()
 
     for (wq = 0; wq < NFD_IN_NUM_WQS; wq++) {
         mem_workq_setup((wq_num_base | wq),
-                        &NFD_RING_BASE(PCIE_ISL, nfd_in)[wq * NFD_IN_WQ_SZ /
-                                                         sizeof(unsigned int)],
+                        &NFD_RING_BASE(PCIE_ISL, nfd_in)[wq * NFD_IN_WQ_SZ],
                         NFD_IN_WQ_SZ);
     }
 

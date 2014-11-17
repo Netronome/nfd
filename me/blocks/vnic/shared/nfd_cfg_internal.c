@@ -360,9 +360,9 @@ nfd_cfg_setup()
 
     /* Setup the configuration message rings */
     for (ring = 0; ring < NFD_CFG_NUM_RINGS; ring++) {
-        mem_workq_setup((ring_num_base | ring),
-                        &nfd_cfg_rings[PCIE_ISL][ring],
-                        NFD_CFG_RING_SZ);
+        mem_ring_setup((ring_num_base | ring),
+                       &nfd_cfg_rings[PCIE_ISL][ring],
+                       NFD_CFG_RING_SZ);
     }
 
     /* Setup the configuration queues */
