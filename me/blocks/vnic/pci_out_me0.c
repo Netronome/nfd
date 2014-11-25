@@ -19,6 +19,7 @@
 #include <vnic/shared/nfd_cfg_internal.c>
 
 NFD_CFG_DECLARE(nfd_cfg_sig_pci_out, NFD_CFG_SIG_NEXT_ME);
+NFD_INIT_DONE_DECLARE;
 
 struct nfd_cfg_msg cfg_msg;
 
@@ -48,6 +49,7 @@ main(void)
         /* CTX 1-7 will stall until this starts ordering stages */
         stage_batch_setup_shared();
 
+        NFD_INIT_DONE_SET(PCIE_ISL, 0);     /* XXX Remove? */
     } else {
         /* These methods do not have dependencies on the
          * setup_shared() methods. */

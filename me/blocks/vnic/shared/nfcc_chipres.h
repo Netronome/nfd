@@ -1,3 +1,5 @@
+#define alloc_mem(x) _alloc_mem(#x)
+#define declare_resource(x) _declare_resource(#x)
 #define _alloc_resource(x) __alloc_resource(#x)
 
 #define EMEM_QUEUE_ALLOC(_name_, _scope_, _resourcepool_) \

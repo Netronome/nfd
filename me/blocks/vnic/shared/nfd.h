@@ -7,6 +7,8 @@
 #ifndef _BLOCKS__VNIC_SHARED_NFD_H_
 #define _BLOCKS__VNIC_SHARED_NFD_H_
 
+#include <nfp/mem_atomic.h>     /* TEMP */
+
 #include "nfd_user_cfg.h"
 #include <vnic/shared/nfcc_chipres.h>
 
@@ -38,6 +40,19 @@ do {                                                                    \
     _comp##_ring_info[_isl].sp0 = 0;                                    \
     _comp##_ring_info[_isl].rnum = NFD_RING_ALLOC(_isl, _comp, _num); \
 } while(0)
+
+
+/* XXX Remove NFD_INIT_DONE_DECLARE or leave?
+ * NB size 8 is minimum that NFCC and NFAS can share */
+#define NFD_INIT_DONE_DECLARE_IND1(_emem) \
+    __export __emem_n(_emem) unsigned int nfd_init_done[2];
+#define NFD_INIT_DONE_DECLARE_IND0(_emem) NFD_INIT_DONE_DECLARE_IND1(_emem)
+#define NFD_INIT_DONE_DECLARE NFD_INIT_DONE_DECLARE_IND0(NFD_CFG_RING_EMEM)
+
+
+#define NFD_INIT_DONE_SET_IND0(_isl, _me) \
+    mem_bitset_imm(1<<(_isl * NFD_MAX_ISL + _me), &nfd_init_done[0])
+#define NFD_INIT_DONE_SET(_isl, _me) NFD_INIT_DONE_SET_IND0(_isl, _me)
 
 
 #define NFD_EMEM_CHK_IND(_emem)     "emem" #_emem

@@ -13,6 +13,7 @@
 #include <vnic/pci_out/issue_dma.c>
 #include <vnic/pci_out/issue_dma_status.c>
 
+NFD_INIT_DONE_DECLARE;
 
 int
 main(void)
@@ -24,6 +25,8 @@ main(void)
         issue_dma_setup_shared();
         issue_dma_status_setup();
         free_buf_setup();
+
+        NFD_INIT_DONE_SET(PCIE_ISL, 1);     /* XXX Remove? */
 
     } else {
         issue_dma_setup();

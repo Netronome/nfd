@@ -19,6 +19,7 @@
 
 
 NFD_CFG_DECLARE(nfd_cfg_sig_pci_in1, nfd_cfg_sig_pci_out);
+NFD_INIT_DONE_DECLARE;
 
 struct nfd_cfg_msg cfg_msg;
 
@@ -36,6 +37,7 @@ main(void)
 
         issue_dma_setup_shared();
 
+        NFD_INIT_DONE_SET(PCIE_ISL, 3);     /* XXX Remove? */
     } else {
         issue_dma_setup();
     }

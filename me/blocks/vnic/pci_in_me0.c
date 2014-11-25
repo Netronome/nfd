@@ -25,6 +25,7 @@
 #include <std/event.h>                  /* TEMP */
 
 NFD_CFG_DECLARE(nfd_cfg_sig_pci_in0, nfd_cfg_sig_pci_in1);
+NFD_INIT_DONE_DECLARE;
 
 struct nfd_cfg_msg cfg_msg;
 
@@ -66,6 +67,8 @@ main(void)
         status |= (1<<STATUS_INIT_DONE_BIT);
         /* TEMP: Trigger user event (easy to look for) */
         event_cls_user_event(0x1234);
+
+        NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
     } else {
         gather_setup();
 
