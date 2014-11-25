@@ -41,6 +41,21 @@
 #define NS_VNIC_RX_OFFSET		32
 
 /**
+ * Hash type pre-pended when a RSS hash was computed
+ */
+#define NS_VNIC_RSS_NONE		0
+#define NS_VNIC_RSS_IPV4		1
+#define NS_VNIC_RSS_IPV6		2
+#define NS_VNIC_RSS_IPV6_EX		3
+#define NS_VNIC_RSS_IPV4_TCP		4
+#define NS_VNIC_RSS_IPV6_TCP		5
+#define NS_VNIC_RSS_IPV6_EX_TCP		6
+#define NS_VNIC_RSS_IPV4_UDP		7
+#define NS_VNIC_RSS_IPV6_UDP		8
+#define NS_VNIC_RSS_IPV6_EX_UDP		9
+
+
+/**
  * @NS_VNIC_TXR_MAX:         Maximum number of TX rings
  * @NS_VNIC_TXR_MASK:        Mask for TX rings
  * @NS_VNIC_RXR_MAX:         Maximum number of RX rings
@@ -141,9 +156,10 @@
 #define   NS_VNIC_CFG_RSS_MASK_of(_x)	  ((_x) & 0x7f)
 #define   NS_VNIC_CFG_RSS_IPV4		  (1 <<  8) /* RSS for IPv4 */
 #define   NS_VNIC_CFG_RSS_IPV6		  (1 <<  9) /* RSS for IPv6 */
-#define   NS_VNIC_CFG_RSS_TCP		  (1 << 10) /* RSS for TCP only */
-#define   NS_VNIC_CFG_RSS_UDP		  (1 << 11) /* RSS for UDP only */
-#define   NS_VNIC_CFG_RSS_4TUPLE	  (1 << 12) /* RSS using 4 tuple */
+#define   NS_VNIC_CFG_RSS_IPV4_TCP	  (1 << 10) /* RSS for IPv4/TCP */
+#define   NS_VNIC_CFG_RSS_IPV4_UDP	  (1 << 11) /* RSS for IPv4/UDP */
+#define   NS_VNIC_CFG_RSS_IPV6_TCP	  (1 << 12) /* RSS for IPv6/TCP */
+#define   NS_VNIC_CFG_RSS_IPV6_UDP	  (1 << 13) /* RSS for IPv6/UDP */
 #define   NS_VNIC_CFG_RSS_TOEPLITZ	  (1 << 24) /* Use Toeplitz hash */
 #define NS_VNIC_CFG_RSS_KEY		(NS_VNIC_CFG_RSS_BASE + 0x4)
 #define NS_VNIC_CFG_RSS_KEY_SZ		0x28
