@@ -22,7 +22,6 @@
 #ifndef _NS_VNIC_CTRL_H_
 #define _NS_VNIC_CTRL_H_
 
-
 /**
  * Configuration BAR size.
  *
@@ -54,7 +53,6 @@
 #define NS_VNIC_RSS_IPV6_UDP		8
 #define NS_VNIC_RSS_IPV6_EX_UDP		9
 
-
 /**
  * @NS_VNIC_TXR_MAX:         Maximum number of TX rings
  * @NS_VNIC_TXR_MASK:        Mask for TX rings
@@ -65,7 +63,6 @@
 #define NS_VNIC_TXR_MASK		(NS_VNIC_TXR_MAX - 1)
 #define NS_VNIC_RXR_MAX			64
 #define NS_VNIC_RXR_MASK		(NS_VNIC_RXR_MAX - 1)
-
 
 /**
  * Read/Write config words
@@ -117,7 +114,6 @@
 #define NS_VNIC_CFG_EXN			0x0021
 #define NS_VNIC_CFG_MACADDR		0x0024
 
-
 /**
  * Read-only words:
  * @NS_VNIC_CFG_VERSION:     Firmware version number
@@ -167,7 +163,6 @@
 					 NS_VNIC_CFG_RSS_KEY_SZ)
 #define NS_VNIC_CFG_RSS_ITBL_SZ		0x80
 
-
 /**
  * TX ring configuration
  * @NS_VNIC_CFG_TXR_BASE:    Base offset for TX ring configuration
@@ -185,7 +180,6 @@
 #define NS_VNIC_CFG_TXR_VEC(_x)		(NS_VNIC_CFG_TXR_BASE + 0x440 + (_x))
 #define NS_VNIC_CFG_TXR_PRIO(_x)	(NS_VNIC_CFG_TXR_BASE + 0x480 + (_x))
 
-
 /**
  * RX ring configuration
  * @NS_VNIC_CFG_RXR_BASE:    Base offset for RX ring configuration
@@ -199,7 +193,6 @@
 #define NS_VNIC_CFG_RXR_SZ(_x)		(NS_VNIC_CFG_RXR_BASE + 0x200 + (_x))
 #define NS_VNIC_CFG_RXR_VEC(_x)		(NS_VNIC_CFG_RXR_BASE + 0x240 + (_x))
 #define NS_VNIC_CFG_RXR_PRIO(_x)	(NS_VNIC_CFG_RXR_BASE + 0x280 + (_x))
-
 
 /**
  * General device stats (all counters are 64bit)
@@ -225,7 +218,6 @@
 #define NS_VNIC_CFG_STATS_TX_FRAMES     (NS_VNIC_CFG_STATS_BASE + 0x78)
 #define NS_VNIC_CFG_STATS_TX_MC_FRAMES  (NS_VNIC_CFG_STATS_BASE + 0x80)
 #define NS_VNIC_CFG_STATS_TX_BC_FRAMES  (NS_VNIC_CFG_STATS_BASE + 0x88)
-
 
 /**
  * Per ring stats (optional)
