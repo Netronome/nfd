@@ -121,11 +121,19 @@ __intrinsic void nfd_cfg_init_cfg_msg(SIGNAL *cfg_sig,
  * @param cfg_msg           message struct to fill
  * @param cfg_sig           signal to check for messages
  * @param rnum              ring number to fetch messages from
- * @param rbase             base address of the ring to use
  */
 __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                                        SIGNAL *cfg_sig,
                                        unsigned int rnum);
+
+/**
+ * Convenience macro to check cfg_msg from the app ME master without rnum
+ * @param _msg              message struct to fill
+ * @param _sig              signal to check for messages
+ * @param _pci              PCIe island
+ */
+#define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
+    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM((_pci), 2))
 
 
 /**
