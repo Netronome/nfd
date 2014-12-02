@@ -13,6 +13,7 @@
 #include <pkt/pkt.h>
 #include <std/reg_utils.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/utils/qc.h>
@@ -45,11 +46,7 @@ nfd_out_send_init()
 unsigned int
 nfd_out_map_queue(unsigned int vnic, unsigned int queue)
 {
-    unsigned int natural_queue;
-
-    natural_queue = ((vnic * NFD_MAX_VNIC_QUEUES) |
-                     (queue & (NFD_MAX_VNIC_QUEUES - 1)));
-    return map_natural_to_bitmask(natural_queue);
+    return NFD_BUILD_QID(vnic, queue);
 }
 
 

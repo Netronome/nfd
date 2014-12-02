@@ -12,6 +12,7 @@
 
 #include <nfp6000/nfp_cls.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/utils/qc.h>
 
 /*
@@ -267,7 +268,7 @@ check_queues(void *queue_info_struct,
      * Read latest wptr value
      * This is not necessary if wptr - sptr > n * MAX_BATCH_SIZE!
      */
-    qc_queue = (map_bitmask_to_natural(queue) << 1) + c->base_queue_num;
+    qc_queue = (NFD_BMQ2NATQ(queue) << 1) + c->base_queue_num;
     __qc_read(c->pcie_isl, qc_queue, QC_WPTR, &wptr_raw, ctx_swap, &qc_sig);
     wptr.__raw = wptr_raw;
 

@@ -15,6 +15,7 @@
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_qc.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>
@@ -238,8 +239,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         return;
     }
 
-    queue_s += cfg_msg->vnic * NFD_MAX_VNIC_QUEUES;
-    bmsk_queue = map_natural_to_bitmask(queue_s);
+    bmsk_queue = NFD_BUILD_QID(cfg_msg->vnic, queue_s);
 
     rxq.watermark    = NFP_QC_STS_HI_WATERMARK_8; /* XXX use 16 instead? */
     rxq.event_data   = NFD_OUT_Q_EVENT_DATA;
@@ -327,7 +327,7 @@ _fetch_fl(__gpr unsigned int *queue)
     int space_chk;
     int ret;        /* Required to ensure __intrinsic_begin|end pairing */
 
-    qc_queue = (map_bitmask_to_natural(*queue) << 1) | NFD_OUT_Q_START;
+    qc_queue = (NFD_BMQ2NATQ(*queue) << 1) | NFD_OUT_Q_START;
 
     /* Is there a batch to get from this queue?
      * If the queue is active or urgent there should be. */

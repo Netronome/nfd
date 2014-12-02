@@ -16,6 +16,7 @@
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
@@ -165,7 +166,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     }
 
     queue += cfg_msg->vnic * NFD_MAX_VNIC_QUEUES;
-    bmsk_queue = map_natural_to_bitmask(queue);
+    bmsk_queue = NFD_NATQ2BMQ(queue);
 
     if (cfg_msg->up_bit) {
         /* Initialise queue state */

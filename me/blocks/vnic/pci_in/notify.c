@@ -14,6 +14,7 @@
 
 #include <nfp/mem_ring.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>
@@ -229,7 +230,7 @@ notify()
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
-        qc_queue = map_bitmask_to_natural(q_batch) << 1;
+        qc_queue = NFD_BMQ2NATQ(q_batch) << 1;
         __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
                         sig_done, &qc_sig);
     } else {

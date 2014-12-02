@@ -13,6 +13,7 @@
 #include <pkt/pkt.h>
 #include <std/reg_utils.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/utils/qc.h>
@@ -101,11 +102,8 @@ void
 nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
                  unsigned int nfd_queue)
 {
-    unsigned int natural_queue;
-
-    natural_queue = map_bitmask_to_natural(nfd_queue);
-    *queue = natural_queue & (NFD_MAX_VNIC_QUEUES - 1);
-    *vnic = natural_queue / NFD_MAX_VNIC_QUEUES;
+    *vnic = NFD_QID2VNIC(nfd_queue);
+    *queue = NFD_QID2VQN(nfd_queue);
 }
 
 

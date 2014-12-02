@@ -13,6 +13,7 @@
 
 #include <vnic/pci_in.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>
@@ -97,7 +98,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     }
 
     queue += cfg_msg->vnic * NFD_MAX_VNIC_QUEUES;
-    bmsk_queue = map_natural_to_bitmask(queue);
+    bmsk_queue = NFD_NATQ2BMQ(queue);
 
     txq.watermark    = NFP_QC_STS_HI_WATERMARK_4;
     txq.event_data   = NFD_IN_Q_EVENT_DATA;

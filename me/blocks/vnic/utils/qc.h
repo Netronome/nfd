@@ -8,30 +8,6 @@
 #define _BLOCKS__VNIC_UTILS_QC_H_
 
 
-/* XXX Host code may need access to the map_xxx_to_yyy methods
- * for debugging purposes. */
-
-/**
- * Map from natural queue number to bitmask number
- * Compute which bit in a bitmask corresponds to a given natural queue number
- */
-__intrinsic int
-map_natural_to_bitmask(int natural_queue)
-{
-    return (((natural_queue & 31) << 1) | (natural_queue >> 5));
-}
-
-/**
- * Map from bitmask number to natural number
- * Given an offset in a queue bitmask, obtain the natural queue number
- */
-__intrinsic int
-map_bitmask_to_natural(int bitmask_queue)
-{
-    return (bitmask_queue>>1) | ((bitmask_queue << 5) & 32);
-}
-
-
 #if defined (__NFP_LANG_MICROC)
 
 #include <nfp.h>

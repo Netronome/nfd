@@ -12,6 +12,7 @@
 
 #include <vnic/pci_in/gather_status.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/qc.h>
@@ -79,7 +80,7 @@ gather_status()
          * Convert the natural queue number in the request to a bitmask queue
          * number
          */
-        bmsk_queue = map_natural_to_bitmask(status_queue_sel);
+        bmsk_queue = NFD_NATQ2BMQ(status_queue_sel);
         __implicit_write(&status_queue_sel);
 
         /*
