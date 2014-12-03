@@ -117,7 +117,7 @@
 #define NFD_OUT_FL_EVENT_TYPE           13
 #define NFD_OUT_DATA_EVENT_TYPE         14
 #define NFD_OUT_DATA_IGN_EVENT_TYPE     7
-#define NFD_OUT_DESC_EVENT_TYPE         9
+#define NFD_OUT_DESC_EVENT_TYPE         3
 
 #define NFD_OUT_FL_EVENT_FILTER         11
 #define NFD_OUT_DATA_EVENT_FILTER       12
