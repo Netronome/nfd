@@ -23,13 +23,22 @@
 #define NFD_BMQ2NATQ(_qid) \
     (((_qid) >> 1) | (((_qid) << 5) & 32))
 
+#define NFD_NATQ2VNIC(_nat) \
+    ((_nat) / NFD_MAX_VNIC_QUEUES)
+
+#define NFD_NATQ2VQN(_nat) \
+    ((_nat) % NFD_MAX_VNIC_QUEUES)
+
+#define NFD_BUILD_NATQ(_vnic, _vqn) \
+    ((_vnic) * NFD_MAX_VNIC_QUEUES + (_vqn))
+
 #define NFD_QID2VNIC(_qid) \
-    (NFD_BMQ2NATQ(_qid) / NFD_MAX_VNIC_QUEUES)
+    NFD_NATQ2VNIC(NFD_BMQ2NATQ(_qid))
 
 #define NFD_QID2VQN(_qid) \
-    (NFD_BMQ2NATQ(_qid) % NFD_MAX_VNIC_QUEUES)
+    NFD_NATQ2VQN(NFD_BMQ2NATQ(_qid))
 
 #define NFD_BUILD_QID(_vnic, _vqn) \
-    NFD_NATQ2BMQ((_vnic) * NFD_MAX_VNIC_QUEUES + (_vqn))
+    NFD_NATQ2BMQ(NFD_BUILD_NATQ(_vnic, _vqn))
 
 #endif /* __NFD_COMMON_H */
