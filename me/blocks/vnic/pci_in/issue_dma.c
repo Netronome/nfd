@@ -237,7 +237,7 @@ do {                                                                    \
     unsigned int dma_len;                                               \
                                                                         \
     /* THS-54 workaround, round DMA up to next 4B multiple size */      \
-    dma_len = ((tx_desc.pkt##_pkt##.dma_len + NFD_IN_DATA_ROUND) &      \
+    dma_len = ((tx_desc.pkt##_pkt##.dma_len + NFD_IN_DATA_ROUND - 1) &  \
                ~(NFD_IN_DATA_ROUND -1));                                \
                                                                         \
     if (tx_desc.pkt##_pkt##.eop && !queue_data[queue].cont) {           \

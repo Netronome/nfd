@@ -10,6 +10,7 @@
 #define STATUS_ISSUE_DMA_START   24
 
 struct nfd_out_issue_dma_status {
+    unsigned int data_dma_seq_started;
     unsigned int data_dma_seq_issued;
     unsigned int data_dma_seq_compl;
     unsigned int data_dma_seq_served;

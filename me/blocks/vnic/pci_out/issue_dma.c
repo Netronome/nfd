@@ -60,6 +60,7 @@ static __shared __lmem struct _cpp_desc_batch
 /*
  * Sequence numbers
  */
+__shared __gpr unsigned int data_dma_seq_started = 0;
 __shared __gpr unsigned int data_dma_seq_issued = 0;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
@@ -400,7 +401,7 @@ do {                                                                    \
             descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;      \
             descr_tmp.pcie_addr_lo += PCIE_DMA_MAX_SZ;                  \
                                                                         \
-            descr_tmp.length = len_tmp - PCIE_DMA_MAX_SZ;               \
+            descr_tmp.length = len_tmp - PCIE_DMA_MAX_SZ - 1;           \
             pcie_dma_set_event(&descr_tmp, _type, _src);                \
                                                                         \
             dma_out_main.pkt##_pkt = descr_tmp;                         \
@@ -489,7 +490,9 @@ issue_dma()
     __implicit_read(&get_order_sig);
     __implicit_read(&dma_out_res, sizeof dma_out_res);
 
-    if (!nn_ring_empty() && data_dma_seq_issued != data_dma_seq_safe) {
+    if (!nn_ring_empty() && data_dma_seq_started != data_dma_seq_safe) {
+        data_dma_seq_started++;
+
         /* We have a message! */
         data_wait_msk = __signals(&data_sig0, &data_sig1, &data_sig2,
                                   &data_sig3, &get_order_sig);
@@ -645,7 +648,6 @@ issue_dma()
         /* Allow this thread to poll the NN ring again */
         data_wait_msk = __signals(&get_order_sig);
         reorder_self(&get_order_sig);
-
     }
 }
 

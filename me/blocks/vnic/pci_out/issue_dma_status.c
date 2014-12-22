@@ -21,6 +21,7 @@
  * Issue DMA state
  */
 extern __shared __gpr unsigned int data_dma_seq_issued;
+extern __shared __gpr unsigned int data_dma_seq_issued;
 extern __shared __gpr unsigned int data_dma_seq_compl;
 extern __shared __gpr unsigned int data_dma_seq_served;
 extern __shared __gpr unsigned int data_dma_seq_safe;
@@ -29,7 +30,7 @@ extern __shared __gpr unsigned int data_dma_seq_safe;
 /**
  * Xfers to display state
  */
-static __xwrite struct nfd_out_issue_dma_status status_issued = {0, 0, 0, 0};
+static __xwrite struct nfd_out_issue_dma_status status_issued = {0, 0, 0, 0, 0};
 
 SIGNAL status_throttle;
 
@@ -53,6 +54,7 @@ issue_dma_status()
         /*
          * Collect the independent data from various sources
          */
+        status_issued.data_dma_seq_started = data_dma_seq_started;
         status_issued.data_dma_seq_issued = data_dma_seq_issued;
         status_issued.data_dma_seq_compl = data_dma_seq_compl;
         status_issued.data_dma_seq_served = data_dma_seq_served;
