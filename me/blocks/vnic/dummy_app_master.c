@@ -34,10 +34,10 @@ __export __emem_n(1) __align(8 * BLM_RING_SZ)
 __shared __gpr mem_ring_addr_t fake_blm_addr;
 
 /* Fake buffers */
-#define BUF_SZ  (2 * 1024)
+#define BUF_SZ  (10 * 1024)
 #define BUF_NUM 1024
 __xwrite unsigned int fake_bufs[8];
-__export __imem __align2M char bufs_array[BUF_NUM * BUF_SZ];
+__export __emem __align16K char bufs_array[BUF_NUM * BUF_SZ];
 __shared __gpr unsigned int buf_cnt = 0;
 
 __xread unsigned int cfg_bar_data[6];
@@ -77,7 +77,6 @@ main(void)
         /* unsigned int ctx_of; */
         unsigned int rnum;
 
-        ctassert(SZ_2M >= (BUF_NUM * BUF_SZ));
         ctassert(__is_aligned(BUF_NUM, 8));
 
         buf_base = ((unsigned long long) bufs_array>>11) & 0xffffffff;
