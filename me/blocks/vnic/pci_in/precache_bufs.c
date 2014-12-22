@@ -117,7 +117,7 @@ precache_bufs_setup()
     cfg.lm_addr_3_glob = 1;
     local_csr_write(NFP_MECSR_CTX_ENABLES, cfg.__raw);
 
-    blm_queue_addr = ((unsigned long long) NFD_IN_BLM_RADDR >> 8);
+    blm_queue_addr = ((unsigned long long) NFD_IN_BLM_RADDR >> 8) & 0xff000000;
     blm_queue_num = NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 
     buf_store_start = (unsigned int) &buf_store;

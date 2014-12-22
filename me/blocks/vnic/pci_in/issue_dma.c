@@ -189,7 +189,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 
             /* XXX possibly move BLM constants to GPRs
              * if some are available */
-            blm_raddr = ((unsigned long long) NFD_IN_BLM_RADDR >> 8);
+            blm_raddr = (((unsigned long long) NFD_IN_BLM_RADDR >> 8) &
+                         0xff000000);
             blm_rnum = NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
             mem_ring_journal_fast(blm_rnum, blm_raddr,
                                   queue_data[bmsk_queue].curr_buf);
