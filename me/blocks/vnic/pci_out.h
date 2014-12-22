@@ -7,12 +7,6 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_H_
 #define _BLOCKS__VNIC_PCI_OUT_H_
 
-#include "nfd_user_cfg.h"
-
-
-#ifndef NFD_OUT_RING_SZ
-#error "NFD_OUT_RING_SZ must be defined by the user"
-#endif
 
 #define NFD_OUT_MAX_QUEUES              64
 
@@ -90,6 +84,13 @@ struct nfd_out_input {
 #if defined(__NFP_LANG_MICROC)
 
 #include <pkt/pkt.h>
+
+#include "nfd_user_cfg.h"
+
+#ifndef NFD_OUT_RING_SZ
+#error "NFD_OUT_RING_SZ must be defined by the user"
+#endif
+
 
 /**
  * Prepare ME data structures required to send packets to NFD

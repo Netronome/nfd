@@ -25,6 +25,16 @@
 #include <vnic/utils/qc.h>
 
 
+/* Required user configuration */
+#ifndef NFD_OUT_BLM_POOL_START
+#error "NFD_OUT_BLM_POOL_START must be defined by the user"
+#endif
+
+#ifndef NFD_OUT_BLM_RADDR
+#error "NFD_OUT_BLM_RADDR must be defined by the user"
+#endif
+
+
 /* XXX move somewhere shared? */
 struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt0;

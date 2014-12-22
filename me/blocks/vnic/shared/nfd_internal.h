@@ -7,18 +7,6 @@
 #ifndef _BLOCKS__SHARED_NFD_INTERNAL_H_
 #define _BLOCKS__SHARED_NFD_INTERNAL_H_
 
-#include "nfd_user_cfg.h"
-
-
-/* Required user configuration */
-#ifndef NFD_OUT_BLM_POOL_START
-#error "NFD_OUT_BLM_POOL_START must be defined by the user"
-#endif
-
-#ifndef NFD_OUT_BLM_RADDR
-#error "NFD_OUT_BLM_RADDR must be defined by the user"
-#endif
-
 
 /* Tuning constants */
 /* nfd_cfg */
