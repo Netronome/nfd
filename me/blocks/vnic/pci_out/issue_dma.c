@@ -439,9 +439,10 @@ do {                                                                    \
  */
 #define _ISSUE_CLR(_pkt)                                             \
 do {                                                                 \
+    struct nfd_out_cpp_desc cpp_zero = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};  \
+                                                                     \
     data_wait_msk &= ~__signals(&data_sig##_pkt);                    \
-    cpp_desc_ring[cpp_desc_index].pkt##_pkt##.__raw[0] = 0;          \
-    cpp_desc_ring[cpp_desc_index].pkt##_pkt##.__raw[1] = 0;          \
+    cpp_desc_ring[cpp_desc_index].pkt##_pkt = cpp_zero;              \
 } while (0)
 
 
