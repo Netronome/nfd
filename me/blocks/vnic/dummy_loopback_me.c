@@ -42,6 +42,7 @@ _declare_resource("BLQ_EMU_RINGS global 8 emem1_queues+4");
 
 
 #define NO_CREDIT_SLEEP         256
+#define NO_BUF_SLEEP            256
 #define COPY_CHUNK              64
 
 
@@ -127,6 +128,7 @@ cp_ctm_data(unsigned int ctm_base, unsigned int mu_base, unsigned int start,
 
 
 /* Get a 256B CTM buffer from the local island
+ * Use of packet_alloc_poll assumes that only MEs use this CTM
  * XXX replace with API call */
 __intrinsic void
 __get_ctm_buf_256(__xread unsigned int *ctm_buf, sync_t sync, SIGNAL *sig)
@@ -139,11 +141,11 @@ __get_ctm_buf_256(__xread unsigned int *ctm_buf, sync_t sync, SIGNAL *sig)
 
     if (sync == sig_done) {
         __asm alu[--, --, b, ind];
-        __asm mem[packet_alloc, *ctm_buf, addr_hi, 0, 1], indirect_ref, \
+        __asm mem[packet_alloc_poll, *ctm_buf, addr_hi, 0, 1], indirect_ref, \
             sig_done[*sig];
     } else {
         __asm alu[--, --, b, ind];
-        __asm mem[packet_alloc, *ctm_buf, addr_hi, 0, 1], indirect_ref, \
+        __asm mem[packet_alloc_poll, *ctm_buf, addr_hi, 0, 1], indirect_ref, \
             ctx_swap[*sig];
     }
 }
@@ -318,6 +320,11 @@ void main(void)
 
         /* XXX use API to allocate CTM buffer */
         __get_ctm_buf_256(&ctm_buf, ctx_swap, &ctm_buf_sig);
+        while (((int) ctm_buf) < 0) {
+            /* Throttle PE polling */
+            sleep(NO_BUF_SLEEP);
+            __get_ctm_buf_256(&ctm_buf, ctx_swap, &ctm_buf_sig);
+        }
 
         pkt_info.isl = island;
         pkt_info.pnum = (ctm_buf >> 20);
