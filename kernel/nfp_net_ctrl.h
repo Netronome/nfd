@@ -72,8 +72,8 @@
  * @NFP_NET_CFG_RXRS_ENABLE: Bitmask of enabled RX rings
  * @NFP_NET_CFG_MTU:         Set MTU size
  * @NFP_NET_CFG_FLBUFSZ:     Set freelist buffer size (must be larger than MTU)
- * @NFP_NET_CFG_LSC:         MSI-X table entry for link state changes
  * @NFP_NET_CFG_EXN:         MSI-X table entry for exceptions
+ * @NFP_NET_CFG_LSC:         MSI-X table entry for link state changes
  * @NFP_NET_CFG_MACADDR:     MAC address
  *
  * TODO:
@@ -110,8 +110,8 @@
 #define NFP_NET_CFG_RXRS_ENABLE		0x0010
 #define NFP_NET_CFG_MTU			0x0018
 #define NFP_NET_CFG_FLBUFSZ		0x001c
+#define NFP_NET_CFG_EXN			0x001f
 #define NFP_NET_CFG_LSC			0x0020
-#define NFP_NET_CFG_EXN			0x0021
 #define NFP_NET_CFG_MACADDR		0x0024
 
 /**
