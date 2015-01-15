@@ -20,13 +20,12 @@ struct nfd_out_rx_desc {
     union {
         struct {
             unsigned int dd:1;          /* Descriptor done, must be set */
-            unsigned int offset:7;      /* Offset where packet starts */
+            unsigned int meta_len:7;    /* Length of meta data prepended */
             unsigned int queue:8;       /* Queue, bitmask numbered */
             unsigned int data_len:16;   /* Length of frame + meta data */
 
             unsigned int vlan:16;       /* VLAN if stripped */
-            unsigned int spare:12;
-            unsigned int flags:4;       /* RX flags */
+            unsigned int flags:16;      /* RX flags */
         };
         unsigned int __raw[2];
     };

@@ -124,7 +124,7 @@ nfd_out_fill_desc(__gpr struct nfd_out_input *desc, void *pkt_info,
     /* Length and offset details */
     desc->rxd.data_len = (((struct nbi_meta_pkt_info *) pkt_info)->len +
                           meta_len);
-    desc->rxd.offset = meta_len;
+    desc->rxd.meta_len = meta_len;
     desc->cpp.offset = pkt_start - meta_len;
 }
 
@@ -135,7 +135,6 @@ nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc, unsigned int vlan,
 {
     desc->rxd.vlan  = vlan;
     desc->rxd.flags = flags;
-    desc->rxd.spare = 0;
 }
 
 
