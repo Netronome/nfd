@@ -324,8 +324,12 @@ struct nfd_out_data_batch {
 /* Helper macros */
 /* XXX can provide an extra _pool parameter here if required */
 #define NFD_BLM_Q_ALLOC_IND(_name)                  \
-    _alloc_resource(_name BLQ_EMU_RINGS global 1)
+    ASM(.alloc_resource _name BLQ_EMU_RINGS global 1)
 #define NFD_BLM_Q_ALLOC(_name) NFD_BLM_Q_ALLOC_IND(_name)
+
+#define NFD_BLM_Q_LINK_IND(_name)                  \
+    _link_sym(_name)
+#define NFD_BLM_Q_LINK(_name) NFD_BLM_Q_LINK_IND(_name)
 
 #define NFD_RING_BASE_IND(_isl, _comp)   _comp##_ring_isl##_isl
 #define NFD_RING_BASE(_isl, _comp)       NFD_RING_BASE_IND(_isl, _comp)

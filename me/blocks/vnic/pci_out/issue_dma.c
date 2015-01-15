@@ -34,6 +34,8 @@
 #error "NFD_OUT_BLM_RADDR must be defined by the user"
 #endif
 
+NFD_BLM_Q_ALLOC(NFD_OUT_BLM_POOL_START);
+
 
 /* XXX move somewhere shared? */
 struct _dma_desc_batch {
@@ -660,7 +662,7 @@ __intrinsic void
 free_buf_setup()
 {
     blm_raddr = ((unsigned long long) NFD_OUT_BLM_RADDR >> 8) & 0xff000000;
-    blm_rnum_start = NFD_BLM_Q_ALLOC(NFD_OUT_BLM_POOL_START);
+    blm_rnum_start = NFD_BLM_Q_LINK(NFD_OUT_BLM_POOL_START);
 }
 
 

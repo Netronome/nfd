@@ -20,18 +20,33 @@ __visible SIGNAL nfd_cfg_sig_app_master1;
 
 struct nfd_cfg_msg cfg_msg;
 
-/* Cheap ordering mechanism */
-__shared __gpr int ring_wait = 0;
-
 
 /* Fake BLM */
 /* Support 8 BLM rings (not all need to be used). */
 /* All rings are on one EMEM unit */
-_declare_resource("BLQ_EMU_RINGS global 8 emem1_queues+4");
-#define BLM_RING_SZ (4 * 4096)
-__export __emem_n(1) __align(8 * BLM_RING_SZ)
-    unsigned int fake_blm_mem[8 * BLM_RING_SZ / sizeof(unsigned int)];
-__shared __gpr mem_ring_addr_t fake_blm_addr;
+#define BLM_RING_SZ     16384
+
+emem1_queues_DECL;
+ASM(.declare_resource BLQ_EMU_RINGS global 8 emem1_queues+4);
+ASM(.alloc_mem fake_blm_mem emem1 global (8 * BLM_RING_SZ) (8 * BLM_RING_SZ));
+
+#define DUMMY_BLM_INIT(_qid, _num, _base)                               \
+    ASM(.alloc_resource _qid BLQ_EMU_RINGS+##_num global 1)             \
+    ASM(.declare_resource _base##_res global BLM_RING_SZ fake_blm_mem)  \
+    ASM(.alloc_resource _base _base##_res global BLM_RING_SZ BLM_RING_SZ) \
+    ASM(.init_mu_ring _qid _base)
+
+DUMMY_BLM_INIT(BLM_NBI8_BLQ0_EMU_QID, 0, BLM_NBI8_BLQ0_EMU_Q_BASE);
+DUMMY_BLM_INIT(BLM_NBI8_BLQ1_EMU_QID, 1, BLM_NBI8_BLQ1_EMU_Q_BASE);
+DUMMY_BLM_INIT(BLM_NBI8_BLQ2_EMU_QID, 2, BLM_NBI8_BLQ2_EMU_Q_BASE);
+DUMMY_BLM_INIT(BLM_NBI8_BLQ3_EMU_QID, 3, BLM_NBI8_BLQ3_EMU_Q_BASE);
+DUMMY_BLM_INIT(BLM_NBI9_BLQ0_EMU_QID, 4, BLM_NBI9_BLQ0_EMU_Q_BASE);
+DUMMY_BLM_INIT(BLM_NBI9_BLQ1_EMU_QID, 5, BLM_NBI9_BLQ1_EMU_Q_BASE);
+DUMMY_BLM_INIT(BLM_NBI9_BLQ2_EMU_QID, 6, BLM_NBI9_BLQ2_EMU_Q_BASE);
+DUMMY_BLM_INIT(BLM_NBI9_BLQ3_EMU_QID, 7, BLM_NBI9_BLQ3_EMU_Q_BASE);
+
+
+__gpr mem_ring_addr_t fake_blm_addr;
 
 /* Fake buffers */
 #define BUF_SZ  (10 * 1024)
@@ -49,43 +64,19 @@ int
 main(void)
 {
     if (ctx() == 0) {
-        unsigned int rnum;
-
-        rnum = _alloc_resource(BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS global 1);
-        mem_ring_setup(rnum, &fake_blm_mem[0], BLM_RING_SZ);
-        rnum = _alloc_resource(BLM_NBI8_BLQ1_EMU_QID BLQ_EMU_RINGS global 1);
-        mem_ring_setup(rnum, &fake_blm_mem[BLM_RING_SZ / 4], BLM_RING_SZ);
-        rnum = _alloc_resource(BLM_NBI8_BLQ2_EMU_QID BLQ_EMU_RINGS global 1);
-        mem_ring_setup(rnum, &fake_blm_mem[2 * BLM_RING_SZ / 4], BLM_RING_SZ);
-        rnum = _alloc_resource(BLM_NBI8_BLQ3_EMU_QID BLQ_EMU_RINGS global 1);
-        mem_ring_setup(rnum, &fake_blm_mem[3 * BLM_RING_SZ / 4], BLM_RING_SZ);
-        rnum = _alloc_resource(BLM_NBI9_BLQ0_EMU_QID BLQ_EMU_RINGS global 1);
-        mem_ring_setup(rnum, &fake_blm_mem[4 * BLM_RING_SZ / 4], BLM_RING_SZ);
-        rnum = _alloc_resource(BLM_NBI9_BLQ1_EMU_QID BLQ_EMU_RINGS global 1);
-        mem_ring_setup(rnum, &fake_blm_mem[5 * BLM_RING_SZ / 4], BLM_RING_SZ);
-        rnum = _alloc_resource(BLM_NBI9_BLQ2_EMU_QID BLQ_EMU_RINGS global 1);
-        mem_ring_setup(rnum, &fake_blm_mem[6 * BLM_RING_SZ / 4], BLM_RING_SZ);
-        rnum = _alloc_resource(BLM_NBI9_BLQ3_EMU_QID BLQ_EMU_RINGS global 1);
-        fake_blm_addr = mem_ring_setup(rnum, &fake_blm_mem[7 * BLM_RING_SZ / 4],
-                                       BLM_RING_SZ);
-
-        ring_wait = 1;
-
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_app_master1, &cfg_msg);
+
     } else {
         unsigned int buf_base;
-        /* unsigned int ctx_of; */
         unsigned int rnum;
 
         ctassert(__is_aligned(BUF_NUM, 8));
 
         buf_base = ((unsigned long long) bufs_array>>11) & 0xffffffff;
 
-        rnum = _alloc_resource(BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS global 1);
-
-        while (ring_wait == 0) {
-            ctx_swap();
-        }
+        fake_blm_addr =
+            (unsigned long long) (__LoadTimeConstant("__addr_emem1")) >> 8;
+        rnum = _link_sym(BLM_NBI8_BLQ0_EMU_QID);
 
         while (buf_cnt < BUF_NUM) {
             int i = 0;

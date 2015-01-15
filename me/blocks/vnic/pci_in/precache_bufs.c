@@ -23,6 +23,8 @@
 #define NFD_IN_BUF_STORE_PTR *l$index3
 _init_csr("mecsr:CtxEnables.LMAddr3Global 1");
 
+NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
+
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
 static struct nfd_in_me1_state state = {0, 0, 0};
@@ -118,7 +120,7 @@ precache_bufs_setup()
     local_csr_write(NFP_MECSR_CTX_ENABLES, cfg.__raw);
 
     blm_queue_addr = ((unsigned long long) NFD_IN_BLM_RADDR >> 8) & 0xff000000;
-    blm_queue_num = NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
+    blm_queue_num = NFD_BLM_Q_LINK(NFD_IN_BLM_POOL);
 
     buf_store_start = (unsigned int) &buf_store;
     local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, buf_store_start);

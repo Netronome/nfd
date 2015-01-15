@@ -50,6 +50,10 @@ struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt3;
 };
 
+
+NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
+
+
 /* Ring declarations */
 /* XXX use CLS ring API when available */
 /* XXX THS-50 workaround, use CTM instead of CLS rings */
@@ -191,7 +195,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
              * if some are available */
             blm_raddr = (((unsigned long long) NFD_IN_BLM_RADDR >> 8) &
                          0xff000000);
-            blm_rnum = NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
+            blm_rnum = NFD_BLM_Q_LINK(NFD_IN_BLM_POOL);
             mem_ring_journal_fast(blm_rnum, blm_raddr,
                                   queue_data[bmsk_queue].curr_buf);
         }

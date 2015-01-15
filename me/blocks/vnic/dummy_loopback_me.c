@@ -37,6 +37,11 @@
 
 
 /* XXX variables that app and/or BLM should expose */
+emem1_queues_DECL;
+ASM(.declare_resource BLQ_EMU_RINGS global 8 emem1_queues+4);
+ASM(.alloc_resource BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS+0 global 1);
+
+
 _declare_resource("BLQ_EMU_RINGS global 8 emem1_queues+4");
 #define APP_BLM_RADDR __LoadTimeConstant("__addr_emem1")
 
@@ -219,7 +224,6 @@ void main(void)
 
     int ret;
 
-
     if (ctx() == 0) {
         /* Kick off ordering */
         signal_ctx(0, __signal_number(&get_order_sig));
@@ -246,8 +250,8 @@ void main(void)
     }
 
     blm_raddr = ((unsigned long long) APP_BLM_RADDR >> 8);
-    blm_rnum_base =
-        _alloc_resource(BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS global 1);
+    blm_rnum_base = _link_sym(BLM_NBI8_BLQ0_EMU_QID);
+        /* _alloc_resource(BLM_NBI8_BLQ0_EMU_QID BLQ_EMU_RINGS global 1); */
 
     /* Manual delay to allow work queues
      * to become configured! */
