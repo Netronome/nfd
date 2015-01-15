@@ -197,7 +197,9 @@ notify_setup()
 do {                                                                    \
     if (batch_in.pkt##_pkt##.eop) {                                     \
         __critical_path();                                              \
-        dst_q = batch_in.pkt##_pkt##.dst_q;                             \
+        pkt_desc_tmp.sp0 = 0;                                           \
+        pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;              \
+        dst_q = (batch_in.pkt##_pkt##.lso & NFD_IN_DSTQ_MSK);           \
         NFD_IN_ADD_SEQN_PROC;                                           \
         dst_q |= wq_num_base;                                           \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];         \
@@ -284,7 +286,6 @@ notify()
         /* Interface and queue info are the same for all packets in batch */
         pkt_desc_tmp.intf = PCIE_ISL;
         pkt_desc_tmp.q_num = q_batch;
-        pkt_desc_tmp.sp1 = 0;
 #ifndef NFD_IN_ADD_SEQN
         pkt_desc_tmp.reserved = 0;
 #endif

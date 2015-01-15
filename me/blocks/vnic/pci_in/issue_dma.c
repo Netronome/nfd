@@ -262,9 +262,7 @@ do {                                                                    \
         /*     notify technically doesn't use the rest unless */        \
         /*     EOP is set */                                            \
         issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                       \
-        issued_tmp.sp0 = 0;                                             \
-        issued_tmp.sp1 = 0; /* XXX most efficient value to set? */      \
-        issued_tmp.dst_q = tx_desc.pkt##_pkt##.dst_q;                   \
+        issued_tmp.offset = tx_desc.pkt##_pkt##.offset;                 \
                                                                         \
         /* Apply a standard "recipe" to complete the DMA issue */       \
         batch_out.pkt##_pkt## = issued_tmp;                             \
@@ -299,11 +297,11 @@ do {                                                                    \
         /* produce output to the work queues, and will have no */       \
         /* effect on the queue controller queue. */                     \
         /* NB: the rest of the message will be stale. */                \
-        issued_tmp.num_batch = 0;                                       \
         issued_tmp.eop = 0;                                             \
+        issued_tmp.offset = 0;                                          \
         issued_tmp.sp0 = 0;                                             \
+        issued_tmp.num_batch = 0;                                       \
         issued_tmp.sp1 = 0;                                             \
-        issued_tmp.dst_q = 0;                                           \
         batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];           \
                                                                         \
         /* Handle the DMA sequence numbers for the batch */             \
@@ -362,9 +360,7 @@ do {                                                                    \
         /*     notify technically doesn't use the rest unless */        \
         /*     EOP is set */                                            \
         issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                       \
-        issued_tmp.sp0 = 0;                                             \
-        issued_tmp.sp1 = 0; /* XXX most efficient value to set? */      \
-        issued_tmp.dst_q = tx_desc.pkt##_pkt##.dst_q;                   \
+        issued_tmp.offset = tx_desc.pkt##_pkt##.offset;                 \
                                                                         \
         /* Apply a standard "recipe" to complete the DMA issue */       \
         batch_out.pkt##_pkt## = issued_tmp;                             \
@@ -478,8 +474,10 @@ issue_dma()
     queue = batch.queue;
     data_dma_seq_issued++;
 
-    issued_tmp.q_num = queue;
+    issued_tmp.sp0 = 0;
     issued_tmp.num_batch = batch.num;   /* Only needed in pkt0 */
+    issued_tmp.sp1 = 0;
+    issued_tmp.q_num = queue;
 
     /* Maybe add "full" bit */
     switch (batch.num) {

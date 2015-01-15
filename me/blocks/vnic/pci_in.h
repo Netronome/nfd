@@ -107,36 +107,34 @@
  * PCI.in TX descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
- * Word  +-+-----+-----------------------+---------+-----+---------------+
- *    0  |E| sp0 |        dma_len        |   sp1   |dst_q|  dma_addr_hi  |
- *       +-+-----+-----------------------+---------+-----+---------------+
+ * Word  +-+-------------+-------------------------------+---------------+
+ *    0  |E|   offset    |            dma_len            |  dma_addr_hi  |
+ *       +-+-------------+-------------------------------+---------------+
  *    1  |                          dma_addr_lo                          |
- *       +-+-------------+-------+-------+-------------------------------+
- *    2  |0|  offset     |  sp2  | flags |            data_len           |
- *       +-+-------------+-------+-------+-------------------------------+
- *    3  |             VLAN              |               sp3             |
+ *       +---------------+---------------+-------------------------------+
+ *    2  |     flags     |   l4_offsets  |               lso             |
+ *       +---------------+---------------+-------------------------------+
+ *    3  |           data_len            |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
- *      sp0 - sp3 -> spare
  *      E -> End of packet
  */
 struct nfd_in_tx_desc {
     union {
         struct {
             unsigned int eop:1;
-            unsigned int sp0:3;
-            unsigned int dma_len:12;
-            unsigned int sp1:5;
-            unsigned int dst_q:3;
-            unsigned int dma_addr_hi:8;
-            unsigned int dma_addr_lo:32;
-            unsigned int valid:1;
             unsigned int offset:7;
-            unsigned int sp2:4;
-            unsigned int flags:4;
+            unsigned int dma_len:16;
+            unsigned int dma_addr_hi:8;
+
+            unsigned int dma_addr_lo:32;
+
+            unsigned int flags:8;
+            unsigned int l4_offset:8;
+            unsigned int lso:16;
+
             unsigned int data_len:16;
             unsigned int vlan:16;
-            unsigned int sp3:16;
         };
         unsigned int __raw[4];
     };
@@ -147,34 +145,36 @@ struct nfd_in_tx_desc {
  * PCI.in Packet descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
- * Word  +----+------------+---------------------------------------------+
- *    0  |intf|   q_num    |                     sp1                     |
- *       +----+------------+---------------------------------------------+
+ * Word  +-+-------------+-----------------------------+---+-------------+
+ *    0  |S|    offset   |           reserved          |itf|    q_num    |
+ *       +-+-------------+-----------------------------+---+-------------+
  *    1  |                           buf_addr                            |
- *       +-+-------------+-------+-------+-------------------------------+
- *    2  |0|  offset     |  sp2  | flags |            data_len           |
- *       +-+-------------+-------+-------+-------------------------------+
- *    3  |             VLAN              |               sp3             |
+ *       +---------------+---------------+-------------------------------+
+ *    2  |     flags     |   l4_offset   |               lso             |
+ *       +---------------+---------------+-------------------------------+
+ *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
- *      sp0 - sp3 -> spare
- * XXX use compact buffer address?
+ *      S -> sp0 (spare)
+ *    itf -> intf
  */
 struct nfd_in_pkt_desc {
     union {
         struct {
+            unsigned int sp0:1;
+            unsigned int offset:7;
+            unsigned int reserved:16;
             unsigned int intf:2;
             unsigned int q_num:6;
-            unsigned int sp1:8;
-            unsigned int reserved:16;
+
             unsigned int buf_addr:32;
-            unsigned int valid:1;
-            unsigned int offset:7;
-            unsigned int sp2:4;
-            unsigned int flags:4;
+
+            unsigned int flags:8;
+            unsigned int l4_offset:8;
+            unsigned int lso:16;
+
             unsigned int data_len:16;
             unsigned int vlan:16;
-            unsigned int sp3:16;
         };
         unsigned int __raw[4];
     };

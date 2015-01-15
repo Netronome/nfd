@@ -33,6 +33,8 @@
 
 #define NFD_IN_ISSUE_START_CTX  1
 
+#define NFD_IN_DSTQ_MSK         0x7
+
 /* Additional check queue constants */
 #define NFD_IN_MAX_RETRIES      5
 #define NFD_IN_BATCH_SZ         4
@@ -172,14 +174,14 @@ struct nfd_in_batch_desc {
  * PCI.in issued desc format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
- * Word  +-+-+-----------+-------------------------+-----+---------------+
- *    0  |E|S|   q_num   |           sp1           |dst_q|   num_batch   |
- *       +-+-+-----------+-------------------------+-----+---------------+
+ * Word  +-+-------------+---------------+---------------+---+-----------+
+ *    0  |E|    offset   |      sp0      |   num_batch   |sp1|   q_num   |
+ *       +-+-------------+---------------+---------------+---+-----------+
  *    1  |                           buf_addr                            |
- *       +-+-------------+-------+-------+-------------------------------+
- *    2  |0|  offset     |  sp2  | flags |            data_len           |
- *       +-+-------------+-------+-------+-------------------------------+
- *    3  |             VLAN              |               sp3             |
+ *       +---------------+---------------+-------------------------------+
+ *    2  |     flags     |   l4_offset   |               lso             |
+ *       +---------------+---------------+-------------------------------+
+ *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
  *      sp0 - sp3 -> spare
@@ -189,19 +191,20 @@ struct nfd_in_issued_desc {
     union {
         struct {
             unsigned int eop:1;
-            unsigned int sp0:1;
-            unsigned int q_num:6;
-            unsigned int sp1:13;
-            unsigned int dst_q:3;
-            unsigned int num_batch:8;
-            unsigned int buf_addr:32;
-            unsigned int valid:1;
             unsigned int offset:7;
-            unsigned int sp2:4;
-            unsigned int flags:4;
+            unsigned int sp0:8;
+            unsigned int num_batch:8;
+            unsigned int sp1:2;
+            unsigned int q_num:6;
+
+            unsigned int buf_addr:32;
+
+            unsigned int flags:8;
+            unsigned int l4_offset:8;
+            unsigned int lso:16;
+
             unsigned int data_len:16;
             unsigned int vlan:16;
-            unsigned int sp3:16;
         };
         unsigned int __raw[4];
     };
