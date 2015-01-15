@@ -11,6 +11,7 @@
 #include <ns_vnic_ctrl.h>
 
 #include <vnic/shared/nfcc_chipres.h>
+#include <vnic/shared/nfd.h>
 
 #include "nfd_user_cfg.h"
 
@@ -41,20 +42,48 @@
 #define NFD_CFG_TOTAL_RINGS     16
 #define NFD_CFG_NUM_RINGS       4
 
-#define NFD_CFG_EMEM_IND1(_emem) __LoadTimeConstant("__addr_emem" #_emem)
+#define NFD_CFG_RINGS_RES_IND(_emem)                                    \
+    ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues global 16 16)
+#define NFD_CFG_RINGS_RES(_emem) NFD_CFG_RINGS_RES_IND(_emem)
+
+NFD_CFG_RINGS_RES(NFD_CFG_RING_EMEM);
+
+#define NFD_CFG_RINGS_DECL_IND(_isl)                                    \
+    ASM(.declare_resource nfd_cfg_ring_nums##_isl global NFD_CFG_NUM_RINGS \
+        nfd_cfg_ring_nums)                                              \
+    ASM(.alloc_resource nfd_cfg_ring_num##_isl##0 nfd_cfg_ring_nums##_isl \
+        global 1)                                                       \
+    ASM(.alloc_resource nfd_cfg_ring_num##_isl##1 nfd_cfg_ring_nums##_isl \
+        global 1)                                                       \
+    ASM(.alloc_resource nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_nums##_isl \
+        global 1)
+
+#define NFD_CFG_RINGS_DECL(_isl) NFD_CFG_RINGS_DECL_IND(_isl)
+
+
+#if _nfp_has_island("pcie0")
+NFD_CFG_RINGS_DECL(0);
+#endif
+
+#if _nfp_has_island("pcie1")
+NFD_CFG_RINGS_DECL(1);
+#endif
+
+#if _nfp_has_island("pcie2")
+NFD_CFG_RINGS_DECL(2);
+#endif
+
+#if _nfp_has_island("pcie3")
+NFD_CFG_RINGS_DECL(3);
+#endif
+
+#define NFD_CFG_EMEM_IND1(_emem) __LoadTimeConstant("__addr_" #_emem)
 #define NFD_CFG_EMEM_IND0(_emem) NFD_CFG_EMEM_IND1(_emem)
 #define NFD_CFG_EMEM NFD_CFG_EMEM_IND0(NFD_CFG_RING_EMEM)
 
-#define NFD_CFG_RING_ALLOC_IND1(_emem, _name, _num)             \
-_alloc_resource(_name emem##_emem##_queues global _num _num)
-#define NFD_CFG_RING_ALLOC_IND0(_emem, _name, _num)             \
-    NFD_CFG_RING_ALLOC_IND1(_emem, _name, _num)
-#define NFD_CFG_RING_ALLOC                                        \
-    NFD_CFG_RING_ALLOC_IND0(NFD_CFG_RING_EMEM, nfd_cfg_num_start, \
-                            NFD_CFG_TOTAL_RINGS)
 
-#define NFD_CFG_RING_NUM_IND(_isl, _num)                    \
-    (NFD_CFG_RING_ALLOC | _isl * NFD_CFG_NUM_RINGS | _num)
+#define NFD_CFG_RING_NUM_IND(_isl, _num)        \
+    _link_sym(nfd_cfg_ring_num##_isl##_num)
 #define NFD_CFG_RING_NUM(_isl, _num) NFD_CFG_RING_NUM_IND(_isl, _num)
 
 #define NFD_CFG_BASE_IND(_x) nfd_cfg_base##_x
@@ -133,7 +162,7 @@ __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
  * @param _pci              PCIe island
  */
 #define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
-    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM((_pci), 2))
+    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 2))
 
 
 /**

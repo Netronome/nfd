@@ -42,12 +42,43 @@
 #endif
 
 
-#define NFD_CFG_RINGS_DECLARE(_emem)            \
-    __export __emem_n(_emem)                                    \
-        __align(NFD_CFG_RING_SZ * NFD_MAX_ISL * NFD_CFG_NUM_RINGS)      \
-        char nfd_cfg_rings[NFD_MAX_ISL][NFD_CFG_NUM_RINGS][NFD_CFG_RING_SZ];
+ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
+    (NFD_MAX_ISL * NFD_CFG_NUM_RINGS * NFD_CFG_RING_SZ)  \
+    (NFD_MAX_ISL * NFD_CFG_NUM_RINGS * NFD_CFG_RING_SZ))
 
-NFD_CFG_RINGS_DECLARE(NFD_CFG_RING_EMEM);
+
+#define NFD_CFG_RINGS_INIT_IND(_isl)                                    \
+    ASM(.declare_resource nfd_cfg_ring_mem##_isl global 8192 nfd_cfg_ring_mem) \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##0 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##1 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##2 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
+                                                                        \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##0 nfd_cfg_ring_mem##_isl##0) \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##1 nfd_cfg_ring_mem##_isl##1) \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_mem##_isl##2)
+
+#define NFD_CFG_RINGS_INIT(_isl) NFD_CFG_RINGS_INIT_IND(_isl)
+
+#if _nfp_has_island("pcie0")
+NFD_CFG_RINGS_INIT(0);
+#endif
+
+
+#if _nfp_has_island("pcie1")
+NFD_CFG_RINGS_INIT(1);
+#endif
+
+#if _nfp_has_island("pcie2")
+NFD_CFG_RINGS_INIT(2);
+#endif
+
+
+#if _nfp_has_island("pcie3")
+NFD_CFG_RINGS_INIT(3);
+#endif
 
 
 /*
@@ -356,14 +387,11 @@ nfd_cfg_setup()
 {
     unsigned int vnic;
     unsigned int ring;
-    unsigned int ring_num_base = NFD_CFG_RING_NUM(PCIE_ISL, 0);
 
-    /* Setup the configuration message rings */
-    for (ring = 0; ring < NFD_CFG_NUM_RINGS; ring++) {
-        mem_ring_setup((ring_num_base | ring),
-                       &nfd_cfg_rings[PCIE_ISL][ring],
-                       NFD_CFG_RING_SZ);
-    }
+    /* XXX remove once .declare_resource and .alloc_resource support
+     * bracketed expressions. */
+    ctassert(NFD_CFG_NUM_RINGS == 4);
+    ctassert(NFD_CFG_RING_SZ == 2048);
 
     /* Setup the configuration queues */
     _nfd_cfg_queue_setup();

@@ -1,6 +1,8 @@
 #define alloc_mem(x) _alloc_mem(#x)
 #define declare_resource(x) _declare_resource(#x)
 #define _alloc_resource(x) __alloc_resource(#x)
+#define _link_sym(x) __link_sym(#x)
+#define ASM(_str) __asm{_str}
 
 #define EMEM_QUEUE_ALLOC(_name_, _scope_, _resourcepool_) \
     _alloc_resource(_name_ _resourcepool_ _scope_ 1)

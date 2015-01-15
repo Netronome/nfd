@@ -44,14 +44,18 @@ do {                                                                    \
 
 /* XXX Remove NFD_INIT_DONE_DECLARE or leave?
  * NB size 8 is minimum that NFCC and NFAS can share */
-#define NFD_INIT_DONE_DECLARE_IND1(_emem) \
-    __export __emem_n(_emem) unsigned int nfd_init_done[2];
+#define NFD_INIT_DONE_DECLARE_IND1(_emem)                               \
+    ASM(.alloc_mem nfd_init_done_atomic _emem global 64 64)             \
+    ASM(.declare_resource nfd_init_done_mem global 8 nfd_init_done_atomic) \
+    ASM(.alloc_resource nfd_init_done nfd_init_done_mem global 8 8)
+
 #define NFD_INIT_DONE_DECLARE_IND0(_emem) NFD_INIT_DONE_DECLARE_IND1(_emem)
 #define NFD_INIT_DONE_DECLARE NFD_INIT_DONE_DECLARE_IND0(NFD_CFG_RING_EMEM)
 
 
-#define NFD_INIT_DONE_SET_IND0(_isl, _me) \
-    mem_bitset_imm(1<<(_isl * NFD_MAX_ISL + _me), &nfd_init_done[0])
+#define NFD_INIT_DONE_SET_IND0(_isl, _me)         \
+    mem_bitset_imm(1<<(_isl * NFD_MAX_ISL + _me), \
+                   (__dram void *) _link_sym(nfd_init_done))
 #define NFD_INIT_DONE_SET(_isl, _me) NFD_INIT_DONE_SET_IND0(_isl, _me)
 
 
