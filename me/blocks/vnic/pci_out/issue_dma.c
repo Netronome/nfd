@@ -24,6 +24,8 @@
 #include <vnic/utils/pcie.h>
 #include <vnic/utils/qc.h>
 
+#include <ns_vnic_ctrl.h>
+
 
 /* Required user configuration */
 #ifndef NFD_OUT_BLM_POOL_START
@@ -299,6 +301,8 @@ do {                                                                    \
                 descr_tmp.cpp_addr_lo = in_batch.pkt##_pkt##.cpp.mu_addr<<11; \
                 descr_tmp.cpp_addr_lo += split_len;                     \
                 descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;  \
+                descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;            \
+                descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len; \
                 descr_tmp.pcie_addr_lo += ctm_bytes;                    \
                                                                         \
                 if (in_batch.pkt##_pkt##.cpp.eop) {                     \
@@ -322,6 +326,8 @@ do {                                                                    \
                 /* Issue main DMA */                                    \
                 _get_ctm_addr(&descr_tmp, &in_batch.pkt##_pkt);         \
                 descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;  \
+                descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;            \
+                descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len; \
                                                                         \
                 descr_tmp.length = ctm_bytes - 1;                       \
                 pcie_dma_set_event(&descr_tmp, _type, _src);            \
@@ -335,6 +341,8 @@ do {                                                                    \
                 __critical_path();                                      \
                 _get_ctm_addr(&descr_tmp, &in_batch.pkt##_pkt);         \
                 descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;  \
+                descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;            \
+                descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len; \
                                                                         \
                 /* data_len is guaranteed to fit in one DMA */          \
                 descr_tmp.length = in_batch.pkt##_pkt##.data_len - 1;   \
@@ -352,6 +360,8 @@ do {                                                                    \
             descr_tmp.cpp_addr_lo = in_batch.pkt##_pkt##.cpp.mu_addr<<11; \
             descr_tmp.cpp_addr_lo += in_batch.pkt##_pkt##.cpp.offset;   \
             descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;      \
+            descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;                \
+            descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len;    \
                                                                         \
             if (in_batch.pkt##_pkt##.cpp.eop) {                         \
                 /* This packet is both sop and eop, which means it */   \
@@ -381,6 +391,8 @@ do {                                                                    \
                 descr_tmp.cpp_addr_lo += in_batch.pkt##_pkt##.cpp.offset; \
                 descr_tmp.cpp_addr_lo += (2 * PCIE_DMA_MAX_SZ);         \
                 descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;  \
+                descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;            \
+                descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len; \
                 descr_tmp.pcie_addr_lo += (2 * PCIE_DMA_MAX_SZ);        \
                                                                         \
                 descr_tmp.length = len_tmp - (2 * PCIE_DMA_MAX_SZ + 1); \
@@ -401,6 +413,8 @@ do {                                                                    \
             descr_tmp.cpp_addr_lo += in_batch.pkt##_pkt##.cpp.offset;   \
             descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;                   \
             descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;      \
+            descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;                \
+            descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len;    \
             descr_tmp.pcie_addr_lo += PCIE_DMA_MAX_SZ;                  \
                                                                         \
             descr_tmp.length = len_tmp - PCIE_DMA_MAX_SZ - 1;           \

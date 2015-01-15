@@ -273,9 +273,9 @@ do {                                                                    \
     data_batch_tmp.fl_cache_index =                                     \
         cache_desc_compute_fl_addr(&queue, queue_data[queue].fl_u);     \
     queue_data[queue].fl_u += eop;                                      \
+    data_batch_tmp.meta_len = in_batch.pkt##_pkt##.rxd.meta_len;        \
     data_batch_tmp.rid = queue_data[queue].requester_id;                \
     data_batch_tmp.data_len = in_batch.pkt##_pkt##.rxd.data_len;        \
-    data_batch_tmp.spare = 0;                                           \
                                                                         \
     data_batch_tmp.cpp = in_batch.pkt##_pkt##.cpp;                      \
     data_batch_tmp.cpp.sop &= up;                                       \

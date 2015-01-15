@@ -299,8 +299,8 @@ struct nfd_out_data_dma_info {
     union {
         struct {
             struct nfd_out_cpp_desc cpp;    /* CPP descriptor */
+            unsigned int meta_len:8;        /* Length of meta data prepended */
             unsigned int rid:8;             /* Requester ID for the pkt */
-            unsigned int spare:8;
             unsigned int data_len:16;       /* Total data length */
             unsigned int fl_cache_index;    /* FL descriptor index */
         };
