@@ -17,29 +17,15 @@
 
 
 /* Helper macros */
-#define NFD_EMEM_IND2(_emem) __LoadTimeConstant("__addr_emem" #_emem)
+#define NFD_EMEM_IND2(_emem) __LoadTimeConstant("__addr_" #_emem)
 #define NFD_EMEM_IND1(_emem) NFD_EMEM_IND2(_emem)
 #define NFD_EMEM_IND0(_isl) NFD_EMEM_IND1(NFD_PCIE##_isl##_EMEM)
 #define NFD_EMEM(_isl) NFD_EMEM_IND0(_isl)
 
-#define NFD_RING_ALLOC_IND2(_emem, _name, _num)                 \
-_alloc_resource(_name emem##_emem##_queues global _num _num)
-#define NFD_RING_ALLOC_IND1(_emem, _name, _num)                 \
-    NFD_RING_ALLOC_IND2(_emem, _name, _num)
-#define NFD_RING_ALLOC_IND0(_isl, _comp, _num)                  \
-    NFD_RING_ALLOC_IND1(NFD_PCIE##_isl##_EMEM,                  \
-                        _comp##_num_start_isl##_isl, _num)
-#define NFD_RING_ALLOC(_isl, _comp, _num)                       \
-    NFD_RING_ALLOC_IND0(_isl, _comp, _num)
 
-
-#define NFD_RING_INIT(_isl, _comp, _num)                                \
-do {                                                                    \
-    _comp##_ring_info[_isl].addr_hi = ((unsigned long long) NFD_EMEM(_isl) \
-                                       >> 32);                          \
-    _comp##_ring_info[_isl].sp0 = 0;                                    \
-    _comp##_ring_info[_isl].rnum = NFD_RING_ALLOC(_isl, _comp, _num); \
-} while(0)
+#define NFD_RING_LINK_IND(_isl, _comp, _num) \
+    _link_sym(_comp##_ring_num##_isl##_num)
+#define NFD_RING_LINK(_isl, _comp, _num) NFD_RING_LINK_IND(_isl, _comp, _num)
 
 
 /* XXX Remove NFD_INIT_DONE_DECLARE or leave?
@@ -59,48 +45,53 @@ do {                                                                    \
 #define NFD_INIT_DONE_SET(_isl, _me) NFD_INIT_DONE_SET_IND0(_isl, _me)
 
 
-#define NFD_EMEM_CHK_IND(_emem)     "emem" #_emem
-#define NFD_EMEM_CHK(_emem)         NFD_EMEM_CHK_IND(_emem)
-
+#define NFD_EMEM_CHK_IND(_emem) #_emem
+#define NFD_EMEM_CHK(_emem) NFD_EMEM_CHK_IND(_emem)
 
 /* User define consistency checks */
-#if _nfp_has_island("pcie0")
-    #ifndef NFD_PCIE0_EMEM
-        #error "NFD_PCIE0_EMEM must be defined by the user"
-    #else
+#ifdef NFD_IN_WQ_SHARED
+    #if !_nfp_has_island(NFD_EMEM_CHK(NFD_IN_WQ_SHARED))
+        #error "NFD_IN_WQ_SHARED specifies an unavailable EMU"
+    #endif
+#endif
+
+#ifdef NFD_PCIE0_EMEM
+    #if _nfp_has_island("pcie0")
         #if !_nfp_has_island(NFD_EMEM_CHK(NFD_PCIE0_EMEM))
             #error "NFD_PCIE0_EMEM specifies an unavailable EMU"
         #endif
+    #else
+        #error "NFD_PCIE0_EMEM defined but pcie0 unavailable"
     #endif
 #endif
 
-#if _nfp_has_island("pcie1")
-    #ifndef NFD_PCIE1_EMEM
-        #error "NFD_PCIE1_EMEM must be defined by the user"
-    #else
+#ifdef NFD_PCIE1_EMEM
+    #if _nfp_has_island("pcie1")
         #if !_nfp_has_island(NFD_EMEM_CHK(NFD_PCIE1_EMEM))
             #error "NFD_PCIE1_EMEM specifies an unavailable EMU"
         #endif
+    #else
+        #error "NFD_PCIE1_EMEM defined but pcie1 unavailable"
     #endif
 #endif
 
-#if _nfp_has_island("pcie2")
-    #ifndef NFD_PCIE2_EMEM
-        #error "NFD_PCIE2_EMEM must be defined by the user"
-    #else
+#ifdef NFD_PCIE2_EMEM
+    #if _nfp_has_island("pcie2")
         #if !_nfp_has_island(NFD_EMEM_CHK(NFD_PCIE2_EMEM))
             #error "NFD_PCIE2_EMEM specifies an unavailable EMU"
         #endif
+    #else
+        #error "NFD_PCIE2_EMEM defined but pcie2 unavailable"
     #endif
 #endif
 
-#if _nfp_has_island("pcie3")
-    #ifndef NFD_PCIE3_EMEM
-        #error "NFD_PCIE3_EMEM must be defined by the user"
-    #else
+#ifdef NFD_PCIE3_EMEM
+    #if _nfp_has_island("pcie3")
         #if !_nfp_has_island(NFD_EMEM_CHK(NFD_PCIE3_EMEM))
             #error "NFD_PCIE3_EMEM specifies an unavailable EMU"
         #endif
+    #else
+        #error "NFD_PCIE3_EMEM defined but pcie3 unavailable"
     #endif
 #endif
 

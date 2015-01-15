@@ -43,6 +43,7 @@
 #define NFD_CFG_NUM_RINGS       4
 
 #define NFD_CFG_RINGS_RES_IND(_emem)                                    \
+    _emem##_queues_DECL                                                 \
     ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues global 16 16)
 #define NFD_CFG_RINGS_RES(_emem) NFD_CFG_RINGS_RES_IND(_emem)
 

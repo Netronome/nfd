@@ -11,6 +11,8 @@
 
 #include "nfd_user_cfg.h"
 
+#include <vnic/shared/nfcc_chipres.h>
+
 #ifndef NFD_IN_DATA_OFFSET
 #define NFD_IN_DATA_OFFSET          64
 #endif
@@ -37,6 +39,68 @@
 
 
 #define NFD_IN_MAX_QUEUES   64
+
+
+#ifdef NFD_IN_WQ_SHARED
+
+#define NFD_IN_RINGS_DECL_IND2(_isl, _emem)                             \
+    _emem##_queues_DECL                                                 \
+    ASM(.alloc_resource nfd_in_ring_nums0 _emem##_queues global         \
+        NFD_IN_NUM_WQS NFD_IN_NUM_WQS)                                  \
+    ASM(.declare_resource nfd_in_ring_nums_res0 global NFD_IN_NUM_WQS   \
+        nfd_in_ring_nums0)
+#define NFD_IN_RINGS_DECL_IND1(_isl, _emem)    \
+    NFD_IN_RINGS_DECL_IND2(_isl, _emem)
+#define NFD_IN_RINGS_DECL_IND0(_isl)                \
+    NFD_IN_RINGS_DECL_IND1(_isl, NFD_IN_WQ_SHARED)
+#define NFD_IN_RINGS_DECL(_isl) NFD_IN_RINGS_DECL_IND0(_isl)
+
+#define NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)                           \
+    ASM(.alloc_resource nfd_in_ring_num0##_num nfd_in_ring_nums_res0    \
+        global 1)
+#define NFD_IN_RING_NUM_ALLOC(_isl, _num) NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)
+
+#else /* !NFD_IN_WQ_SHARED */
+
+#define NFD_IN_RINGS_DECL_IND2(_isl, _emem)                             \
+    _emem##_queues_DECL                                                 \
+    ASM(.alloc_resource nfd_in_ring_nums##_isl _emem##_queues global    \
+        NFD_IN_NUM_WQS NFD_IN_NUM_WQS)                                  \
+    ASM(.declare_resource nfd_in_ring_nums_res##_isl global NFD_IN_NUM_WQS  \
+        nfd_in_ring_nums##_isl)
+#define NFD_IN_RINGS_DECL_IND1(_isl, _emem)    \
+    NFD_IN_RINGS_DECL_IND2(_isl, _emem)
+#define NFD_IN_RINGS_DECL_IND0(_isl)                    \
+    NFD_IN_RINGS_DECL_IND1(_isl, NFD_PCIE##_isl##_EMEM)
+#define NFD_IN_RINGS_DECL(_isl) NFD_IN_RINGS_DECL_IND0(_isl)
+
+#define NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)                           \
+    ASM(.alloc_resource nfd_in_ring_num##_isl##_num nfd_in_ring_nums_res##_isl \
+        global 1)
+#define NFD_IN_RING_NUM_ALLOC(_isl, _num) NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)
+
+#endif /* NFD_IN_WQ_SHARED */
+
+
+#ifdef NFD_PCIE0_EMEM
+    NFD_IN_RINGS_DECL(0);
+    NFD_IN_RING_NUM_ALLOC(0, 0);
+#endif
+
+#ifdef NFD_PCIE1_EMEM
+    NFD_IN_RINGS_DECL(1);
+    NFD_IN_RING_NUM_ALLOC(1, 0);
+#endif
+
+#ifdef NFD_PCIE2_EMEM
+    NFD_IN_RINGS_DECL(2);
+    NFD_IN_RING_NUM_ALLOC(2, 0);
+#endif
+
+#ifdef NFD_PCIE3_EMEM
+    NFD_IN_RINGS_DECL(3);
+    NFD_IN_RING_NUM_ALLOC(3, 0);
+#endif
 
 
 /**

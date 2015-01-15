@@ -53,7 +53,21 @@ extern __shared __gpr struct qc_bitmask urgent_bmsk;
 /*
  * Rings and queues
  */
-NFD_RING_DECLARE(PCIE_ISL, nfd_out, NFD_OUT_RING_SZ);
+#define NFD_OUT_RING_INIT_IND2(_isl, _emem)                         \
+    ASM(.alloc_mem nfd_out_ring_mem##_isl _emem global              \
+        NFD_OUT_RING_SZ NFD_OUT_RING_SZ)                            \
+    ASM(.init_mu_ring nfd_out_ring_num##_isl##0 nfd_out_ring_mem##_isl)
+#define NFD_OUT_RING_INIT_IND1(_isl, _emem) NFD_OUT_RING_INIT_IND2(_isl, _emem)
+#define NFD_OUT_RING_INIT_IND0(_isl)                    \
+    NFD_OUT_RING_INIT_IND1(_isl, NFD_PCIE##_isl##_EMEM)
+#define NFD_OUT_RING_INIT(_isl) NFD_OUT_RING_INIT_IND0(_isl)
+
+NFD_OUT_RING_INIT(PCIE_ISL);
+
+#define NFD_OUT_SEND_ADDR_IND(_isl) _link_sym(nfd_out_ring_mem##_isl)
+#define NFD_OUT_SEND_ADDR(_isl) NFD_OUT_SEND_ADDR_IND(_isl)
+
+
 static __gpr mem_ring_addr_t in_ring_addr;
 static __gpr unsigned int in_ring_num;
 
@@ -143,15 +157,6 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 }
 
 
-/* XXX remove when THSDK-886 resolved */
-void
-stage_batch_setup_rings()
-{
-    /* Input ring */
-    in_ring_num = NFD_RING_ALLOC(PCIE_ISL, nfd_out, 1);
-    MEM_RING_CONFIGURE(NFD_RING_BASE(PCIE_ISL, nfd_out), in_ring_num);
-}
-
 /**
  * Perform once off, CTX0-only initialisation
  */
@@ -171,7 +176,7 @@ void
 stage_batch_setup()
 {
     /* Input ring */
-    in_ring_num = NFD_RING_ALLOC(PCIE_ISL, nfd_out, 1);
+    in_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_out, 0);
     in_ring_addr = (unsigned long long) NFD_EMEM(PCIE_ISL) >> 8;
 
     /* Allow polling initially */
@@ -553,7 +558,7 @@ send_desc_setup()
     descr_tmp.cpp_addr_hi = (((unsigned long long) NFD_EMEM(PCIE_ISL) >> 32) &
                              0xFF);
 
-    send_desc_addr_lo = ((unsigned long long) NFD_RING_BASE(PCIE_ISL, nfd_out) &
+    send_desc_addr_lo = ((unsigned long long) NFD_OUT_SEND_ADDR(PCIE_ISL) &
                          0xffffffff);
 }
 

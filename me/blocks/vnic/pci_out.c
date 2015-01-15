@@ -19,26 +19,36 @@
 #include <vnic/utils/qc.h>
 
 
+
+#define NFD_OUT_RING_LINK(_isl)                                         \
+do {                                                                    \
+    nfd_out_ring_info[_isl].addr_hi =                                   \
+        ((unsigned long long) NFD_EMEM(_isl) >> 32);                    \
+    nfd_out_ring_info[_isl].sp0 = 0;                                    \
+    nfd_out_ring_info[_isl].rnum = NFD_RING_LINK(_isl, nfd_out, 0);     \
+} while(0)
+
 __shared __lmem struct nfd_ring_info nfd_out_ring_info[NFD_MAX_ISL];
 
 
+/* XXX point unused islands at a small "stray" ring? */
 __intrinsic void
 nfd_out_send_init()
 {
-#if _nfp_has_island("pcie0")
-    NFD_RING_INIT(0, nfd_out, 1);
+#ifdef NFD_PCIE0_EMEM
+    NFD_OUT_RING_LINK(0);
 #endif
 
-#if _nfp_has_island("pcie1")
-    NFD_RING_INIT(1, nfd_out, 1);
+#ifdef NFD_PCIE1_EMEM
+    NFD_OUT_RING_LINK(1);
 #endif
 
-#if _nfp_has_island("pcie2")
-    NFD_RING_INIT(2, nfd_out, 1);
+#ifdef NFD_PCIE2_EMEM
+    NFD_OUT_RING_LINK(2);
 #endif
 
-#if _nfp_has_island("pcie3")
-    NFD_RING_INIT(3, nfd_out, 1);
+#ifdef NFD_PCIE3_EMEM
+    NFD_OUT_RING_LINK(3);
 #endif
 }
 

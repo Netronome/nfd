@@ -56,7 +56,76 @@ __export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING_SZ
 
 /* XXX declare dst_q counters in LM */
 
-NFD_RING_DECLARE(PCIE_ISL, nfd_in, NFD_IN_NUM_WQS * NFD_IN_WQ_SZ);
+#ifdef NFD_IN_WQ_SHARED
+
+#define NFD_IN_RINGS_MEM_IND2(_isl, _emem)                              \
+    ASM(.alloc_mem nfd_in_rings_mem0 _emem global                       \
+        (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS) (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS))
+#define NFD_IN_RINGS_MEM_IND1(_isl, _emem) NFD_IN_RINGS_MEM_IND2(_isl, _emem)
+#define NFD_IN_RINGS_MEM_IND0(_isl)                    \
+    NFD_IN_RINGS_MEM_IND1(_isl, NFD_IN_WQ_SHARED)
+#define NFD_IN_RINGS_MEM(_isl) NFD_IN_RINGS_MEM_IND0(_isl)
+
+#define NFD_IN_RING_INIT_IND0(_isl, _num)                               \
+    NFD_IN_RING_NUM_ALLOC(_isl, _num)                                   \
+    ASM(.declare_resource nfd_in_ring_mem_res0##_num                    \
+        global NFD_IN_WQ_SZ nfd_in_rings_mem0)                          \
+    ASM(.alloc_resource nfd_in_ring_mem0##_num                          \
+        nfd_in_ring_mem_res0##_num global NFD_IN_WQ_SZ NFD_IN_WQ_SZ)    \
+    ASM(.init_mu_ring nfd_in_ring_num0##_num nfd_in_ring_mem0##_num)
+#define NFD_IN_RING_INIT(_isl, _num) NFD_IN_RING_INIT_IND0(_isl, _num)
+
+#else /* !NFD_IN_WQ_SHARED */
+
+#define NFD_IN_RINGS_MEM_IND2(_isl, _emem)                              \
+    ASM(.alloc_mem nfd_in_rings_mem##_isl _emem global                  \
+        (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS) (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS))
+#define NFD_IN_RINGS_MEM_IND1(_isl, _emem) NFD_IN_RINGS_MEM_IND2(_isl, _emem)
+#define NFD_IN_RINGS_MEM_IND0(_isl)                    \
+    NFD_IN_RINGS_MEM_IND1(_isl, NFD_PCIE##_isl##_EMEM)
+#define NFD_IN_RINGS_MEM(_isl) NFD_IN_RINGS_MEM_IND0(_isl)
+
+#define NFD_IN_RING_INIT_IND0(_isl, _num)                               \
+    NFD_IN_RING_NUM_ALLOC(_isl, _num)                                   \
+    ASM(.declare_resource nfd_in_ring_mem_res##_isl##_num               \
+        global NFD_IN_WQ_SZ nfd_in_rings_mem##_isl)                     \
+    ASM(.alloc_resource nfd_in_ring_mem##_isl##_num                     \
+        nfd_in_ring_mem_res##_isl##_num global NFD_IN_WQ_SZ NFD_IN_WQ_SZ) \
+    ASM(.init_mu_ring nfd_in_ring_num##_isl##_num nfd_in_ring_mem##_isl##_num)
+#define NFD_IN_RING_INIT(_isl, _num) NFD_IN_RING_INIT_IND0(_isl, _num)
+
+#endif /* NFD_IN_WQ_SHARED */
+
+
+NFD_IN_RINGS_MEM(PCIE_ISL);
+
+#if NFD_IN_NUM_WQS > 0
+    NFD_IN_RING_INIT(PCIE_ISL, 0);
+#else
+    #error "NFD_IN_NUM_WQS must be a power of 2 between 1 and 8"
+#endif
+
+#if NFD_IN_NUM_WQS > 1
+    NFD_IN_RING_INIT(PCIE_ISL, 1);
+#endif
+
+#if NFD_IN_NUM_WQS > 2
+    NFD_IN_RING_INIT(PCIE_ISL, 2);
+    NFD_IN_RING_INIT(PCIE_ISL, 3);
+#endif
+
+#if NFD_IN_NUM_WQS > 4
+    NFD_IN_RING_INIT(PCIE_ISL, 4);
+    NFD_IN_RING_INIT(PCIE_ISL, 5);
+    NFD_IN_RING_INIT(PCIE_ISL, 6);
+    NFD_IN_RING_INIT(PCIE_ISL, 7);
+#endif
+
+#if NFD_IN_NUM_WQS > 8
+    #error "NFD_IN_NUM_WQS > 8 is not supported"
+#endif
+
+
 static __shared mem_ring_addr_t wq_raddr;
 static __shared unsigned int wq_num_base;
 
@@ -99,16 +168,13 @@ do {                                                                    \
 void
 notify_setup_shared()
 {
-    unsigned int wq;
-    wq_num_base = NFD_RING_ALLOC(PCIE_ISL, nfd_in, NFD_IN_NUM_WQS);
-
-    for (wq = 0; wq < NFD_IN_NUM_WQS; wq++) {
-        mem_workq_setup((wq_num_base | wq),
-                        &NFD_RING_BASE(PCIE_ISL, nfd_in)[wq * NFD_IN_WQ_SZ],
-                        NFD_IN_WQ_SZ);
-    }
-
+#ifdef NFD_IN_WQ_SHARED
+    wq_num_base = NFD_RING_LINK(0, nfd_in, 0);
+    wq_raddr = (unsigned long long) NFD_EMEM_IND1(NFD_IN_WQ_SHARED) >> 8;
+#else
+    wq_num_base = NFD_RING_LINK(PCIE_ISL, nfd_in, 0);
     wq_raddr = (unsigned long long) NFD_EMEM(PCIE_ISL) >> 8;
+#endif
 }
 
 

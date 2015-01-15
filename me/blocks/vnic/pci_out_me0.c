@@ -32,9 +32,6 @@ main(void)
 
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_out, &cfg_msg);
 
-        /* Ensure rings are safe to use ASAP */
-        stage_batch_setup_rings();
-
         /* Must run before PCI.OUT host interaction, and before stage_batch */
         cache_desc_setup_shared();
 
