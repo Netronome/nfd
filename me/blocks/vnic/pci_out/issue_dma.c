@@ -696,6 +696,17 @@ _free_ctm_addr(struct nfd_out_cpp_desc *cpp)
 }
 
 
+#ifdef NFD_VNIC_DBG_CHKS
+#define _FREE_BUF_MU_CHK                                                \
+    unsigned int rnum;                                                  \
+    if ((cpp_desc.__raw[1] & NFD_MU_PTR_DBG_MSK) == 0) {                \
+        halt();                                                         \
+    }
+#else
+#define _FREE_BUF_MU_CHK
+#endif
+
+
 /**
  * Free the CTM and MU buffers associated with a CPP descriptor.
  */
@@ -707,6 +718,8 @@ do {                                                                    \
                                                                         \
     /* Only free for EOP */                                             \
     if (cpp_desc.eop) {                                                 \
+        _FREE_BUF_MU_CHK;                                               \
+                                                                        \
         /* Don't free CTM buffer for MU only packets */                 \
         if (cpp_desc.isl != 0) {                                        \
             _free_ctm_addr(&cpp_desc);                                  \
@@ -725,8 +738,10 @@ do {                                                                    \
 __forceinline void
 free_buf()
 {
-    unsigned int rnum;
     unsigned int cpp_desc_index;
+#ifndef NFD_VNIC_DBG_CHKS
+    unsigned int rnum;
+#endif
 
     if (data_dma_seq_served != data_dma_seq_compl) {
         /*

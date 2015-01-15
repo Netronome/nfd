@@ -237,6 +237,16 @@ issue_dma_setup()
 }
 
 
+#ifdef NFD_VNIC_DBG_CHKS
+#define _ISSUE_PROC_MU_CHK(_val)                                        \
+    if ((_val & NFD_MU_PTR_DBG_MSK) == 0) {                             \
+        halt();                                                         \
+    }
+#else
+#define _ISSUE_PROC_MU_CHK(_val)
+#endif
+
+
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     unsigned int dma_len;                                               \
@@ -251,6 +261,7 @@ do {                                                                    \
                                                                         \
         /* Set NFP buffer address and offset */                         \
         issued_tmp.buf_addr = precache_bufs_use();                      \
+        _ISSUE_PROC_MU_CHK(issued_tmp.buf_addr);                        \
         descr_tmp.cpp_addr_hi = issued_tmp.buf_addr>>21;                \
         descr_tmp.cpp_addr_lo = issued_tmp.buf_addr<<11;                \
         descr_tmp.cpp_addr_lo += NFD_IN_DATA_OFFSET;                    \
@@ -331,6 +342,7 @@ do {                                                                    \
                                                                         \
             /* XXX check efficiency */                                  \
             queue_data[queue].curr_buf = precache_bufs_use();           \
+            _ISSUE_PROC_MU_CHK(queue_data[queue].curr_buf);             \
             queue_data[queue].cont = 1;                                 \
             queue_data[queue].offset = NFD_IN_DATA_OFFSET;              \
             queue_data[queue].offset -= tx_desc.pkt##_pkt##.offset;     \

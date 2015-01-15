@@ -190,8 +190,16 @@ notify_setup()
 }
 
 
+#ifdef NFD_VNIC_DBG_CHKS
+#define _NOTIFY_MU_CHK                                                  \
+    if ((batch_in.pkt##_pkt##.__raw[1] & NFD_MU_PTR_DBG_MSK) == 0) {    \
+        halt();                                                         \
+    }
+#else
+#define _NOTIFY_MU_CHK
+#endif
 
-
+//        _NOTIFY_MU_CHK;                       \
 
 #define _NOTIFY_PROC(_pkt)                                              \
 do {                                                                    \

@@ -96,6 +96,18 @@
 #endif
 
 
+/* Debug defines */
+#ifdef NFD_VNIC_DBG_CHKS
+
+/* A mask used to test whether a value may be a legal MU buffer.
+ * This provides very coarse checking for illegal MU buffers in NFD. */
+#ifndef NFD_MU_PTR_DBG_MSK
+#define NFD_MU_PTR_DBG_MSK 0x1f000000
+#endif
+
+#endif
+
+
 /* Shared structures */
 /**
  * Compact storage of NFD ring addresses and ring numbers
