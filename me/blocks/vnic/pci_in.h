@@ -223,8 +223,8 @@ __intrinsic void nfd_in_fill_meta(void *pkt_info,
  * @param queue     queue number within the vNIC
  * @param nfd_queue queue number within NFD "bitmask" numbering system
  */
-void nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
-                      unsigned int nfd_queue);
+__intrinsic void nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
+                                  unsigned int nfd_queue);
 
 __intrinsic unsigned int nfd_in_pkt_len(
     __xread struct nfd_in_pkt_desc *nfd_in_meta);

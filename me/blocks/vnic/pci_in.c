@@ -122,7 +122,7 @@ nfd_in_fill_meta(void *pkt_info,
 }
 
 
-void
+__intrinsic void
 nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
                  unsigned int nfd_queue)
 {

@@ -135,7 +135,8 @@ __intrinsic void nfd_out_send_init();
  * This method returns a "bitmask" queue number (the numbering system used
  * internally in PCI.OUT and PCI.IN) from a vNIC, queue number pair.
  */
-extern unsigned int nfd_out_map_queue(unsigned int vnic, unsigned int queue);
+__intrinsic unsigned int nfd_out_map_queue(unsigned int vnic,
+                                           unsigned int queue);
 
 
 /**
@@ -154,9 +155,9 @@ __intrinsic void __nfd_out_get_credit(unsigned int pcie_isl,
                                       __xrw unsigned int *data,
                                       sync_t sync, SIGNAL_PAIR *sigpair);
 
-extern unsigned int nfd_out_get_credit(unsigned int pcie_isl,
-                                       unsigned int bmsk_queue,
-                                       unsigned int num);
+__intrinsic unsigned int nfd_out_get_credit(unsigned int pcie_isl,
+                                            unsigned int bmsk_queue,
+                                            unsigned int num);
 
 
 /**

@@ -53,7 +53,7 @@ nfd_out_send_init()
 }
 
 
-unsigned int
+__intrinsic unsigned int
 nfd_out_map_queue(unsigned int vnic, unsigned int queue)
 {
     return NFD_BUILD_QID(vnic, queue);
@@ -91,7 +91,7 @@ __nfd_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
 }
 
 
-unsigned int
+__intrinsic unsigned int
 nfd_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
                    unsigned int num)
 {
