@@ -122,6 +122,8 @@
  * @NFP_NET_MAX_TXRINGS:     Maximum number of TX rings
  * @NFP_NET_MAX_RXRINGS:     Maximum number of RX rings
  * @NFP_NET_MAX_MTU:         Maximum support MTU
+ * @NFP_NET_CFG_START_TXQ:   Start Queue Control Queue to use for TX (PF only)
+ * @NFP_NET_CFG_START_RXQ:   Start Queue Control Queue to use for RX (PF only)
  *
  * TODO:
  * - define more STS bits
@@ -133,6 +135,8 @@
 #define NFP_NET_CFG_MAX_TXRINGS		0x003c
 #define NFP_NET_CFG_MAX_RXRINGS		0x0040
 #define NFP_NET_CFG_MAX_MTU		0x0044
+#define NFP_NET_CFG_START_TXQ		0x004c
+#define NFP_NET_CFG_START_RXQ		0x0050
 
 /*
  * YDS-155 workaround for the NFP-3200
