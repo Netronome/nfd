@@ -282,8 +282,13 @@ void main(void)
         /* Map the packet vnic and queue */
         nfd_in_map_queue(&vnic, &queue, nfd_in_meta.q_num);
 
-        /* Pick loopback queue */
-        queue = queue + 1;
+        /* Pick loopback queue and vNIC */
+#ifdef LOOPBACK_FLIP_QUEUE
+        queue = queue ^ 1;
+#endif
+#ifdef LOOPBACK_FLIP_VNIC
+        vnic = vnic ^ 1;
+#endif
 
         /* PCI.OUT transmit */
         bmsk_queue = nfd_out_map_queue(vnic, queue);
