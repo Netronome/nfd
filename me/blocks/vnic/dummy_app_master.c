@@ -100,11 +100,26 @@ main(void)
                                sizeof cfg_bar_data);
                 }
             } else {
+                __xwrite unsigned int link_state;
+
                 __implicit_read(cfg_bar_data, 6);
 
                 local_csr_write(NFP_MECSR_MAILBOX_0, cfg_msg.vnic);
                 local_csr_write(NFP_MECSR_MAILBOX_1, cfg_bar_data[0]);
 
+                /* Set link state */
+                if (!cfg_msg.error && (cfg_bar_data[NS_VNIC_CFG_CTRL] &
+                                       NS_VNIC_CFG_CTRL_ENABLE)) {
+                    link_state = NS_VNIC_CFG_STS_LINK;
+                } else {
+                    link_state = 0;
+                }
+                mem_write32(&link_state,
+                            (NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg.vnic) +
+                             NS_VNIC_CFG_STS),
+                            sizeof link_state);
+
+                /* Complete the message */
                 cfg_msg.msg_valid = 0;
                 nfd_cfg_app_complete_cfg_msg(&cfg_msg,
                                              NFD_CFG_BASE_LINK(PCIE_ISL));
