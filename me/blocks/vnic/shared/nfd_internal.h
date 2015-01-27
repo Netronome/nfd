@@ -138,7 +138,8 @@ struct nfd_in_queue_info {
     unsigned int tx_s;
     unsigned int ring_sz_msk;
     unsigned int requester_id;
-    unsigned int spare0:24;
+    unsigned int spare0:23;
+    unsigned int up:1;
     unsigned int ring_base_hi:8;
     unsigned int ring_base_lo;
     unsigned int dummy[2];

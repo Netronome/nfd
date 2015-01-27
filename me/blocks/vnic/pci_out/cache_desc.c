@@ -246,7 +246,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     rxq.event_data   = NFD_OUT_Q_EVENT_DATA;
     rxq.ptr          = 0;
 
-    if (cfg_msg->up_bit) {
+    if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
         /* Up the queue:
          * - Set ring size and requester ID info
          * - (Re)clear queue pointers in case something changed them
@@ -273,7 +273,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         rxq.size         = ring_sz - 8; /* XXX add define for size shift */
         qc_init_queue(PCIE_ISL, (queue_s<<1) | NFD_OUT_Q_START, &rxq);
 
-    } else {
+    } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* XXX consider what is required for PCI.OUT! */
         /* Down the queue:
          * - Prevent it issuing events

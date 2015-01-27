@@ -104,7 +104,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     txq.event_data   = NFD_IN_Q_EVENT_DATA;
     txq.ptr          = 0;
 
-    if (cfg_msg->up_bit) {
+    if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
         /* Up the queue:
          * - Set ring size and requester ID info
          * - (Re)clear queue pointers in case something changed them
@@ -117,13 +117,14 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].requester_id += NFD_CFG_VF_OFFSET;
 #endif
         queue_data[bmsk_queue].spare0 = 0;
+        queue_data[bmsk_queue].up = 1;
         queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;
         queue_data[bmsk_queue].ring_base_lo = ring_base[0];
 
         txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY;
         txq.size         = ring_sz - 8; /* XXX add define for size shift */
         qc_init_queue(PCIE_ISL, (queue<<1) | NFD_IN_Q_START, &txq);
-    } else {
+    } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* Down the queue:
          * - Prevent it issuing events
          * - Clear active_msk bit
@@ -139,6 +140,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         /* Clear queue LM state */
         queue_data[bmsk_queue].tx_w = 0;
         queue_data[bmsk_queue].tx_s = 0;
+        queue_data[bmsk_queue].up = 0;
 
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
         txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;

@@ -615,7 +615,8 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
 
     /* Check if change affects this component */
     /* Only interested in the change if it contains a ring update */
-    if (cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2] & NS_VNIC_CFG_UPDATE_RING) {
+    if (cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2] &
+        (NS_VNIC_CFG_UPDATE_RING | NS_VNIC_CFG_UPDATE_GEN)) {
         cfg_msg->interested = 1;
     }
 

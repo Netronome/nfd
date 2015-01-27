@@ -172,7 +172,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     queue += cfg_msg->vnic * NFD_MAX_VNIC_QUEUES;
     bmsk_queue = NFD_NATQ2BMQ(queue);
 
-    if (cfg_msg->up_bit) {
+    if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
         /* Initialise queue state */
         queue_data[bmsk_queue].sp0 = 0;
         queue_data[bmsk_queue].rid = cfg_msg->vnic;
@@ -185,7 +185,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].offset = 0;
         queue_data[bmsk_queue].sp2 = 0;
 
-    } else {
+    } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* Free the MU buffer */
         if (queue_data[bmsk_queue].curr_buf != 0) {
             unsigned int blm_raddr;
