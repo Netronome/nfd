@@ -7,6 +7,7 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_H_
 #define _BLOCKS__VNIC_PCI_OUT_H_
 
+#include <vnic/shared/nfd_net.h>
 
 #define NFD_OUT_MAX_QUEUES              64
 
