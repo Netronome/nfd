@@ -20,7 +20,7 @@ main(void)
 {
     /* Perform per ME initialisation  */
     if (ctx() == 0) {
-        ctassert(NFD_MAX_VNICS * NFD_MAX_VNIC_QUEUES <= 64);
+        ctassert((NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES) <= 64);
 
         issue_dma_setup_shared();
         issue_dma_status_setup();

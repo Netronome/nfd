@@ -96,7 +96,7 @@ main(void)
 
                 if (cfg_msg.msg_valid) {
                     mem_read64(cfg_bar_data,
-                               NFD_CFG_BASE(PCIE_ISL)[cfg_msg.vnic],
+                               NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg.vnic),
                                sizeof cfg_bar_data);
                 }
             } else {
@@ -106,7 +106,8 @@ main(void)
                 local_csr_write(NFP_MECSR_MAILBOX_1, cfg_bar_data[0]);
 
                 cfg_msg.msg_valid = 0;
-                nfd_cfg_app_complete_cfg_msg(&cfg_msg, NFD_CFG_BASE(PCIE_ISL));
+                nfd_cfg_app_complete_cfg_msg(&cfg_msg,
+                                             NFD_CFG_BASE_LINK(PCIE_ISL));
             }
 
             ctx_swap();

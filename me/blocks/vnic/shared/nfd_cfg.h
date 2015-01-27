@@ -42,6 +42,16 @@
 #define NFD_CFG_TOTAL_RINGS     16
 #define NFD_CFG_NUM_RINGS       4
 
+
+/* It is convenient to have a value like NFD_MAX_VFS for the PF,
+ * so we set one up based on whether PF queues are defined or not. */
+#if (NFD_MAX_PF_QUEUES != 0)
+#define NFD_MAX_PFS 1
+#else
+#define NFD_MAX_PFS 0
+#endif
+
+
 #define NFD_CFG_RINGS_RES_IND(_emem)                                    \
     _emem##_queues_DECL                                                 \
     ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues global 16 16)
@@ -95,13 +105,29 @@ NFD_CFG_RINGS_DECL(3);
 /* Due to THB-350, BARs must be 2M aligned on A0 */
 #if 1
 #define NFD_CFG_BASE_DECLARE(_isl)                                   \
-    __export __emem __align(SZ_2M)                                   \
-        char NFD_CFG_BASE(_isl)[NFD_MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
+    ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global          \
+        ((NFD_MAX_VFS + NFD_MAX_PFS) * NS_VNIC_CFG_BAR_SZ) SZ_2M)
 #else
 #define NFD_CFG_BASE_DECLARE(_isl)                                   \
-    __export __emem __align(NS_VNIC_CFG_BAR_SZ * NFD_MAX_VNICS)      \
-        char NFD_CFG_BASE(_isl)[NFD_MAX_VNICS][NS_VNIC_CFG_BAR_SZ];
+    ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global          \
+        ((NFD_MAX_VFS + NFD_MAX_PFS) * NS_VNIC_CFG_BAR_SZ)           \
+        (NFD_MAX_VFS * NS_VNIC_CFG_BAR_SZ * (1 +  NFD_MAX_PFS)))
 #endif
+
+
+#define NFD_CFG_BASE_LINK_IND1(_sym)                 \
+    ((__emem char *) _link_sym(_sym))
+#define NFD_CFG_BASE_LINK_IND0(_isl)                \
+    NFD_CFG_BASE_LINK_IND1(NFD_CFG_BASE(_isl))
+#define NFD_CFG_BASE_LINK(_isl) NFD_CFG_BASE_LINK_IND0(_isl)
+
+
+/* XXX we can't use "|" here due to NFCC error, check and possibly JIRA. */
+#define NFD_CFG_BAR(_base, _vnic)               \
+    ((_base) + (_vnic * NS_VNIC_CFG_BAR_SZ))
+
+#define NFD_CFG_BAR_ISL(_isl, _vnic)            \
+    NFD_CFG_BAR(NFD_CFG_BASE_LINK(_isl), _vnic)
 
 
 /**

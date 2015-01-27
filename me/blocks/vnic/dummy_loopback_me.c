@@ -181,14 +181,14 @@ test_enable(unsigned int vnic, unsigned int queue) {
     __xread unsigned int enables;
 
     /* Check global enable */
-    ptr = NFD_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_CTRL;
+    ptr = NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NS_VNIC_CFG_CTRL;
     mem_read32(&enables, ptr, sizeof(enables));
     if (!(enables & NS_VNIC_CFG_CTRL_ENABLE)) {
         return 0;
     }
 
     /* Check per ring enable */
-    ptr = NFD_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_RXRS_ENABLE;
+    ptr = NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NS_VNIC_CFG_RXRS_ENABLE;
     if (queue & 32) {
         ptr += sizeof(unsigned int);
     }

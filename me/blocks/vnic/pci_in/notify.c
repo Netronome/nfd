@@ -170,10 +170,10 @@ notify_setup_shared()
 {
 #ifdef NFD_IN_WQ_SHARED
     wq_num_base = NFD_RING_LINK(0, nfd_in, 0);
-    wq_raddr = (unsigned long long) NFD_EMEM_IND1(NFD_IN_WQ_SHARED) >> 8;
+    wq_raddr = (unsigned long long) NFD_EMEM_SHARED(NFD_IN_WQ_SHARED) >> 8;
 #else
     wq_num_base = NFD_RING_LINK(PCIE_ISL, nfd_in, 0);
-    wq_raddr = (unsigned long long) NFD_EMEM(PCIE_ISL) >> 8;
+    wq_raddr = (unsigned long long) NFD_EMEM_LINK(PCIE_ISL) >> 8;
 #endif
 }
 

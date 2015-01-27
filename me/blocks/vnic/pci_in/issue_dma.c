@@ -161,7 +161,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     unsigned int queue;
     unsigned int bmsk_queue;
 
-    ctassert(__is_log2(NFD_MAX_VNIC_QUEUES));
+    ctassert(__is_log2(NFD_MAX_VF_QUEUES));
+    ctassert(__is_log2(NFD_MAX_PF_QUEUES));
 
     nfd_cfg_next_queue(cfg_msg, &queue);
 
@@ -169,16 +170,16 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         return;
     }
 
-    queue += cfg_msg->vnic * NFD_MAX_VNIC_QUEUES;
+    queue += cfg_msg->vnic * NFD_MAX_VF_QUEUES;
     bmsk_queue = NFD_NATQ2BMQ(queue);
 
     if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
         /* Initialise queue state */
         queue_data[bmsk_queue].sp0 = 0;
-        queue_data[bmsk_queue].rid = cfg_msg->vnic;
-#ifdef NFD_VNIC_VF
-        queue_data[bmsk_queue].rid += NFD_CFG_VF_OFFSET;
-#endif
+        queue_data[bmsk_queue].rid = 0;
+        if (cfg_msg->vnic != NFD_MAX_VFS) {
+            queue_data[bmsk_queue].rid = cfg_msg->vnic + NFD_CFG_VF_OFFSET;
+        }
         queue_data[bmsk_queue].cont = 0;
         queue_data[bmsk_queue].up = 1;
         queue_data[bmsk_queue].curr_buf = 0;

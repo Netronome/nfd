@@ -177,7 +177,7 @@ stage_batch_setup()
 {
     /* Input ring */
     in_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_out, 0);
-    in_ring_addr = (unsigned long long) NFD_EMEM(PCIE_ISL) >> 8;
+    in_ring_addr = (unsigned long long) NFD_EMEM_LINK(PCIE_ISL) >> 8;
 
     /* Allow polling initially */
     reorder_self(&may_poll);
@@ -555,8 +555,8 @@ send_desc_setup()
     descr_tmp.trans_class = 0;
     descr_tmp.cpp_token = 0;
     descr_tmp.dma_cfg_index = NFD_OUT_DESC_CFG_REG;
-    descr_tmp.cpp_addr_hi = (((unsigned long long) NFD_EMEM(PCIE_ISL) >> 32) &
-                             0xFF);
+    descr_tmp.cpp_addr_hi =
+        (((unsigned long long) NFD_EMEM_LINK(PCIE_ISL)) >> 32) & 0xFF;
 
     send_desc_addr_lo = ((unsigned long long) NFD_OUT_SEND_ADDR(PCIE_ISL) &
                          0xffffffff);

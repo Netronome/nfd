@@ -24,7 +24,7 @@
 #define NFD_IN_RING_LINK(_isl)                                          \
 do {                                                                    \
     nfd_in_ring_info[_isl].addr_hi =                                    \
-        ((unsigned long long) NFD_EMEM_IND1(NFD_IN_WQ_SHARED) >> 32);   \
+        ((unsigned long long) NFD_EMEM_SHARED(NFD_IN_WQ_SHARED) >> 32); \
     nfd_in_ring_info[_isl].sp0 = 0;                                     \
     nfd_in_ring_info[_isl].rnum = NFD_RING_LINK(0, nfd_in, 0);          \
 } while(0)
@@ -34,7 +34,7 @@ do {                                                                    \
 #define NFD_IN_RING_LINK(_isl)                                          \
 do {                                                                    \
     nfd_in_ring_info[_isl].addr_hi =                                    \
-        ((unsigned long long) NFD_EMEM(_isl) >> 32);                    \
+        ((unsigned long long) NFD_EMEM_LINK(_isl) >> 32);               \
     nfd_in_ring_info[_isl].sp0 = 0;                                     \
     nfd_in_ring_info[_isl].rnum = NFD_RING_LINK(_isl, nfd_in, 0);       \
 } while(0)
@@ -126,8 +126,7 @@ __intrinsic void
 nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
                  unsigned int nfd_queue)
 {
-    *vnic = NFD_QID2VNIC(nfd_queue);
-    *queue = NFD_QID2VQN(nfd_queue);
+    NFD_EXTRACT_QID(*vnic, *queue, nfd_queue);
 }
 
 

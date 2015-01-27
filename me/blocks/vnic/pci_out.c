@@ -23,7 +23,7 @@
 #define NFD_OUT_RING_LINK(_isl)                                         \
 do {                                                                    \
     nfd_out_ring_info[_isl].addr_hi =                                   \
-        ((unsigned long long) NFD_EMEM(_isl) >> 32);                    \
+        ((unsigned long long) NFD_EMEM_LINK(_isl) >> 32);               \
     nfd_out_ring_info[_isl].sp0 = 0;                                    \
     nfd_out_ring_info[_isl].rnum = NFD_RING_LINK(_isl, nfd_out, 0);     \
 } while(0)

@@ -101,7 +101,7 @@ static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
 
 /**
- * Increment an atomic counter stored in local CTM
+ *Increment an atomic counter stored in local CTM
  * @param base      Start address of structure to increment
  * @param offset    Offset within structure to increment
  * @param val       Value to add
@@ -254,10 +254,11 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].fl_w = 0;
         queue_data[bmsk_queue].fl_s = 0;
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
-        queue_data[bmsk_queue].requester_id = cfg_msg->vnic;
-#ifdef NFD_VNIC_VF
-        queue_data[bmsk_queue].requester_id += NFD_CFG_VF_OFFSET;
-#endif
+        queue_data[bmsk_queue].requester_id = 0;
+        if (cfg_msg->vnic != NFD_MAX_VFS) {
+            queue_data[bmsk_queue].requester_id = (cfg_msg->vnic +
+                                                   NFD_CFG_VF_OFFSET);
+        }
         queue_data[bmsk_queue].spare0 = 0;
         queue_data[bmsk_queue].up = 1;
         queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;

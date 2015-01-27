@@ -28,6 +28,20 @@
 #include <ns_vnic_ctrl.h>
 
 
+#if NFD_MAX_VF_QUEUES != 0
+#ifndef NFD_CFG_VF_CAP
+#error NFD_CFG_VF_CAP must be defined
+#endif
+#endif
+
+
+#if NFD_MAX_PF_QUEUES != 0
+#ifndef NFD_CFG_PF_CAP
+#error NFD_CFG_PF_CAP must be defined
+#endif
+#endif
+
+
 #define NFD_CFG_DECLARE(_sig, _next_sig)  \
     __visible SIGNAL _sig;                \
     __remote SIGNAL _next_sig;
@@ -88,15 +102,20 @@ NFD_CFG_RINGS_INIT(3);
  *
  * There are a few corner cases to consider (such as the case of
  * two vNICs with 32 queues each), so #if-#elif-#else statements are used.
+ *
+ * For the purposes of computing these constants, we can handle the PF as
+ * if it had the same number of queues as the VFs.
  */
-#if ((NFD_MAX_VNICS == 1) || (NFD_MAX_VNICS * NFD_MAX_VNIC_QUEUES <= 16))
+#if (((NFD_MAX_VFS + NFD_MAX_PFS) == 1) ||          \
+     ((NFD_MAX_VFS + NFD_MAX_PFS) * NFD_MAX_VF_QUEUES <= 16))
 #define NFD_CFG_BMSK_TEST_MSK  0
 #define NFD_CFG_BMSK_SPACING   0
 
-#elif ((NFD_MAX_VNICS == 2) || (NFD_MAX_VNICS * NFD_MAX_VNIC_QUEUES <= 32))
+#elif (((NFD_MAX_VFS + NFD_MAX_PFS) == 2) ||                        \
+       ((NFD_MAX_VFS * NFD_MAX_PFS) * NFD_MAX_VF_QUEUES <= 32))
 #define NFD_CFG_BMSK_TEST_MSK  1
 
-#if NFD_MAX_VNIC_QUEUES == 32
+#if NFD_MAX_VF_QUEUES == 32
 #define NFD_CFG_BMSK_SPACING   64
 #else
 #define NFD_CFG_BMSK_SPACING   32
@@ -118,6 +137,7 @@ __remote SIGNAL NFD_CFG_SIG_NEXT_ME;
 #endif
 
 NFD_CFG_BASE_DECLARE(PCIE_ISL);
+/* XXX add the equivalent of nfd_cfg_pf_bars.uc in microC here. */
 
 static unsigned int cfg_ring_enables[2] = {0, 0};
 __xread unsigned int cfg_ring_addr[2] = {0, 0};
@@ -225,7 +245,8 @@ _bar_addr(struct nfp_pcie_barcfg_p2c *bar, unsigned long long data)
  * XXX formalise setup_pf and setup_vf methods
  * Configure the PF for use with NFD
  */
-/* XXX TEMP configure wide PF BARs to access config mem and QC  */
+/* XXX TEMP configure wide PF BARs to access config mem and QC
+ * NB not used with BSP drivers on PF */
 __intrinsic void
 nfd_cfg_setup_pf()
 {
@@ -240,7 +261,7 @@ nfd_cfg_setup_pf()
     bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_64BIT;
     bar_tmp.target = 7; /* MU CPP target */
     bar_tmp.token = 0;
-    _bar_addr(&bar_tmp, (unsigned long long) NFD_CFG_BASE(PCIE_ISL));
+    _bar_addr(&bar_tmp, NFD_CFG_BASE_LINK(PCIE_ISL));
     bar = bar_tmp;
 
     bar_base_addr = NFP_PCIE_BARCFG_P2C(0, 0);
@@ -284,7 +305,8 @@ nfd_cfg_setup_vf()
     bar_tmp.target = 7; /* MU CPP target */
     bar_tmp.token = 0;
     /* XXX this is A0 specific */
-    bar_tmp.base = (unsigned long long) NFD_CFG_BASE(PCIE_ISL) >> (40 - 19);
+    bar_tmp.base =
+        ((unsigned long long) NFD_CFG_BASE_LINK(PCIE_ISL)) >> (40 - 19);
     bar = bar_tmp;
 
     bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(0);
@@ -343,7 +365,7 @@ _nfd_cfg_queue_setup()
     nfd_cfg_queue.ptr        = 0;
 
     init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
-                   2 * NFD_MAX_VNIC_QUEUES, NFD_MAX_VNICS);
+                   2 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS + NFD_MAX_PFS);
 
     /* Setup the Event filter and autopush */
     __implicit_write(&cfg_ap_sig);
@@ -367,14 +389,31 @@ _nfd_cfg_queue_setup()
         NFD_CFG_EVENT_FILTER);
 }
 
+
 void
-_nfd_cfg_write_cap(unsigned int vnic)
+_nfd_cfg_write_vf_cap(unsigned int vnic)
 {
-    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_CAP,
-                                   NFD_MAX_VNIC_QUEUES, NFD_MAX_VNIC_QUEUES,
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_VF_CAP,
+                                   NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
                                    NFD_CFG_MAX_MTU};
 
-    mem_write64(&cfg, NFD_CFG_BASE(PCIE_ISL)[vnic] + NS_VNIC_CFG_VERSION,
+    mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NS_VNIC_CFG_VERSION,
+                sizeof cfg);
+}
+
+
+void
+_nfd_cfg_write_pf_cap()
+{
+    unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS * 2);
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_PF_CAP,
+                                   NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
+                                   NFD_CFG_MAX_MTU, tx_q_off,
+                                   NFD_OUT_Q_START + tx_q_off};
+
+    mem_write64(&cfg,
+                (NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
+                 NS_VNIC_CFG_VERSION),
                 sizeof cfg);
 }
 
@@ -397,13 +436,19 @@ nfd_cfg_setup()
     _nfd_cfg_queue_setup();
 
     /*
-     * Write compile time configured NFD_MAX_VNIC_QUEUES to mem.
+     * Write compile time configured NFD_MAX_VF_QUEUES and
+     * NFD_MAX_PF_QUEUES to mem.
      * XXX Could be .init'ed?
      */
-
-    for (vnic = 0; vnic < NFD_MAX_VNICS; vnic++) {
-        _nfd_cfg_write_cap(vnic);
+#if NFD_MAX_VF_QUEUES != 0
+    for (vnic = 0; vnic < NFD_MAX_VFS; vnic++) {
+        _nfd_cfg_write_vf_cap(vnic);
     }
+#endif
+
+#if NFD_MAX_PF_QUEUES != 0
+    _nfd_cfg_write_pf_cap();
+#endif
 }
 
 
@@ -461,7 +506,7 @@ nfd_cfg_next_vnic()
      * If there is not a one-to-one mapping between queues and bits,
      * first test whether the queue is empty. */
 #if NFD_CFG_BMSK_TEST_MSK == 0
-    vnic = queue / (2 * NFD_MAX_VNIC_QUEUES);
+    vnic = NFD_CFGQ2VNIC(queue / 2);
     qc_add_to_ptr(PCIE_ISL, queue, QC_RPTR, 1);
 #else
     __qc_read(PCIE_ISL, queue, QC_RPTR, &cfg_queue_sts.__raw, ctx_swap, &sig);
@@ -469,7 +514,7 @@ nfd_cfg_next_vnic()
         /* We haven't found a vNIC to service this time */
         vnic = -1;
     } else {
-        vnic = queue / (2 * NFD_MAX_VNIC_QUEUES);
+        vnic = NFD_CFGQ2VNIC(queue / 2);
         qc_add_to_ptr(PCIE_ISL, queue, QC_RPTR, 1);
     }
 #endif
@@ -597,13 +642,13 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
     if (comp == NFD_CFG_PCI_OUT) {
         /* Need RXRS_ENABLES, at 0x10 */
         mem_read64(cfg_bar_data,
-                 NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_CTRL,
-                 6 * sizeof(unsigned int));
+                   NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + NS_VNIC_CFG_CTRL,
+                   6 * sizeof(unsigned int));
     } else {
         /* Only need TXRS_ENABLES, at 0x08 */
         mem_read64(cfg_bar_data,
-                 NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + NS_VNIC_CFG_CTRL,
-                 4 * sizeof(unsigned int));
+                   NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + NS_VNIC_CFG_CTRL,
+                   4 * sizeof(unsigned int));
     }
 
     /* Check capabilities */
@@ -620,8 +665,12 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
         cfg_msg->interested = 1;
     }
 
-    /* Set the queue to process to zero */
-    cfg_msg->queue = 0;
+    /* Set the queue to process to the final queue */
+    if (cfg_msg->vnic == NFD_MAX_VFS) {
+        cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
+    } else {
+        cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;
+    }
 
     /* Copy ring configs
      * If the vNIC is not up, set all ring enables to zero */
@@ -630,12 +679,12 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
 
         if (comp == NFD_CFG_PCI_OUT) {
             enables_ind = NS_VNIC_CFG_RXRS_ENABLE >> 2;
-            addr_off =    NS_VNIC_CFG_RXR_ADDR(0);
-            sz_off =      NS_VNIC_CFG_RXR_SZ(0);
+            addr_off =    NS_VNIC_CFG_RXR_ADDR(cfg_msg->queue);
+            sz_off =      NS_VNIC_CFG_RXR_SZ(cfg_msg->queue);
         } else if (comp == NFD_CFG_PCI_IN0) {
             enables_ind = NS_VNIC_CFG_TXRS_ENABLE >> 2;
-            addr_off =    NS_VNIC_CFG_TXR_ADDR(0);
-            sz_off =      NS_VNIC_CFG_TXR_SZ(0);
+            addr_off =    NS_VNIC_CFG_TXR_ADDR(cfg_msg->queue);
+            sz_off =      NS_VNIC_CFG_TXR_SZ(cfg_msg->queue);
         } else if (comp == NFD_CFG_PCI_IN1) {
             enables_ind = NS_VNIC_CFG_TXRS_ENABLE >> 2;
         } else {
@@ -647,12 +696,15 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
         cfg_ring_enables[1] = cfg_bar_data[enables_ind + 1];
 
         if (comp == NFD_CFG_PCI_OUT || comp == NFD_CFG_PCI_IN0) {
-            /* Cache next ring address and size */
+            /* Cache next ring address and size
+             * For size, we want the 4B aligned entry that holds
+             * the end ring. */
+            sz_off &= ~3;
             mem_read64(&cfg_ring_addr,
-                       NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + addr_off,
+                       NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + addr_off,
                        sizeof(cfg_ring_addr));
             mem_read32(&cfg_ring_sizes,
-                       NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + sz_off,
+                       NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + sz_off,
                        sizeof(cfg_ring_sizes));
         }
     } else {
@@ -706,12 +758,12 @@ nfd_cfg_proc_msg(struct nfd_cfg_msg *cfg_msg, unsigned int *queue,
         cfg_msg->up_bit = 0;
     }
 
-    cfg_msg->queue++;
-    if (cfg_msg->queue == NFD_MAX_VNIC_QUEUES) {
+    if (cfg_msg->queue == 0) {
         /* This queue is the last */
         cfg_msg->msg_valid = 0;
         return;
     }
+    cfg_msg->queue--;
 
     /* Read values for next queue(s) */
     if (comp == NFD_CFG_PCI_OUT) {
@@ -726,14 +778,17 @@ nfd_cfg_proc_msg(struct nfd_cfg_msg *cfg_msg, unsigned int *queue,
      * Otherwise suppress read to save CPP bandwidth. */
     if (_ring_enables_test(cfg_msg)) {
         mem_read64(&cfg_ring_addr,
-                   NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_addr_off,
+                   NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + next_addr_off,
                    sizeof(cfg_ring_addr));
     }
 
-    /* Sizes packed 4 per register, so reread every 4th queue */
-    if ((cfg_msg->queue & 3) == 0) {
+    /* Reread the queue sizes if necessary.
+     * Sizes packed 4 per register and wee start from the last queue,
+     * so need to reread when the low bits are "3". */
+    if ((cfg_msg->queue & 3) == 3) {
+        next_sz_off &= ~3;
         mem_read32(&cfg_ring_sizes,
-                   NFD_CFG_BASE(PCIE_ISL)[cfg_msg->vnic] + next_sz_off,
+                   NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + next_sz_off,
                    sizeof(cfg_ring_sizes));
     }
 }
@@ -759,10 +814,9 @@ nfd_cfg_next_queue(struct nfd_cfg_msg *cfg_msg, unsigned int *queue)
         cfg_msg->up_bit = 0;
     }
 
-    cfg_msg->queue++;
-    if (cfg_msg->queue == NFD_MAX_VNIC_QUEUES) {
+    if (cfg_msg->queue == 0) {
         /* This queue is the last */
         cfg_msg->msg_valid = 0;
-        return;
     }
+    cfg_msg->queue--;
 }
