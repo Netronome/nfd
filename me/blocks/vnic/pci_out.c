@@ -76,7 +76,7 @@ __nfd_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
     ctassert(__is_read_write_reg(data));
 
     addr_hi = (0x84 | pcie_isl) << 24;
-    addr_lo = bmsk_queue * sizeof(unsigned int);
+    addr_lo = bmsk_queue * NFD_OUT_ATOMICS_SZ;
 
     *data = num;
 

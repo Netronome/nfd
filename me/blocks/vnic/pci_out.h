@@ -81,6 +81,14 @@ struct nfd_out_input {
 };
 
 
+/*
+ * Format of PCI.OUT CTM atomic data
+ */
+#define NFD_OUT_ATOMICS_SZ          8
+#define NFD_OUT_ATOMICS_CREDIT      0
+#define NFD_OUT_ATOMICS_SENT        4
+
+
 #if defined(__NFP_LANG_MICROC)
 
 #include <pkt/pkt.h>

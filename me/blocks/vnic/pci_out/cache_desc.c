@@ -44,15 +44,15 @@
     (NFD_OUT_FL_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
 
 
-/* XXX remove and just call _alloc_mem directly? */
 /*
- * Allocate 256B (64 x 4B) of memory at offset 0 in CTM for credits.
+ * Allocate memory at offset 0 in CTM for atomics.
  * Forcing this to zero on all PCIe islands makes code to access credits
  * simpler and more efficient throughout the system.
  */
-#define NFD_CREDITS_ALLOC_IND(_off)                                    \
-    ASM(.alloc_mem nfd_out_credits ctm+##_off  island 256)
-#define NFD_CREDITS_ALLOC(_off) NFD_CREDITS_ALLOC_IND(_off)
+#define NFD_ATOMICS_ALLOC_IND(_off)                                    \
+    ASM(.alloc_mem nfd_out_atomics ctm+##_off island                   \
+        (NFD_OUT_ATOMICS_SZ * NFD_OUT_MAX_QUEUES))
+#define NFD_ATOMICS_ALLOC(_off) NFD_ATOMICS_ALLOC_IND(_off)
 
 
 /*
@@ -78,7 +78,7 @@ static __shared __lmem unsigned int
     fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
 
 /* NFD credits are fixed at offset zero in CTM */
-NFD_CREDITS_ALLOC(NFD_OUT_CREDITS_BASE);
+NFD_ATOMICS_ALLOC(NFD_OUT_CREDITS_BASE);
 
 
 __export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_SZ_PER_QUEUE)
@@ -103,43 +103,52 @@ static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 /**
  *Increment an atomic counter stored in local CTM
  * @param base      Start address of structure to increment
- * @param offset    Offset within structure to increment
+ * @param queue     Queue within structure to increment
  * @param val       Value to add
+ * @param counter   Counter to increment
  *
  * XXX replace this command with suitable flowenv alternative when available.
  */
 __intrinsic void
-_add_imm(unsigned int base, unsigned int offset, unsigned int val)
+_add_imm(unsigned int base, unsigned int queue, unsigned int val,
+         unsigned int counter)
 {
     unsigned int ind;
+    ctassert(__is_ct_const(counter));
 
-    offset = offset * sizeof(unsigned int);
+    queue = queue * NFD_OUT_ATOMICS_SZ | counter;
     ind = (NFP_MECSR_PREV_ALU_LENGTH(8) | NFP_MECSR_PREV_ALU_OV_LEN |
            NFP_MECSR_PREV_ALU_OVE_DATA(2));
 
     __asm alu[--, ind, or, val, <<16];
-    __asm mem[add_imm, --, base, offset, 1], indirect_ref;
+    __asm mem[add_imm, --, base, queue, 1], indirect_ref;
 }
 
 
 /**
  * Zero an atomic counter stored in local CTM
  * @param base      Start address of structure to zero
- * @param offset    Offset within structure to zero
+ * @param queue     Queue within structure to zero
  *
  * XXX replace this command with suitable flowenv alternative when available.
  */
 __intrinsic void
-_zero_imm(unsigned int base, unsigned int offset)
+_zero_imm(unsigned int base, unsigned int queue, size_t size)
 {
     unsigned int ind;
+    unsigned int count = size>>2;
 
-    offset = offset * sizeof(unsigned int);
-    ind = (NFP_MECSR_PREV_ALU_LENGTH(8) | NFP_MECSR_PREV_ALU_OV_LEN |
+    ctassert(__is_ct_const(size));
+    ctassert(size <= 32);
+
+    queue = queue * NFD_OUT_ATOMICS_SZ;
+    ind = (NFP_MECSR_PREV_ALU_LENGTH(8 + (count - 1)) |
+           NFP_MECSR_PREV_ALU_OV_LEN |
            NFP_MECSR_PREV_ALU_OVE_DATA(2));
 
     __asm alu[--, --, B, ind];
-    __asm mem[atomic_write_imm, --, base, offset, 1], indirect_ref;
+    __asm mem[atomic_write_imm, --, base, queue, \
+              __ct_const_val(count)], indirect_ref;
 }
 
 
@@ -268,7 +277,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].rx_w = 0;
 
         /* Reset credits */
-        _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue);
+        _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue, NFD_OUT_ATOMICS_SZ);
 
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK;
         rxq.size         = ring_sz - 8; /* XXX add define for size shift */
@@ -298,9 +307,10 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].rx_w = 0;
 
         /* Reset credits */
-        _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue);
+        _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue, NFD_OUT_ATOMICS_SZ);
 
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
+        /* XXX configure both queues without swapping? */
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
         rxq.size         = 0;
         qc_init_queue(PCIE_ISL, (queue_s<<1) | NFD_OUT_Q_START, &rxq);
@@ -347,7 +357,7 @@ _fetch_fl(__gpr unsigned int *queue)
         ptr_inc &= queue_data[*queue].ring_sz_msk;
         queue_data[*queue].fl_w += ptr_inc;
 #ifdef NFD__OUT_CREDITS_HOST_ISSUED
-        _add_imm(NFD_OUT_CREDITS_BASE, *queue, ptr_inc);
+        _add_imm(NFD_OUT_CREDITS_BASE, *queue, ptr_inc, NFD_OUT_ATOMICS_CREDIT);
 #endif
         if (!wptr.wmreached) {
             /* Mark the queue not urgent
@@ -466,7 +476,8 @@ _complete_fetch()
             queue_c = fl_cache_pending[pending_slot];
 
 #ifdef NFD_OUT_CREDITS_NFP_CACHED
-            _add_imm(NFD_OUT_CREDITS_BASE, queue_c, NFD_OUT_FL_BATCH_SZ);
+            _add_imm(NFD_OUT_CREDITS_BASE, queue_c, NFD_OUT_FL_BATCH_SZ,
+                     NFD_OUT_ATOMICS_CREDIT);
 #endif
 
             /* Increment queue available pointer by one batch
