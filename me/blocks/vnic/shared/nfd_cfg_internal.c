@@ -112,7 +112,7 @@ NFD_CFG_RINGS_INIT(3);
 #define NFD_CFG_BMSK_SPACING   0
 
 #elif (((NFD_MAX_VFS + NFD_MAX_PFS) == 2) ||                        \
-       ((NFD_MAX_VFS * NFD_MAX_PFS) * NFD_MAX_VF_QUEUES <= 32))
+       ((NFD_MAX_VFS + NFD_MAX_PFS) * NFD_MAX_VF_QUEUES <= 32))
 #define NFD_CFG_BMSK_TEST_MSK  1
 
 #if NFD_MAX_VF_QUEUES == 32
