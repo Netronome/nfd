@@ -288,6 +288,8 @@ void main(void)
 #endif
 #ifdef LOOPBACK_FLIP_VNIC
         vnic = vnic ^ 1;
+        /* Queue 0 is always a valid destination if vnic valid */
+        queue = 0;
 #endif
 
         /* PCI.OUT transmit */
