@@ -26,7 +26,8 @@
 #define NFD_EMEM_LINK_IND0(_isl) NFD_EMEM_LINK_IND1(NFD_EMEM(_isl))
 #define NFD_EMEM_LINK(_isl) NFD_EMEM_LINK_IND0(_isl)
 
-#define NFD_EMEM_SHARED(_emem) NFD_EMEM_IND2(_emem)
+#define NFD_EMEM_SHARED_IND(_emem) __LoadTimeConstant("__addr_" #_emem)
+#define NFD_EMEM_SHARED(_emem) NFD_EMEM_SHARED_IND(_emem)
 
 
 #define NFD_RING_LINK_IND(_isl, _comp, _num) \

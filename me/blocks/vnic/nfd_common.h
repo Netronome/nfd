@@ -62,6 +62,7 @@
     ((_nat) - (_vnic * NFD_MAX_VF_QUEUES))
 
 
+#ifndef __NFP_LANG_ASM
 /* With no special knowledge about the natural queue,
  * we need to test whether it is a PF queue or a VF queue,
  * and handle each case differently. */
@@ -75,6 +76,7 @@ do {                                                    \
         (_vqn) = NFD_NATQ2PFQ(_nat);                    \
     }                                                   \
 } while(0)
+#endif /* __NFP_LANG_ASM */
 
 #define NFD_EXTRACT_QID(_vnic, _vqn, _qid)              \
     NFD_EXTRACT_NATQ(_vnic, _vqn, NFD_BMQ2NATQ(_qid))
