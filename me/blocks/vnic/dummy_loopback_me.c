@@ -55,6 +55,8 @@ __shared unsigned long long nrecv = 0;
 __shared unsigned long long nsent = 0;
 volatile __shared unsigned long long nfail = 0;
 
+__shared __lmem uint32_t next_q[NFD_MAX_VFS+1];
+
 /* Ordering  */
 static SIGNAL get_order_sig;
 static SIGNAL credit_order_sig;
@@ -287,9 +289,18 @@ void main(void)
         queue = queue ^ 1;
 #endif
 #ifdef LOOPBACK_FLIP_VNIC
+#define NFD_IS_VNIC_VF(_vnic) (_vnic < NFD_MAX_VFS)
+#define NFD_IS_VNIC_PF(_vnic) (_vnic == NFD_MAX_VFS)
+
         vnic = vnic ^ 1;
-        /* Queue 0 is always a valid destination if vnic valid */
-        queue = 0;
+
+        /* round robin to all queues available */
+        queue = next_q[vnic]++;
+        if (NFD_IS_VNIC_PF(vnic)) {
+            queue = queue & (NFD_MAX_PF_QUEUES-1);
+        } else {
+            queue = queue & (NFD_MAX_VF_QUEUES-1);
+        }
 #endif
 
         /* PCI.OUT transmit */
