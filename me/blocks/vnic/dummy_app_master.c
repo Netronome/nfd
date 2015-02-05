@@ -134,7 +134,8 @@ main(void)
             ctx_swap();
         } else {
             if (ctx() == 1) {
-                // msix_gen_loop();
+                //msix_gen_loop();
+                ctx_swap();
             } else {
                 ctx_swap();
             }
