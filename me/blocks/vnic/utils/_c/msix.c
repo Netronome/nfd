@@ -68,9 +68,9 @@ __gpr uint32_t msi_vf_status(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr, __
     // configure address to access PCIe internal PF Registers
     addr_hi = pcie_nr << 30;
 
-    addr_lo = PCIE_XPB_TARGET_ID_VF_REGS << 32 + 
+    addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) + 
               NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_PEND +
-              vf_fn_nr << 12;
+              (vf_fn_nr << 12);
     
     __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[r_sig]
 
@@ -91,9 +91,9 @@ void msi_vf_mask(__gpr int32_t pcie_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t 
     // configure address to access PCIe internal PF Registers
     addr_hi = pcie_nr << 30;
 
-    addr_lo = PCIE_XPB_TARGET_ID_VF_REGS << 32 +
+    addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
               NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK +
-              vf_fn_nr << 12;
+              (vf_fn_nr << 12);
 
     __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
 
