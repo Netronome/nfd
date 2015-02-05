@@ -105,7 +105,7 @@ void msi_vf_mask(__gpr int32_t pcie_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t 
 
 }
 
-void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t mask_intrpt)
+void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr,  __gpr uint32_t intrpt_nr, __gpr uint32_t mask_intrpt)
 {
 
     __gpr unsigned int addr_hi;
@@ -119,7 +119,9 @@ void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr, __gpr uint32_
     addr_hi = pcie_nr << 30;
 
     // MSI Address is 0x60040+fn_number
-    addr_lo = 0x600040 + vf_fn_nr;
+    addr_lo = 0x60040 + vf_fn_nr;
+
+    local_csr_write(NFP_MECSR_MAILBOX_3, addr_lo);
 
     msi_wdata = intrpt_nr;
     __asm pcie[write_pci, msi_wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]

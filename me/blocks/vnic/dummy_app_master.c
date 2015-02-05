@@ -16,6 +16,9 @@
 
 #include <vnic/shared/nfd_cfg.h>
 
+// MSI/MSI-X
+//#include <msix_gen.h>
+
 __visible SIGNAL nfd_cfg_sig_app_master1;
 
 struct nfd_cfg_msg cfg_msg;
@@ -59,7 +62,6 @@ __xread unsigned int cfg_bar_data[6];
 
 NFD_CFG_BASE_DECLARE(PCIE_ISL);
 
-
 int
 main(void)
 {
@@ -86,6 +88,10 @@ main(void)
             }
             mem_ring_put(rnum, fake_blm_addr, fake_bufs, sizeof fake_bufs);
         }
+    }
+
+    if (ctx() == 1) {
+       // msix_gen_init();
     }
 
     for (;;) {
@@ -127,9 +133,15 @@ main(void)
 
             ctx_swap();
         } else {
-
-            ctx_swap();
+            if (ctx() == 1) {
+                // msix_gen_loop();
+            } else {
+                ctx_swap();
+            }
         }
     }
 }
+
+
+
 

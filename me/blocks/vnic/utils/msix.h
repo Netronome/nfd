@@ -17,6 +17,18 @@
  * @brief         
  */
 
+/*
+//////
+TODO:
+
+change vf_fn_nr to vf_nr or vf_num (maybe also pcie_num...)
+int_nr -> vector_num
+remove un_mask function
+do not expose mask function
+/////
+*/
+
+
 /**
   * Returns the pending status of given MSI interrupt for specified
   * virtual function
@@ -51,7 +63,7 @@ void msi_vf_mask(__gpr int32_t pcie_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t 
   * @param mask_intrpt - specifies if the interrupt should be optionally
   *                      masked after assertion
   */
-void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t mask_intrpt);
+void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr,  __gpr uint32_t intrpt_nr, __gpr uint32_t mask_intrpt);
 
 /**
   * Retrieves MSI-X mask status for given interrupt number
