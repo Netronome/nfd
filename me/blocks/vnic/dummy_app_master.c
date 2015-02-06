@@ -17,7 +17,9 @@
 #include <vnic/shared/nfd_cfg.h>
 
 // MSI/MSI-X
-//#include <msix_gen.h>
+#ifdef APP_MASTER_MSIX_EN
+#include <msix_gen.h>
+#endif
 
 __visible SIGNAL nfd_cfg_sig_app_master1;
 
@@ -90,9 +92,11 @@ main(void)
         }
     }
 
+#ifdef APP_MASTER_MSIX_EN
     if (ctx() == 1) {
-       // msix_gen_init();
+        msix_gen_init();
     }
+#endif
 
     for (;;) {
         if (ctx() == 0) {
@@ -134,7 +138,9 @@ main(void)
             ctx_swap();
         } else {
             if (ctx() == 1) {
-                //msix_gen_loop();
+#ifdef APP_MASTER_MSIX_EN
+                msix_gen_loop();
+#endif
                 ctx_swap();
             } else {
                 ctx_swap();
