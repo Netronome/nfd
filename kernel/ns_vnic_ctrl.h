@@ -97,7 +97,8 @@
 #define   NS_VNIC_CFG_CTRL_RINGPRIO	  (0x1 << 19) /* Ring priorities */
 #define   NS_VNIC_CFG_CTRL_MSIXAUTO	  (0x1 << 20) /* MSI-X auto-masking */
 #define   NS_VNIC_CFG_CTRL_TXRWB	  (0x1 << 21) /* Write-back of TX ring*/
-#define   NS_VNIC_CFG_CTRL_L2FILTER	  (0x1 << 22) /* L2 filters (VMQ) */
+#define   NS_VNIC_CFG_CTRL_L2SWITCH	  (0x1 << 22) /* L2 Switch */
+#define   NS_VNIC_CFG_CTRL_L2SWITCH_LOCAL (0x1 << 23) /* Switch to local */
 #define NS_VNIC_CFG_UPDATE		0x0004
 #define   NS_VNIC_CFG_UPDATE_GEN	  (0x1 <<  0) /* General update */
 #define   NS_VNIC_CFG_UPDATE_RING	  (0x1 <<  1) /* Ring config change */
@@ -105,6 +106,7 @@
 #define   NS_VNIC_CFG_UPDATE_TXRPRIO	  (0x1 <<  3) /* TX Ring prio change */
 #define   NS_VNIC_CFG_UPDATE_RXRPRIO	  (0x1 <<  4) /* RX Ring prio change */
 #define   NS_VNIC_CFG_UPDATE_MSIX	  (0x1 <<  5) /* MSI-X change */
+#define   NS_VNIC_CFG_UPDATE_L2SWITCH	  (0x1 <<  6) /* Switch config change */
 #define   NS_VNIC_CFG_UPDATE_ERR	  (0x1 << 31) /* A error occurred */
 #define NS_VNIC_CFG_TXRS_ENABLE		0x0008
 #define NS_VNIC_CFG_RXRS_ENABLE		0x0010
