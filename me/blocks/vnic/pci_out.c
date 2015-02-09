@@ -12,12 +12,31 @@
 #include <nfp/mem_ring.h>
 #include <pkt/pkt.h>
 #include <std/reg_utils.h>
+#include <std/cntrs.h>
+#include <nfp/mem_bulk.h>
 
 #include <vnic/nfd_common.h>
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/utils/qc.h>
+#include <vnic/shared/nfd_cfg.h>
 
+
+#ifdef NFD_PCIE0_EMEM
+    PKTS_CNTRS_DECLARE(nfd_out_cntrs0, NFD_OUT_MAX_QUEUES, __imem_n(0));
+#endif
+
+#ifdef NFD_PCIE1_EMEM
+    PKTS_CNTRS_DECLARE(nfd_out_cntrs1, NFD_OUT_MAX_QUEUES, __imem_n(0));
+#endif
+
+#ifdef NFD_PCIE2_EMEM
+    PKTS_CNTRS_DECLARE(nfd_out_cntrs2, NFD_OUT_MAX_QUEUES, __imem_n(1));
+#endif
+
+#ifdef NFD_PCIE3_EMEM
+    PKTS_CNTRS_DECLARE(nfd_out_cntrs3, NFD_OUT_MAX_QUEUES, __imem_n(1));
+#endif
 
 
 #define NFD_OUT_RING_LINK(_isl)                                         \
@@ -29,6 +48,7 @@ do {                                                                    \
 } while(0)
 
 __shared __lmem struct nfd_ring_info nfd_out_ring_info[NFD_MAX_ISL];
+__shared __lmem struct pkt_cntr_addr nfd_out_cntrs_base[NFD_MAX_ISL];
 
 
 /* XXX point unused islands at a small "stray" ring? */
@@ -37,18 +57,22 @@ nfd_out_send_init()
 {
 #ifdef NFD_PCIE0_EMEM
     NFD_OUT_RING_LINK(0);
+    nfd_out_cntrs_base[0] = pkt_cntr_get_addr(nfd_out_cntrs0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
     NFD_OUT_RING_LINK(1);
+    nfd_out_cntrs_base[1] = pkt_cntr_get_addr(nfd_out_cntrs1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
     NFD_OUT_RING_LINK(2);
+    nfd_out_cntrs_base[2] = pkt_cntr_get_addr(nfd_out_cntrs2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
     NFD_OUT_RING_LINK(3);
+    nfd_out_cntrs_base[3] = pkt_cntr_get_addr(nfd_out_cntrs3);
 #endif
 }
 
@@ -104,6 +128,41 @@ nfd_out_get_credit(unsigned int pcie_isl, unsigned int bmsk_queue,
 
     return ret;
 }
+
+
+__intrinsic void
+__nfd_out_cnt_pkt(unsigned int pcie_isl, unsigned int bmsk_queue,
+                  unsigned int byte_count, sync_t sync, SIGNAL *sig)
+{
+    ctassert(__is_ct_const(sync));
+    ctassert(sync == sig_done || sync == ctx_swap);
+
+    pkt_cntr_add(nfd_out_cntrs_base[pcie_isl], bmsk_queue, 0, byte_count,
+                 sync, sig);
+}
+
+__intrinsic void
+__nfd_out_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
+                       sync_t sync, SIGNAL *sig)
+{
+    unsigned int pkt_count;
+    unsigned long long byte_count;
+    __xwrite unsigned long long xfer_update[2];
+
+    ctassert(__is_ct_const(sync));
+    ctassert(sync == sig_done || sync == ctx_swap);
+
+    pkt_cntr_read_and_clr(nfd_out_cntrs_base[pcie_isl], bmsk_queue, 0,
+                          &pkt_count, &byte_count);
+
+    xfer_update[0] = byte_count;
+    xfer_update[1] = pkt_count;
+
+    __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(PCIE_ISL, 0) +
+                NS_VNIC_CFG_TXR_STATS(bmsk_queue)),
+                sizeof xfer_update, sizeof xfer_update, sync, sig);
+}
+
 
 
 __intrinsic void
