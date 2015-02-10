@@ -207,42 +207,6 @@ __intrinsic void nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
 
 
 /**
- * Packets and Bytes count for PCI.IN queues.
- * @param pcie_isl      PCIe island to access
- * @param bmsk_queue    Rx queue number
- * @param byte_count    The bytes count to add
- * @param sync          type of synchronization
- * @param sig           signal to report completion
- *
- * This function uses the stats engine pkt and byte counters
- * to log the packet and bytes count per Rx queue.
- * The values are accumulated in the nfd_in_cntrsX memory and needs
- * to be pushed to the CFG BAR using the "__nfd_in_push_pkt_cnt" function.
- */
-__intrinsic void __nfd_in_cnt_pkt(unsigned int pcie_isl,
-                                  unsigned int bmsk_queue,
-                                  unsigned int byte_count,
-                                  sync_t sync, SIGNAL *sig);
-
-/**
- * Push Packets and Bytes count for PCI.IN queue into the CFG BAR.
- * @param pcie_isl      PCIe island to access
- * @param bmsk_queue    Rx queue number
- * @param sync          type of synchronization
- * @param sig           signal to report completion
- *
- * This function updates the per Rx Q packets and bytes counter
- * in the CFG BAR. It reads and clears the packets and bytes
- * count from the relevant nfd_in_cntrsX memory and updates the
- * CFG BAR counters using the read values.
- */
-__intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,
-                                       unsigned int bmsk_queue,
-                                       sync_t sync, SIGNAL *sig);
-
-
-
-/**
  * Populate a nfd_in_pkt_desc struct from the NFD meta data
  * @param desc      PCI.IN descriptor for the packet
  * @param pkt_info  nbi_meta_pkt_info struct for the packet
