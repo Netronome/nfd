@@ -14,6 +14,7 @@
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd_internal.h>
 #include <nfp/mem_atomic.h>
+#include <std/reg_utils.h>
 
 #define MAX_QUEUE_NUM (NFD_MAX_VFS*NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1) 
 
@@ -27,6 +28,16 @@ __gpr uint64_t     pending_msi;
 __gpr uint64_t     rx_queue_enabled;
       unsigned int vector_num_per_q[MAX_QUEUE_NUM+1];
 // assert on size of pending_msi and rx_queue_enabled if NFD_OUT_MAX_QUEUES !=64
+
+// debug
+#define MSIX_GEN_DEBUG_EN
+
+#ifdef MSIX_GEN_DEBUG_EN
+__export __shared __imem_n(0) __align4 uint32_t msix_debug[100];  
+__xwrite uint64_t debug_data[8];
+__xwrite uint32_t debug_data_32[8];
+int i;
+#endif
 
 #define __NFD_OUT_ATOMICS_SZ 16   /// why defined as 8 ?
 __intrinsic uint32_t
@@ -45,6 +56,42 @@ __get_rx_queue_cnt(unsigned int pcie_isl, unsigned int queue)
     return(rdata);
 }
 
+#ifdef MSIX_GEN_DEBUG_EN
+__intrinsic void
+update_debug() 
+{
+    int word;
+    int byte_num;
+    uint32_t temp;
+
+    for (i=0; i<8; i++) {
+        debug_data[i]=0;
+    }
+
+    for (i=0; i<8; i++) {
+        debug_data_32[i]=0;
+    }
+
+    debug_data[0] = pending_msi;
+    debug_data[1] = rx_queue_enabled;
+    mem_write64((void*)&debug_data, (__mem void*)&msix_debug[4], sizeof debug_data);
+
+    byte_num=0;
+    word=0;
+    temp=0;
+    for (i=0; i<=MAX_QUEUE_NUM; i++) {
+        temp=temp + (vector_num_per_q[i] << (byte_num*8));
+        debug_data_32[word]=temp;
+        byte_num++;
+        if (byte_num==4) {
+            byte_num=0;
+            temp=0;
+            word++;
+        }
+    }
+    mem_write32((void*)&debug_data_32, (__mem void*)&msix_debug[8], sizeof debug_data_32);
+}
+#endif
 
 int 
 queue_is_pf(unsigned int queue_num)
@@ -72,22 +119,69 @@ queue_vector_is_masked(unsigned int qnum)
     return (mask);
 }
 
-void 
-set_rx_queue_enabled(int qnum, int en) 
+__intrinsic void 
+msix_gen_set_rx_queue_enabled(int qnum, int en) 
 {
     if (en==1) {
        rx_queue_enabled = rx_queue_enabled | (1 << qnum); 
     } else {
-       rx_queue_enabled = rx_queue_enabled & !(1 << qnum); 
+       rx_queue_enabled = rx_queue_enabled & ~(1 << qnum); 
     }
+
+#ifdef MSIX_GEN_DEBUG_EN
+    update_debug();
+#endif
+
 }
 
-void 
-set_rx_queue_vector(int qnum, int vector)
+__intrinsic void 
+msix_gen_set_rx_queue_vector(int qnum, int vector)
 {
     vector_num_per_q[qnum]=vector;
+#ifdef MSIX_GEN_DEBUG_EN
+    update_debug();
+#endif
+
 }
 
+
+struct rx_ring_vector_t {
+    uint8_t data[64];
+} rx_ring_vector_t;
+
+__intrinsic void
+msix_gen_update_config(unsigned int vnic, __xread unsigned int cfg_bar_data[6], __xread unsigned int rx_ring_vector_data[16])
+{
+    int res;
+    unsigned int queue_num;
+    unsigned int temp;
+    unsigned int vector_num;
+    __align4 unsigned int word_data[2];
+    __align4 unsigned long long int bit_data;
+    
+    __lmem struct rx_ring_vector_t rx_ring_vector_data_byte;
+
+    word_data[0]=cfg_bar_data[5];
+    word_data[1]=cfg_bar_data[4];
+    bit_data=*((unsigned long long int*)&word_data[0]);
+
+    reg_cp((void *)&rx_ring_vector_data_byte, (void *)&rx_ring_vector_data,64);
+
+    //update enabled RX queues for this vnic, and vectors
+    res=0;
+    while (res>=0) {
+        res=ffs64(bit_data);
+        if (res>=0) {
+            bit_data = bit_data & ~(1<<res);
+            queue_num = res+vnic*NFD_MAX_VF_QUEUES;
+            msix_gen_set_rx_queue_enabled(queue_num,1);
+            // flip byte order to get the correct vector
+            temp=(res & ~3) + (3-(res & 3));
+            vector_num = rx_ring_vector_data_byte.data[temp];
+            msix_gen_set_rx_queue_vector(queue_num,vector_num);
+        }
+    }
+}
 
 void 
 msix_gen_init() 
@@ -99,11 +193,15 @@ msix_gen_init()
         prev_rx_cnt[qnum] = 0;
     }
 
-    //set_rx_queue_enabled(0,1);    
-    //set_rx_queue_enabled(1,1);   
-    //set_rx_queue_vector(0,2);
-    //set_rx_queue_vector(1,3);
-
+#ifdef MSIX_GEN_DEBUG_EN
+    for (i=0; i<8; i++) {
+        debug_data[i]=0;
+    } 
+    debug_data[0] = 0x1234acbd;
+    debug_data[1] = MAX_QUEUE_NUM;
+    mem_write64((void*)&debug_data, (__mem void*)&msix_debug, sizeof debug_data);
+#endif
+    
 }
 
 void 
@@ -119,7 +217,6 @@ msix_gen_loop()
           
             if ((pending_msi & (1<<qnum)) != 0) {
                 if (queue_vector_is_masked(qnum)==0) {
-                    //local_csr_write(NFP_MECSR_MAILBOX_2, local_csr_read(NFP_MECSR_MAILBOX_2)+1);
                     if (queue_is_pf(qnum)==1) {
                         msix_send(_PCIE_NR, vector_num_per_q[qnum], _AUTO_MASK);
                     } else {

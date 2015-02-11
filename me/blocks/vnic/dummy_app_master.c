@@ -61,6 +61,9 @@ __export __emem __align16K char bufs_array[BUF_NUM * BUF_SZ];
 __shared __gpr unsigned int buf_cnt = 0;
 
 __xread unsigned int cfg_bar_data[6];
+#ifdef APP_MASTER_MSIX_EN
+__xread unsigned int rx_ring_vector_data[16];
+#endif
 
 NFD_CFG_BASE_DECLARE(PCIE_ISL);
 
@@ -108,11 +111,22 @@ main(void)
                     mem_read64(cfg_bar_data,
                                NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg.vnic),
                                sizeof cfg_bar_data);
+#ifdef APP_MASTER_MSIX_EN
+                    mem_read64(rx_ring_vector_data,
+                               NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg.vnic)+0xa40,
+                               sizeof rx_ring_vector_data);
+#endif
                 }
             } else {
+              
+ 
                 __xwrite unsigned int link_state;
 
                 __implicit_read(cfg_bar_data, 6);
+
+#ifdef APP_MASTER_MSIX_EN
+                msix_gen_update_config(cfg_msg.vnic, cfg_bar_data, rx_ring_vector_data);
+#endif
 
                 local_csr_write(NFP_MECSR_MAILBOX_0, cfg_msg.vnic);
                 local_csr_write(NFP_MECSR_MAILBOX_1, cfg_bar_data[0]);
