@@ -16,6 +16,12 @@
 #include <nfp/mem_atomic.h>
 #include <std/reg_utils.h>
 
+
+/*
+  TODO:
+  need to clear all pending interrupts when function comes up or down (what if the state didn't change? save state?)
+*/
+
 #define MAX_QUEUE_NUM (NFD_MAX_VFS*NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1) 
 
 #define _PCIE_NR   4   // should be defined externally
@@ -28,7 +34,6 @@ __shared __gpr uint64_t     pending_msi;
 
 __shared __gpr       uint64_t     rx_queue_enabled;
 __shared __imem_n(0) unsigned int vector_num_per_q[MAX_QUEUE_NUM+1];
-//__shared  unsigned int vector_num_per_q[MAX_QUEUE_NUM+1];
 // assert on size of pending_msi and rx_queue_enabled if NFD_OUT_MAX_QUEUES !=64
 
 // debug
@@ -156,7 +161,7 @@ struct rx_ring_vector_t {
 __intrinsic void
 msix_gen_update_config(unsigned int vnic, __xread unsigned int cfg_bar_data[6], __xread unsigned int rx_ring_vector_data[16])
 {
-    int res;
+    unsigned int indx,num_of_queues;
     unsigned int queue_num;
     unsigned int temp;
     unsigned int vector_num;
@@ -171,20 +176,39 @@ msix_gen_update_config(unsigned int vnic, __xread unsigned int cfg_bar_data[6], 
 
     reg_cp((void *)&rx_ring_vector_data_byte, (void *)&rx_ring_vector_data,64);
 
-    //update enabled RX queues for this vnic, and vectors
-    res=0;
-    while (res>=0) {
-        res=ffs64(bit_data);
-        if (res>=0) {
-            bit_data = bit_data & ~(1<<res);
-            queue_num = res+vnic*NFD_MAX_VF_QUEUES;
+//    local_csr_write(NFP_MECSR_MAILBOX_2, cfg_bar_data[4]);
+
+    if (vnic==NFD_MAX_VFS) {
+        // this is a PF
+        num_of_queues = NFD_MAX_PF_QUEUES;
+    } else {
+        // this is a VF
+        num_of_queues = NFD_MAX_VF_QUEUES;
+    }
+
+
+    // For every possible queue fo this function, update enabled RX queues and vectors
+    for (indx=0; indx<num_of_queues; indx++) {
+        if (indx==32) {
+           bit_data = bit_data >> 32;
+        }
+        
+        queue_num = indx+vnic*NFD_MAX_VF_QUEUES;
+
+        if ((bit_data & (1<<( indx&~(0x20000) ))) > 0) {
+            // enable queue
             msix_gen_set_rx_queue_enabled(queue_num,1);
             // flip byte order to get the correct vector
-            temp=(res & ~3) + (3-(res & 3));
+            temp=(indx & ~3) + (3-(indx & 3));
             vector_num = rx_ring_vector_data_byte.data[temp];
             msix_gen_set_rx_queue_vector(queue_num,vector_num);
+        } else {
+            // disable queue
+            msix_gen_set_rx_queue_enabled(queue_num,0);
         }
     }
+    
+    //local_csr_write(NFP_MECSR_MAILBOX_2, rx_queue_enabled);
 }
 
 void 
