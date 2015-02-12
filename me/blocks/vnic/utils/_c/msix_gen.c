@@ -24,16 +24,19 @@
       unsigned int qnum, vf_num;
 __gpr uint32_t     rx_cnt;
       uint32_t     prev_rx_cnt[MAX_QUEUE_NUM+1];
-__gpr uint64_t     pending_msi;
-__gpr uint64_t     rx_queue_enabled;
-      unsigned int vector_num_per_q[MAX_QUEUE_NUM+1];
+__shared __gpr uint64_t     pending_msi;
+
+__shared __gpr       uint64_t     rx_queue_enabled;
+__shared __imem_n(0) unsigned int vector_num_per_q[MAX_QUEUE_NUM+1];
+//__shared  unsigned int vector_num_per_q[MAX_QUEUE_NUM+1];
 // assert on size of pending_msi and rx_queue_enabled if NFD_OUT_MAX_QUEUES !=64
 
 // debug
-#define MSIX_GEN_DEBUG_EN
+//#define MSIX_GEN_DEBUG_EN
 
 #ifdef MSIX_GEN_DEBUG_EN
-__export __shared __imem_n(0) __align4 uint32_t msix_debug[100];  
+//__shared __lmem __align4 uint32_t msix_debug[100];  
+__shared __lmem uint32_t msix_debug[100];  
 __xwrite uint64_t debug_data[8];
 __xwrite uint32_t debug_data_32[8];
 int i;
@@ -127,7 +130,8 @@ msix_gen_set_rx_queue_enabled(int qnum, int en)
     } else {
        rx_queue_enabled = rx_queue_enabled & ~(1 << qnum); 
     }
-
+    
+//    local_csr_write(NFP_MECSR_MAILBOX_2, rx_queue_enabled);
 #ifdef MSIX_GEN_DEBUG_EN
     update_debug();
 #endif
@@ -139,7 +143,7 @@ msix_gen_set_rx_queue_vector(int qnum, int vector)
 {
     vector_num_per_q[qnum]=vector;
 #ifdef MSIX_GEN_DEBUG_EN
-    update_debug();
+   update_debug();
 #endif
 
 }
@@ -221,7 +225,7 @@ msix_gen_loop()
                         msix_send(_PCIE_NR, vector_num_per_q[qnum], _AUTO_MASK);
                     } else {
                         vf_num = qnum / NFD_MAX_VF_QUEUES;
-                        msi_vf_send(_PCIE_NR, vector_num_per_q[qnum], vf_num, _AUTO_MASK);
+                        msi_vf_send(_PCIE_NR, vf_num, vector_num_per_q[qnum], _AUTO_MASK);
                     }
       
                     pending_msi = pending_msi & ~(1 << qnum);
