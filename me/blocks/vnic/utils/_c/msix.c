@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * @file          
- * @brief         Handle MSI/ MSI-X support
+ * @file   msix.c       
+ * @brief  MSI/MSI-X library 
  */
 
 
@@ -47,7 +47,7 @@
 #define PCIE_XPB_TARGET_ID_VF_REGS      	(0x23)
 
 // !!! COPIED from /opt/netronome/include/nfp6000/nfp_pcie.h
-#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_PEND          0x000000a4
+//#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_PEND          0x000000a4
 #define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK          0x000000a0
 
 /*
@@ -56,7 +56,7 @@
  Includes only support for MSI on VFs
  -----------------------------------------------------------------------------
 */
-__gpr uint32_t msi_vf_status(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t intrpt_nr) 
+unsigned int msi_vf_status(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr) 
 {
     __gpr unsigned int addr_hi;
     __gpr unsigned int addr_lo;
@@ -68,17 +68,22 @@ __gpr uint32_t msi_vf_status(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr, __
     // configure address to access PCIe internal PF Registers
     addr_hi = pcie_nr << 30;
 
-    addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) + 
-              NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_PEND +
-              (vf_fn_nr << 12);
+    addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
+              NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK +
+              (vf_nr << 12);
     
     __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[r_sig]
 
-    return ((rdata >> intrpt_nr) & 1);
+    return ((rdata >> vec_nr) & 1);
 
 }
 
-void msi_vf_mask(__gpr int32_t pcie_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t intrpt_nr)
+/**
+  * Sets the per vf, per-vector mask bit 
+  * @param pcie_nr   the PCIe cluster number
+  * @param vec_nr    interrupt vector number
+  */
+void msi_vf_mask(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr)
 {
     __gpr unsigned int addr_hi;
     __gpr unsigned int addr_lo;
@@ -93,19 +98,19 @@ void msi_vf_mask(__gpr int32_t pcie_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t 
 
     addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
               NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK +
-              (vf_fn_nr << 12);
+              (vf_nr << 12);
 
     __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
 
     // mask the vector
-    wdata = rdata | (1 << intrpt_nr);
+    wdata = rdata | (1 << vec_nr);
 
     // write back
     __asm ct[xpb_write, wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
 
 }
 
-void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr,  __gpr uint32_t intrpt_nr, __gpr uint32_t mask_intrpt)
+void msi_vf_send(unsigned int pcie_nr, unsigned int vf_nr,  unsigned int vec_nr, unsigned int mask_en)
 {
 
     __gpr unsigned int addr_hi;
@@ -119,18 +124,16 @@ void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr,  __gpr uint32_
     addr_hi = pcie_nr << 30;
 
     // MSI Address is 0x60040+fn_number
-    addr_lo = 0x60040 + vf_fn_nr;
+    addr_lo = 0x60040 + vf_nr;
 
-    local_csr_write(NFP_MECSR_MAILBOX_3, addr_lo);
-
-    msi_wdata = intrpt_nr;
+    msi_wdata = vec_nr;
     __asm pcie[write_pci, msi_wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]
 
-    if (mask_intrpt==0) {
+    if (mask_en==0) {
        return;
     }
 
-    msi_vf_mask(pcie_nr, vf_fn_nr, intrpt_nr);
+    msi_vf_mask(pcie_nr, vf_nr, vec_nr);
 
 }
 
@@ -140,7 +143,7 @@ void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr,  __gpr uint32_
  NOTE API Currently only supports MSI-X on PF
  -----------------------------------------------------------------------------
 */
-__gpr uint32_t msix_status(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr) 
+unsigned int msix_status(unsigned int pcie_nr, unsigned int vec_nr) 
 {
     __gpr unsigned int addr_hi;
     __gpr unsigned int addr_lo;
@@ -151,7 +154,7 @@ __gpr uint32_t msix_status(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr)
 
     // calculate SRAM address for given vector definition
     addr_hi = pcie_nr << 30;
-    addr_lo = intrpt_nr << 4; // 4 32-bit words/table entry
+    addr_lo = vec_nr << 4; // 4 32-bit words/table entry
     addr_lo = addr_lo | 0xc;  // vector mask bit is bit 96 (4th byte)
 
     // vector mask bit is in bit 96
@@ -161,7 +164,13 @@ __gpr uint32_t msix_status(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr)
 
 }
 
-void msix_mask(__gpr int32_t pcie_nr, __gpr uint32_t intrpt_nr)
+/**
+  * Sets the per-vector mask bit in the MSI-X vector table located
+  * in PCIe SRAM
+  * @param pcie_nr   the PCIe cluster number
+  * @param vec_nr    interrupt vector number
+  */
+void msix_mask(unsigned int pcie_nr, unsigned int vec_nr)
 {
     __gpr unsigned int addr_hi;
     __gpr unsigned int addr_lo;
@@ -173,7 +182,7 @@ void msix_mask(__gpr int32_t pcie_nr, __gpr uint32_t intrpt_nr)
 
     // calculate SRAM address for given vector definition
     addr_hi = pcie_nr << 30;
-    addr_lo = intrpt_nr << 4; // 4 32-bit words/table entry
+    addr_lo = vec_nr << 4; // 4 32-bit words/table entry
     addr_lo = addr_lo | 0xc;  // vector mask bit is bit 96 (4th byte)
 
     // vector mask bit is in bit 96
@@ -187,33 +196,7 @@ void msix_mask(__gpr int32_t pcie_nr, __gpr uint32_t intrpt_nr)
  
 }
 
-void msix_un_mask(__gpr int32_t pcie_nr, __gpr uint32_t intrpt_nr)
-{
-    __gpr unsigned int addr_hi;
-    __gpr unsigned int addr_lo;
-
-    __xread  uint32_t rdata;
-    __xwrite uint32_t wdata;
-
-    SIGNAL rw_sig;
-
-    // calculate SRAM address for given vector definition
-    addr_hi = pcie_nr << 30;
-    addr_lo = intrpt_nr << 4; // 4 32-bit words/table entry
-    addr_lo = addr_lo | 0xc;  // vector mask bit is bit 96 (4th byte)
-
-    // vector mask bit is in bit 96
-    __asm pcie[read_pci, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
-     
-    // mask the vector
-    wdata = rdata & 0xfffffffe;
-
-    // write back
-    __asm pcie[write_pci, wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
- 
-}
-
-void msix_send(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr, __gpr uint32_t mask_intrpt)
+void msix_send(unsigned int pcie_nr, unsigned int vec_nr, unsigned int mask_en)
 {
     
     __gpr uint32_t addr_hi;
@@ -229,17 +212,14 @@ void msix_send(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr, __gpr uint32_t 
     // MSI-X Address is 0x60000
     addr_lo = 0x60000;
  
-    msix_wdata = intrpt_nr;
+    msix_wdata = vec_nr;
     __asm pcie[write_pci, msix_wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msix_sig]
    
-    if (mask_intrpt==0) {
+    if (mask_en==0) {
        return;
     }
 
-    msix_mask(pcie_nr, intrpt_nr);
+    msix_mask(pcie_nr, vec_nr);
 
 } 
-
-
-
 

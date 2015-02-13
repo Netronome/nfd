@@ -13,85 +13,51 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * @file          
- * @brief         
+ * @file   msix.h       
+ * @brief  header file for MSI/MSI-X library 
  */
 
-/*
-//////
-TODO:
-
-change vf_fn_nr to vf_nr or vf_num (maybe also pcie_num...)
-int_nr -> vector_num
-remove un_mask function
-do not expose mask function
-/////
-*/
-
+/**
+  * Returns MSI mask status for given interrupt vector number and virtual function
+  * @param pcie_nr     - PCIe cluster number
+  * @param vf_nr       - virtual function number (0 to 15)
+  * @param vec_nr      - interrupt vector number
+  * @return            - the status of the interrupt vector
+  *                      0 - interrupt not masked
+  *                      1 - interrupt masked
+  */
+unsigned int msi_vf_status(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr); 
 
 /**
-  * Returns the pending status of given MSI interrupt for specified
-  * virtual function
-  * @param pcie_nr    - the PCIe cluster number
-  * @param vf_fn_nr   - identifies the virtual function number
-  * @param intrpt_nr  - identifies the interrupt
-  * @return 1 if specified MSI interrupt is pending
-  *         0 if specified MSI interrupt is not pending
+  * Send MSI interrupt for specified virtual function
+  * @param pcie_nr     - PCIe cluster number
+  * @param vf_nr       - virtual function number (0 to 15)
+  * @param vec_nr      - interrupt vector number
+  * @param mask_en     - specifies if the interrupt should be masked
+  *                      masked after sending. 
+  *                      0 - do not mask after sending
+  *                      1 - mask after sending
   */
-__gpr uint32_t msi_vf_status(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t intrpt_nr); 
+void msi_vf_send(unsigned int pcie_nr, unsigned int vf_nr,  unsigned int vec_nr, unsigned int  mask_en);
 
 /**
-  * Masks generation of MSI interrupts for a given virtual function 
-  * and interrupt
-  * @param pcie_nr   - the PCIe cluster number
-  * @param vf_fn_nr  - the virtual function number
-  *                    (0 to 15)
-  *@param intrpt_nr - the interrupt number
+  * Returns MSI-X mask status for given interrupt vector number
+  * @param pcie_nr     - PCIe cluster number
+  * @param vec_nr      - interrupt vector number
+  * @return            - the status of the interrupt vector
+  *                      0 - interrupt not masked
+  *                      1 - interrupt masked
   */
-void msi_vf_mask(__gpr int32_t pcie_nr, __gpr uint32_t vf_fn_nr, __gpr uint32_t intrpt_nr);
+unsigned int  msix_status(unsigned int  pcie_nr, unsigned int  vec_nr); 
 
 /**
-  * Asserts MSI interrupt for specified virtual function
-  * and interrupt number
-  * 
-  * NOTE Even numbered virtual functions do not work on NFP6K
-  * 
-  * @param pcie_nr    - the PCIe cluster number
-  * @param vf_fn_nr   - identifies the virtual function number
-  *                     (0 to 15)
-  * @param intrpt_nr  - identifies the interrupt
-  * @param mask_intrpt - specifies if the interrupt should be optionally
-  *                      masked after assertion
+  * Send MSI-X interrupt 
+  * @param pcie_nr     - PCIe cluster number
+  * @param vec_nr      - interrupt vector number
+  * @param mask_en     - specifies if the interrupt should be masked
+  *                      masked after sending. 
+  *                      0 - do not mask after sending
+  *                      1 - mask after sending
   */
-void msi_vf_send(__gpr uint32_t pcie_nr, __gpr uint32_t vf_fn_nr,  __gpr uint32_t intrpt_nr, __gpr uint32_t mask_intrpt);
-
-/**
-  * Retrieves MSI-X mask status for given interrupt number
-  * @param pcie_nr    the PCIe cluster number
-  * @param intrpt_nr  identifies the interrupt 
-  * @param ret_status provides the status of the interrupt vector
-  *        0 - interrupt not masked
-  *        1 - interrupt masked
-  */
-__gpr uint32_t msix_status(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr); 
-
-/**
-  * Sets the per-vector mask bit in the MSI-X vector table located
-  * in PCIe SRAM
-  * @param pcie_nr   the PCIe cluster number
-  * @param intrpt_nr identifies the interrupt number
-  */
-void msix_mask(__gpr int32_t pcie_nr, __gpr uint32_t intrpt_nr);
-
-// DEBUG
-void msix_un_mask(__gpr int32_t pcie_nr, __gpr uint32_t intrpt_nr);
-
-/**
-  * Asserts MSI-X interrupt 
-  * @param pcie_nr   the PCIe cluster number
-  * @param intrpt_nr identifies the interrupt
-  * @param mask_intrpt - specifies if the interrupt should be optionally
-  *                      masked after assertion
-  */
-void msix_send(__gpr uint32_t pcie_nr, __gpr uint32_t intrpt_nr, __gpr uint32_t mask_intrpt);
+void msix_send(unsigned int pcie_nr, unsigned int vec_nr, unsigned int mask_en);
 
