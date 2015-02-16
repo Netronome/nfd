@@ -39,6 +39,8 @@
 #include <types.h>
 #include <nfp/me.h>
 #include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
+#include <pcie.h>
 
 #define PCIE_XPB_TARGET_ID_COMP_CFG_REGS	(0x10) 
 #define PCIE_XPB_TARGET_ID_PF_REGS      	(0x20)
@@ -48,7 +50,49 @@
 
 // !!! COPIED from /opt/netronome/include/nfp6000/nfp_pcie.h
 //#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_PEND          0x000000a4
-#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK          0x000000a0
+#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK             0x000000a0
+#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_LOW_ADDR  	0x00000094
+#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_HI_ADDR      0x00000098
+#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_DATA      	0x0000009c
+
+/*
+
+  temporary here
+
+*/
+
+__intrinsic unsigned int
+pcie_c2p_barcfg_addr(unsigned int addr_hi, unsigned int addr_lo, unsigned int req_id)
+{
+    unsigned int tmp;
+
+    __asm dbl_shf[tmp, addr_hi, addr_lo, >>27];
+    tmp = tmp & NFP_PCIE_BARCFG_C2P_ADDR_msk;
+
+    /* Configure RID if req_id is non-zero or not constant */
+    if ((!__is_ct_const(req_id)) || (req_id != 0)) {
+        tmp |= NFP_PCIE_BARCFG_C2P_ARI_ENABLE;
+        tmp |= NFP_PCIE_BARCFG_C2P_ARI(req_id);
+    }
+   
+    return tmp; 
+}
+
+/*
+ * CPP2PCIe BAR allocation
+ */
+enum pcie_cpp2pci_bar {
+    PCIE_CPP2PCI_MSIX = 0,
+    PCIE_CPP2PCI_MSI,
+    PCIE_CPP2PCI_FREE2,
+    PCIE_CPP2PCI_FREE3,
+    PCIE_CPP2PCI_FREE4,
+    PCIE_CPP2PCI_FREE5,
+    PCIE_CPP2PCI_FREE6,
+    PCIE_CPP2PCI_FREE7
+};
+
+__gpr unsigned int msi_cur_cpp2pci_addr = -1;
 
 /*
  -----------------------------------------------------------------------------
@@ -110,6 +154,10 @@ void msi_vf_mask(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr)
 
 }
 
+/*
+
+  Using HW
+
 void msi_vf_send(unsigned int pcie_nr, unsigned int vf_nr,  unsigned int vec_nr, unsigned int mask_en)
 {
 
@@ -135,6 +183,77 @@ void msi_vf_send(unsigned int pcie_nr, unsigned int vf_nr,  unsigned int vec_nr,
 
     msi_vf_mask(pcie_nr, vf_nr, vec_nr);
 
+}
+*/
+
+void msi_vf_send(unsigned int pcie_nr, unsigned int vf_nr,  unsigned int vec_nr, unsigned int mask_en)
+{
+
+    __gpr unsigned int addr_hi;
+    __gpr unsigned int addr_lo;
+
+    __xwrite uint32_t msi_wdata;
+    __xread  uint32_t rdata;
+
+    __gpr unsigned int msi_addr_hi;
+    __gpr unsigned int msi_addr_lo;
+    __gpr unsigned int msi_data;
+
+    __gpr unsigned int bar_addr;
+
+    SIGNAL msi_sig;
+
+    // configure address to access PCIe internal PF Registers
+    //addr_hi = pcie_nr << 30;
+    addr_hi = 0;
+
+    // read MSI low address
+    addr_lo = (pcie_nr << 24) +
+              (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
+	      NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_LOW_ADDR +
+              (vf_nr << 12);
+    
+    __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]
+    msi_addr_lo = rdata;
+
+
+    // read MSI high address
+    addr_lo = (pcie_nr << 24) +
+              (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
+	      NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_HI_ADDR +
+              (vf_nr << 12);
+   
+    __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]
+    msi_addr_hi = rdata;
+
+    // read MSI data
+    addr_lo = (pcie_nr << 24) +
+              (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
+              NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_DATA +
+              (vf_nr << 12);
+   
+    __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]
+    msi_data = rdata;
+
+
+    /* Check if we need to re-configure the CPP2PCI BAR */
+    bar_addr = pcie_c2p_barcfg_addr(msi_addr_hi, msi_addr_lo, (vf_nr + 64));
+    if (bar_addr != msi_cur_cpp2pci_addr) {
+        pcie_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSI, msi_addr_hi, msi_addr_lo, (vf_nr + 64));
+        msi_cur_cpp2pci_addr = bar_addr;
+    }
+
+
+    /* Send the MSI-X and automask.  We overlap the commands so that
+     * they happen roughly at the same time. */
+    msi_wdata = msi_data + vec_nr;
+    pcie_write(&msi_wdata, pcie_nr, PCIE_CPP2PCI_MSI, msi_addr_hi, msi_addr_lo, sizeof(msi_wdata));
+
+    if (mask_en==0) {
+       return;
+    }
+
+    msi_vf_mask(pcie_nr, vf_nr, vec_nr);
 }
 
 /*
