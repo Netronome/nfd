@@ -44,15 +44,15 @@
 nfd_define_pf_bars(0)
 #endif
 
-#ifdef NFD_PCIE0_EMEM
+#ifdef NFD_PCIE1_EMEM
 nfd_define_pf_bars(1)
 #endif
 
-#ifdef NFD_PCIE0_EMEM
+#ifdef NFD_PCIE2_EMEM
 nfd_define_pf_bars(2)
 #endif
 
-#ifdef NFD_PCIE0_EMEM
+#ifdef NFD_PCIE3_EMEM
 nfd_define_pf_bars(3)
 #endif
 
