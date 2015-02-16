@@ -60,7 +60,23 @@ ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
     (NFD_MAX_ISL * NFD_CFG_NUM_RINGS * NFD_CFG_RING_SZ)  \
     (NFD_MAX_ISL * NFD_CFG_NUM_RINGS * NFD_CFG_RING_SZ))
 
-
+#ifdef USE_SVC_ME
+#define NFD_CFG_RINGS_INIT_IND(_isl)                                    \
+    ASM(.declare_resource nfd_cfg_ring_mem##_isl global 8192 nfd_cfg_ring_mem) \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##0 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##1 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##2 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##3 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
+                                                                        \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##0 nfd_cfg_ring_mem##_isl##0) \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##1 nfd_cfg_ring_mem##_isl##1) \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_mem##_isl##2) \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_mem##_isl##3)
+#else
 #define NFD_CFG_RINGS_INIT_IND(_isl)                                    \
     ASM(.declare_resource nfd_cfg_ring_mem##_isl global 8192 nfd_cfg_ring_mem) \
     ASM(.alloc_resource nfd_cfg_ring_mem##_isl##0 nfd_cfg_ring_mem##_isl \
@@ -73,6 +89,7 @@ ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##0 nfd_cfg_ring_mem##_isl##0) \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##1 nfd_cfg_ring_mem##_isl##1) \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_mem##_isl##2)
+#endif
 
 #define NFD_CFG_RINGS_INIT(_isl) NFD_CFG_RINGS_INIT_IND(_isl)
 
