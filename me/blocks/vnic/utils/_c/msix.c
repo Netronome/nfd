@@ -110,13 +110,11 @@ unsigned int msi_vf_status(unsigned int pcie_nr, unsigned int vf_nr, unsigned in
     SIGNAL r_sig;
 
     // configure address to access PCIe internal PF Registers
-    addr_hi = 0;
+    addr_hi = pcie_nr << 30;
 
     addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
               NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK +
-              (vf_nr << 12); 
-    addr_lo |= (pcie_nr << 24);
-
+              (vf_nr << 12);
     
     __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[r_sig]
 
@@ -140,12 +138,11 @@ void msi_vf_mask(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr)
     SIGNAL rw_sig;
 
     // configure address to access PCIe internal PF Registers
-    addr_hi = 0;
+    addr_hi = pcie_nr << 30;
 
     addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
               NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK +
               (vf_nr << 12);
-    addr_lo |= (pcie_nr << 24);
 
     __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
 
