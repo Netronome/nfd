@@ -66,6 +66,8 @@ __intrinsic void mac_eth_all_link_state(__lmem uint32_t eth_port_mask[],
  * @param eth_port_mask  The bit mask for each port on the MAC island to check
  *
  * @return - The link state of the specified ports on the island
+ *
+ * @note 'mac_isl' range is from 0 to (MAX_MAC_ISLANDS_PER_NFP - 1)
  */
 __intrinsic uint32_t mac_eth_island_link_state(unsigned int mac_isl,
                                                uint32_t eth_port_mask);
@@ -77,6 +79,9 @@ __intrinsic uint32_t mac_eth_island_link_state(unsigned int mac_isl,
  * @param eth_port  The port on the MAC island
  *
  * @return - The link state of the specified port
+ *
+ * @note 'mac_isl' range is from 0 to (MAX_MAC_ISLANDS_PER_NFP - 1)
+ * @note 'eth_port' range is from 0 to (MAX_ETH_PORTS_PER_MAC_ISL - 1)
  */
 __intrinsic enum link_state mac_eth_port_link_state(unsigned int mac_isl,
                                                     unsigned int eth_port);

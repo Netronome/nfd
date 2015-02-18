@@ -31,6 +31,9 @@ mac_eth_all_link_state(__lmem uint32_t eth_port_mask[],
 {
     unsigned int mac_isl;
 
+    /* Check the parameters */
+    assert(mac_isl < MAX_MAC_ISLANDS_PER_NFP);
+
     /* check the link status for each MAC island */
     for (mac_isl = 0; mac_isl < num_mac_islands; ++mac_isl) {
         link_state_mask[mac_isl] =
