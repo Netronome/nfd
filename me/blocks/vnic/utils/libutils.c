@@ -15,7 +15,6 @@
 #include "_c/cls_ring.c"
 #include "_c/ctm_ring.c"
 #include "_c/dma_seqn.c"
-#include "_c/link_state.c"
 #include "_c/nn_ring.c"
 #include "_c/ordering.c"
 #include "_c/pcie.c"
