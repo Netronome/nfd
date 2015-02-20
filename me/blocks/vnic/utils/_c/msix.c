@@ -421,13 +421,17 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsi
     __pcie_write(&msix_data, PCIE_CPP2PCI_MSIX, addr_lo, sizeof(msix_data),
                  sig_done, &msix_sig);
 
-    mask_data = PCIE_MSIX_FLAGS_MASKED;
-    /* XXX FIXME - needs to write to 0x2000 in config BAR */
-    __mem_write8(&mask_data, _pf0_net_bar0 + 0x2000 + PCI_MSIX_TBL_ENTRY_OFF(entry) +
-                 PCI_MSIX_TBL_MSG_FLAGS, sizeof(mask_data),
-                 sig_done, &mask_sig);
-
-    wait_for_all(&msix_sig, &mask_sig);
+    if (mask_en) {
+	mask_data = PCIE_MSIX_FLAGS_MASKED;
+	/* XXX FIXME - needs to write to 0x2000 in config BAR */
+	__mem_write8(&mask_data, _pf0_net_bar0 + 0x2000 + PCI_MSIX_TBL_ENTRY_OFF(entry) +
+		     PCI_MSIX_TBL_MSG_FLAGS, sizeof(mask_data),
+		     sig_done, &mask_sig);
+	wait_for_all(&msix_sig, &mask_sig);
+    }
+    else{
+	wait_for_all(&msix_sig);
+    }
 
     __implicit_write(&msix_sig);
     __implicit_write(&mask_sig);
