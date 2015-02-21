@@ -105,7 +105,7 @@ main(void)
             send_desc();
 
             /* This method won't start until a send_desc batch has completed */
-            inc_wptr();
+            inc_sent();
 
             /* /\* Yield thread *\/ */
             /* ctx_swap(); */

@@ -125,11 +125,6 @@ __shared __gpr unsigned int desc_batch_compl = 0;
 __shared __gpr unsigned int desc_dma_inc = 0;
 __shared __gpr unsigned int desc_dma_inc_safe = 0;
 
-static SIGNAL_MASK wptr_inc_wait_msk = 0;
-static SIGNAL wptr_sig0, wptr_sig1, wptr_sig2, wptr_sig3;
-/* wptr_xfer can be shared as ptr always incremented by one */
-static __xwrite unsigned int wptr_xfer;
-
 
 /* XXX Move to some sort of CT reflect library */
 __intrinsic void
@@ -673,7 +668,8 @@ send_desc()
          */
         desc_batch_served++;
 
-        desc_batch_index = desc_batch_served & (NFD_OUT_DESC_BATCH_RING_BAT - 1);
+        desc_batch_index = (desc_batch_served &
+                            (NFD_OUT_DESC_BATCH_RING_BAT - 1));
         msg = desc_batch_msg[desc_batch_index];
 
         switch (msg.num) {
@@ -719,11 +715,10 @@ send_desc()
 }
 
 
-
-
 /**
+ * Increment the count of packets sent successfully.
  */
-#define INC_WPTR_PROC(_pkt)                                             \
+#define INC_SENT_PROC(_pkt)                                             \
 do {                                                                    \
     if (msg.send_pkt##_pkt) {                                           \
     __critical_path();                                                  \
@@ -734,54 +729,31 @@ do {                                                                    \
                                                                         \
     queue = msg.queue_pkt##_pkt;                                        \
     _add_imm(NFD_OUT_CREDITS_BASE, queue, 1, NFD_OUT_ATOMICS_SENT);     \
-    /* qc_queue = (NFD_BMQ2NATQ(queue) << 1) | (NFD_OUT_Q_START + 1); */      \
-    /* __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_WPTR, 1, &wptr_xfer, */         \
-                    /* sig_done, &wptr_sig##_pkt);  */                        \
                                                                         \
-    } else {                                                            \
-        /* Don't wait on the DMA signal */                              \
-        /* desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);  */              \
     }                                                                   \
 } while (0)
 
 
 
 /**
- * Remove "wptr_sigX" for the packet from the wait mask
+ * Placeholder for processing smaller batches
  */
-#define INC_WPTR_CLR(_pkt)                               \
+#define INC_SENT_CLR(_pkt)                               \
 do {                                                     \
-    /* wptr_inc_wait_msk &= ~__signals(&wptr_sig##_pkt); */    \
 } while (0)
 
 
 void
-inc_wptr()
+inc_sent()
 {
     struct nfd_out_desc_batch_msg msg;
     unsigned int queue, qc_queue;
     unsigned int desc_batch_index;
     int test_safe;
 
-    /* /\* Wait for previous increments to complete *\/ */
-    /* __asm { */
-    /*     ctx_arb[--], defer[1]; */
-    /*     local_csr_wr[NFP_MECSR_ACTIVE_CTX_WAKEUP_EVENTS>>2, wptr_inc_wait_msk]; */
-    /* } */
-
-    /* __implicit_read(&wptr_sig0); */
-    /* __implicit_read(&wptr_sig1); */
-    /* __implicit_read(&wptr_sig2); */
-    /* __implicit_read(&wptr_sig3); */
-
     test_safe = desc_dma_inc_safe - desc_dma_inc;
     if (test_safe > 0) {
        __critical_path();
-
-        /* wptr_inc_wait_msk = __signals(&wptr_sig0, &wptr_sig1, &wptr_sig2, */
-        /*                               &wptr_sig3); */
-
-        /* We have a batch to process and resources to process it */
 
         /*
          * Increment desc_batch_served upfront to avoid ambiguity about
@@ -797,39 +769,36 @@ inc_wptr()
             __critical_path();
             /* Handle full batch */
 
-            INC_WPTR_PROC(0);
-            INC_WPTR_PROC(1);
-            INC_WPTR_PROC(2);
-            INC_WPTR_PROC(3);
+            INC_SENT_PROC(0);
+            INC_SENT_PROC(1);
+            INC_SENT_PROC(2);
+            INC_SENT_PROC(3);
 
             break;
 
         case 3:
-            INC_WPTR_PROC(0);
-            INC_WPTR_PROC(1);
-            INC_WPTR_PROC(2);
+            INC_SENT_PROC(0);
+            INC_SENT_PROC(1);
+            INC_SENT_PROC(2);
 
-            INC_WPTR_CLR(3);
+            INC_SENT_CLR(3);
             break;
 
         case 2:
-            INC_WPTR_PROC(0);
-            INC_WPTR_PROC(1);
+            INC_SENT_PROC(0);
+            INC_SENT_PROC(1);
 
-            INC_WPTR_CLR(2);
-            INC_WPTR_CLR(3);
+            INC_SENT_CLR(2);
+            INC_SENT_CLR(3);
             break;
 
         default:
-            INC_WPTR_PROC(0);
+            INC_SENT_PROC(0);
 
-            INC_WPTR_CLR(1);
-            INC_WPTR_CLR(2);
-            INC_WPTR_CLR(3);
+            INC_SENT_CLR(1);
+            INC_SENT_CLR(2);
+            INC_SENT_CLR(3);
             break;
         }
-    } else {
-       /* /\* There are no wptr updates to be issued *\/ */
-       /* wptr_inc_wait_msk = 0; */
     }
 }
