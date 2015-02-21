@@ -11,6 +11,7 @@
 #include <nfp.h>
 
 #include <nfp/mem_ring.h>
+#include <nfp/pcie.h>
 #include <pkt/pkt.h>
 
 #include <nfp6000/nfp_me.h>
@@ -21,7 +22,6 @@
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
-#include <vnic/utils/pcie.h>
 #include <vnic/utils/qc.h>
 
 #include <ns_vnic_ctrl.h>

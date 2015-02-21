@@ -17,7 +17,6 @@
 #include "_c/dma_seqn.c"
 #include "_c/nn_ring.c"
 #include "_c/ordering.c"
-#include "_c/pcie.c"
 #include "_c/qc.c"
 #include "_c/qcntl.c"
 

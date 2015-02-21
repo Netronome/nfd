@@ -11,6 +11,7 @@
 
 #include <nfp/cls.h>
 #include <nfp/me.h>
+#include <nfp/pcie.h>
 #include <std/reg_utils.h>
 
 #include <nfp6000/nfp_me.h>
@@ -27,7 +28,7 @@
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
-#include <vnic/utils/pcie.h>
+
 
 struct _tx_desc_batch {
     struct nfd_in_tx_desc pkt0;

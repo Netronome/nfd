@@ -8,11 +8,13 @@
 #include <assert.h>
 #include <nfp.h>
 
+#include <nfp/pcie.h>
 #include <std/event.h>
 
 #include <nfp6000/nfp_cls.h>
 #include <nfp6000/nfp_event.h>
 #include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
 #include <nfp6000/nfp_qc.h>
 
 #include <vnic/nfd_common.h>
@@ -21,7 +23,6 @@
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/utils/dma_seqn.h>
-#include <vnic/utils/pcie.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 

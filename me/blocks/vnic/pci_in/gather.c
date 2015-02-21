@@ -8,10 +8,13 @@
 #include <assert.h>
 #include <nfp.h>
 
+#include <nfp/pcie.h>
+
+#include <nfp6000/nfp_pcie.h>
+
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/nn_ring.h>
-#include <vnic/utils/pcie.h>
 #include <vnic/utils/qc.h>
 
 

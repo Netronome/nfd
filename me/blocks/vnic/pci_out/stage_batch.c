@@ -11,11 +11,13 @@
 
 #include <nfp/me.h>
 #include <nfp/mem_ring.h>
+#include <nfp/pcie.h>
 #include <std/event.h>
 
 #include <nfp6000/nfp_cls.h>
 #include <nfp6000/nfp_event.h>
 #include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
 
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd.h>
@@ -23,7 +25,6 @@
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
-#include <vnic/utils/pcie.h>
 #include <vnic/utils/qc.h>
 
 
