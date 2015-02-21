@@ -79,6 +79,8 @@ static __xwrite struct _dma_desc_batch dma_out_res;
 
 static __xread struct nfd_out_fl_desc fl_entries[4];
 
+static __lmem struct nfd_out_data_batch in_batch;
+
 static SIGNAL data_sig0, data_sig1, data_sig2, data_sig3;
 static SIGNAL_MASK data_wait_msk = 0;
 static SIGNAL fl_sig0,  fl_sig1,  fl_sig2,  fl_sig3;
@@ -226,7 +228,7 @@ issue_dma_check_compl()
  */
 __intrinsic void
 _get_fl_entry(__xread struct nfd_out_fl_desc *entry,
-              struct nfd_out_data_dma_info *info,
+              __lmem struct nfd_out_data_dma_info *info,
               sync_t sync, SIGNAL *sig)
 {
     unsigned int index = info->fl_cache_index;
@@ -263,7 +265,7 @@ do {                                             \
  */
 __intrinsic void
 _get_ctm_addr(__gpr struct nfp_pcie_dma_cmd *descr,
-              struct nfd_out_data_dma_info *info)
+              __lmem struct nfd_out_data_dma_info *info)
 {
     descr->cpp_addr_hi = 0x80 | info->cpp.isl;
     descr->cpp_addr_lo = ((1 << 31) | (info->cpp.pktnum << 16) |
@@ -466,7 +468,7 @@ do {                                                                 \
  * Dequeue a message from "stage_batch".
  */
 __intrinsic void
-_nn_get_msg(struct nfd_out_data_dma_info *msg)
+_nn_get_msg(__lmem struct nfd_out_data_dma_info *msg)
 {
     /* Stage batch may head of line block, while enqueuing a message batch,
      * so while dequeuing we must also head of line block. */
@@ -481,7 +483,6 @@ _nn_get_msg(struct nfd_out_data_dma_info *msg)
 }
 
 
-
 /**
  * Check for messages from "stage_batch" and then execute those messages.
  * For each message we fetch a FL entry from CTM, performing an ordered swap
@@ -493,7 +494,6 @@ _nn_get_msg(struct nfd_out_data_dma_info *msg)
 void
 issue_dma()
 {
-    struct nfd_out_data_batch in_batch;
     struct nfd_out_data_batch_msg msg;
     unsigned int n_bat;
     unsigned int cpp_desc_index;
