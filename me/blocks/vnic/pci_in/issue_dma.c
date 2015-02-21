@@ -90,6 +90,9 @@ static SIGNAL tx_desc_sig, msg_sig, desc_order_sig, dma_order_sig;
 static SIGNAL dma_sig0, dma_sig1, dma_sig2, dma_sig3;
 static SIGNAL_MASK wait_msk;
 
+static SIGNAL jumbo0, jumbo1;
+static SIGNAL_MASK jumbo_msk = 0;
+
 /* Configure the NN ring */
 NN_RING_ZERO_PTRS;
 NN_RING_EMPTY_ASSERT_SET(0);
@@ -248,6 +251,25 @@ issue_dma_setup()
 #endif
 
 
+#define _ISSUE_PROC_JUMBO(_pkt, _sig)                                   \
+do {                                                                    \
+    /* Issue DMA for 4k of segment, updating processing state */        \
+    pcie_dma_set_sig(&descr_tmp, __MEID, ctx(),                         \
+                     __signal_number(&_sig));                           \
+    dma_out.pkt##_pkt## = descr_tmp;                                    \
+                                                                        \
+    __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                      \
+                   NFD_IN_DATA_DMA_QUEUE,                               \
+                   ctx_swap, &dma_sig##_pkt##);                         \
+    __implicit_write(&_sig);                                            \
+                                                                        \
+    descr_tmp.pcie_addr_lo += PCIE_DMA_MAX_SZ;                          \
+    descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;                           \
+    dma_len -= PCIE_DMA_MAX_SZ;                                         \
+    jumbo_msk |= __signals(&_sig);                                      \
+} while (0)
+
+
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     unsigned int dma_len;                                               \
@@ -285,6 +307,39 @@ do {                                                                    \
         descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;       \
                                                                         \
         descr_tmp.rid = queue_data[queue].rid;                          \
+                                                                        \
+        if (dma_len > PCIE_DMA_MAX_SZ) {                                \
+            /* data_dma_seq_issued was pre-incremented once we could */ \
+            /* process batch.  Since we are going to swap, we */        \
+            /* decrement it temporarily to ensure */                    \
+            /* precache_bufs_compute_seq_safe will give a pessimistic */ \
+            /* safe count. */                                           \
+            data_dma_seq_issued--;                                      \
+                                                                        \
+            /* Wait for previous jumbo frame on ctx to complete */      \
+            if (jumbo_msk != 0) {                                       \
+                wait_sig_mask(jumbo_msk);                               \
+                jumbo_msk = 0;                                          \
+                __implicit_read(&jumbo0);                               \
+                __implicit_read(&jumbo1);                               \
+            }                                                           \
+                                                                        \
+            /* Always DMA PCIE_DMA_MAX_SZ segments for jumbos */        \
+            descr_tmp.length = PCIE_DMA_MAX_SZ - 1;                     \
+                                                                        \
+            /* Handle first PCIE_DMA_MAX_SZ */                          \
+            _ISSUE_PROC_JUMBO(_pkt, jumbo0);                            \
+                                                                        \
+            if (dma_len > PCIE_DMA_MAX_SZ) {                            \
+                /* Handle second PCIE_DMA_MAX_SZ */                     \
+                _ISSUE_PROC_JUMBO(_pkt, jumbo1);                        \
+            }                                                           \
+                                                                        \
+            /* Re-increment data_dma_seq_issued */                      \
+            data_dma_seq_issued++;                                      \
+        }                                                               \
+                                                                        \
+        /* Issue final DMA for the packet */                            \
         pcie_dma_set_event(&descr_tmp, _type, _src);                    \
         descr_tmp.length = dma_len - 1;                                 \
         dma_out.pkt##_pkt## = descr_tmp;                                \
@@ -384,6 +439,39 @@ do {                                                                    \
         descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;       \
                                                                         \
         descr_tmp.rid = queue_data[queue].rid;                          \
+                                                                        \
+        if (dma_len > PCIE_DMA_MAX_SZ) {                                \
+            /* data_dma_seq_issued was pre-incremented once we could */ \
+            /* process batch.  Since we are going to swap, we */        \
+            /* decrement it temporarily to ensure */                    \
+            /* precache_bufs_compute_seq_safe will give a pessimistic */ \
+            /* safe count. */                                           \
+            data_dma_seq_issued--;                                      \
+                                                                        \
+            /* Wait for previous jumbo frame on ctx to complete */      \
+            if (jumbo_msk != 0) {                                       \
+                wait_sig_mask(jumbo_msk);                               \
+                jumbo_msk = 0;                                          \
+                __implicit_read(&jumbo0);                               \
+                __implicit_read(&jumbo1);                               \
+            }                                                           \
+                                                                        \
+            /* Always DMA PCIE_DMA_MAX_SZ segments for jumbos */        \
+            descr_tmp.length = PCIE_DMA_MAX_SZ - 1;                     \
+                                                                        \
+            /* Handle first PCIE_DMA_MAX_SZ */                          \
+            _ISSUE_PROC_JUMBO(_pkt, jumbo0);                            \
+                                                                        \
+            if (dma_len > PCIE_DMA_MAX_SZ) {                            \
+                /* Handle second PCIE_DMA_MAX_SZ */                     \
+                _ISSUE_PROC_JUMBO(_pkt, jumbo1);                        \
+            }                                                           \
+                                                                        \
+            /* Re-increment data_dma_seq_issued */                      \
+            data_dma_seq_issued++;                                      \
+        }                                                               \
+                                                                        \
+        /* Issue final DMA for the packet */                            \
         pcie_dma_set_event(&descr_tmp, _type, _src);                    \
         descr_tmp.length = dma_len - 1;                                 \
         dma_out.pkt##_pkt## = descr_tmp;                                \
@@ -426,6 +514,8 @@ issue_dma()
     struct nfd_in_batch_desc batch;
     unsigned int queue;
 
+    __implicit_write(&jumbo0);
+    __implicit_write(&jumbo1);
 
     reorder_test_swap(&desc_order_sig);
 
@@ -481,8 +571,9 @@ issue_dma()
         precache_bufs_compute_seq_safe();
     }
 
-    /* We can process this batch, allow next CTX go too */
-    reorder_done(NFD_IN_ISSUE_START_CTX, &dma_order_sig);
+    /* We can start to process this batch but may need to issue multiple
+     * DMAs and swap for large packets, so don't let other batches start
+     * just yet. */
 
     queue = batch.queue;
     data_dma_seq_issued++;
@@ -532,6 +623,9 @@ issue_dma()
     default:
         halt();
     }
+
+    /* We have finished processing the batch, let the next continue */
+    reorder_done(NFD_IN_ISSUE_START_CTX, &dma_order_sig);
 
     /* XXX THS-50 workaround */
     /* cls_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, */
