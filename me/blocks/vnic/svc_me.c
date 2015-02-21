@@ -42,7 +42,7 @@ main(void)
 
 #ifdef SVC_ME_MSIX_EN
     if (ctx() == 1) {
-        msix_gen_init();
+        rx_queue_monitor_init();
     }
 #endif
 
@@ -68,7 +68,7 @@ main(void)
  
                 __implicit_read(cfg_bar_data, 6);
 #ifdef SVC_ME_MSIX_EN
-                msix_gen_update_config(cfg_msg.vnic, cfg_bar_data, rx_ring_vector_data);
+                rx_queue_monitor_update_config(cfg_msg.vnic, cfg_bar_data, rx_ring_vector_data);
 #endif
                 local_csr_write(NFP_MECSR_MAILBOX_0, cfg_msg.vnic);
                 local_csr_write(NFP_MECSR_MAILBOX_1, cfg_bar_data[0]);
@@ -85,7 +85,7 @@ main(void)
 
 #ifdef SVC_ME_MSIX_EN
         if (ctx() == 1) {
-            msix_gen_loop();
+            rx_queue_monitor();
         }
 #endif
 

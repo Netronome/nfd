@@ -26,15 +26,17 @@
 
 #define _PCIE_NR   4   // should be defined externally
 #define _AUTO_MASK 1   // defined externally ? 
+//#define _AUTO_MASK 0   // defined externally ? 
 
       unsigned int qnum, vf_num;
 __gpr uint32_t     rx_cnt;
       uint32_t     prev_rx_cnt[MAX_QUEUE_NUM+1];
-__shared __gpr uint64_t     pending_msi;
+__shared __gpr uint64_t     rx_queue_pending_intr;
 
 __shared __gpr       uint64_t     rx_queue_enabled;
 __shared __imem_n(0) unsigned int vector_num_per_q[MAX_QUEUE_NUM+1];
-// assert on size of pending_msi and rx_queue_enabled if NFD_OUT_MAX_QUEUES !=64
+//__shared lmem unsigned int vector_num_per_q[MAX_QUEUE_NUM+1];
+// assert on size of rx_queue_pending_intr and rx_queue_enabled if NFD_OUT_MAX_QUEUES !=64
 
 // debug
 //#define MSIX_GEN_DEBUG_EN
@@ -80,7 +82,7 @@ update_debug()
         debug_data_32[i]=0;
     }
 
-    debug_data[0] = pending_msi;
+    debug_data[0] = rx_queue_pending_intr;
     debug_data[1] = rx_queue_enabled;
     mem_write64((void*)&debug_data, (__mem void*)&msix_debug[4], sizeof debug_data);
 
@@ -111,21 +113,32 @@ queue_is_pf(unsigned int queue_num)
     }
 }
 
-int 
+/*int 
 queue_vector_is_masked(unsigned int qnum) 
 {
     int mask;
     int _vf_num;
 
+    int tmp;
+
     if (queue_is_pf(qnum)==1) {
         mask = msix_status(_PCIE_NR, vector_num_per_q[qnum]);
     } else {
-        _vf_num = qnum / NFD_MAX_VF_QUEUES;
+        if (qnum==0) {
+            _vf_num = 0;
+        } else {
+            _vf_num = qnum / NFD_MAX_VF_QUEUES;
+        }
         mask = msi_vf_status(_PCIE_NR, _vf_num, vector_num_per_q[qnum]);
     }
 
+    tmp=local_csr_read(NFP_MECSR_MAILBOX_3);
+    tmp = tmp & ~(1<<qnum);
+    tmp = tmp | (mask<<qnum);
+    local_csr_write(NFP_MECSR_MAILBOX_3,tmp);
     return (mask);
 }
+*/
 
 __intrinsic void 
 msix_gen_set_rx_queue_enabled(int qnum, int en) 
@@ -159,7 +172,7 @@ struct rx_ring_vector_t {
 } rx_ring_vector_t;
 
 __intrinsic void
-msix_gen_update_config(unsigned int vnic, __xread unsigned int cfg_bar_data[6], __xread unsigned int rx_ring_vector_data[16])
+rx_queue_monitor_update_config(unsigned int vnic, __xread unsigned int cfg_bar_data[6], __xread unsigned int rx_ring_vector_data[16])
 {
     unsigned int indx,num_of_queues;
     unsigned int queue_num;
@@ -212,14 +225,17 @@ msix_gen_update_config(unsigned int vnic, __xread unsigned int cfg_bar_data[6], 
 }
 
 void 
-msix_gen_init() 
+rx_queue_monitor_init() 
 {
-    pending_msi = 0;
+    rx_queue_pending_intr = 0;
     rx_queue_enabled = 0;
 
     for (qnum=0 ; qnum <= MAX_QUEUE_NUM ; qnum++) {
         prev_rx_cnt[qnum] = 0;
     }
+
+    local_csr_write(NFP_MECSR_MAILBOX_3, 0);
+    local_csr_write(NFP_MECSR_MAILBOX_2, 0xbaba);
 
 #ifdef MSIX_GEN_DEBUG_EN
     for (i=0; i<8; i++) {
@@ -233,17 +249,20 @@ msix_gen_init()
 }
 
 void 
-msix_gen_loop() 
+rx_queue_monitor() 
 {
+    int tmp;
+
     for (qnum=0 ; qnum <= MAX_QUEUE_NUM ; qnum++) {
         if ((rx_queue_enabled & (1<<qnum)) != 0) {
             rx_cnt=__get_rx_queue_cnt(_PCIE_NR,qnum);
             if (rx_cnt != prev_rx_cnt[qnum]) {
-                pending_msi = pending_msi | (1 << qnum);
+                rx_queue_pending_intr |= (1 << qnum);
                 prev_rx_cnt[qnum] = rx_cnt;
             }
           
-            if ((pending_msi & (1<<qnum)) != 0) {
+            if ((rx_queue_pending_intr & (1<<qnum)) != 0) {
+#if 0
                 if (queue_vector_is_masked(qnum)==0) {
                     if (queue_is_pf(qnum)==1) {
                         msix_send(_PCIE_NR, vector_num_per_q[qnum], _AUTO_MASK);
@@ -252,8 +271,21 @@ msix_gen_loop()
                         msi_vf_send(_PCIE_NR, vf_num, vector_num_per_q[qnum], _AUTO_MASK);
                     }
       
-                    pending_msi = pending_msi & ~(1 << qnum);
+                    rx_queue_pending_intr &= ~(1 << qnum);
                     
+                }
+#endif
+                // attempt to send an interrupt
+                if (queue_is_pf(qnum)==1) {
+                    tmp = msix_pf_send(_PCIE_NR, vector_num_per_q[qnum], _AUTO_MASK);
+                } else {
+                    vf_num = qnum / NFD_MAX_VF_QUEUES;
+                    tmp = msix_vf_send(_PCIE_NR, vf_num, vector_num_per_q[qnum], _AUTO_MASK);
+                }
+      
+                // clear the pending bit if send was successful
+                if (tmp==0) {
+                    rx_queue_pending_intr &= ~(1 << qnum);
                 }
             }
         }
