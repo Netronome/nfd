@@ -410,9 +410,11 @@ _nfd_cfg_queue_setup()
 void
 _nfd_cfg_write_vf_cap(unsigned int vnic)
 {
+    unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * vnic * 2);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_VF_CAP,
                                    NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
-                                   NFD_CFG_MAX_MTU};
+                                   NFD_CFG_MAX_MTU, tx_q_off,
+                                   NFD_OUT_Q_START + tx_q_off};
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NS_VNIC_CFG_VERSION,
                 sizeof cfg);
