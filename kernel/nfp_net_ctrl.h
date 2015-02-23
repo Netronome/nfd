@@ -137,6 +137,7 @@
 #define NFP_NET_CFG_MAX_TXRINGS         0x003c
 #define NFP_NET_CFG_MAX_RXRINGS         0x0040
 #define NFP_NET_CFG_MAX_MTU             0x0044
+/* Next two words are being used by VFs for solving THB350 issue */
 #define NFP_NET_CFG_START_TXQ           0x0048
 #define NFP_NET_CFG_START_RXQ           0x004c
 
