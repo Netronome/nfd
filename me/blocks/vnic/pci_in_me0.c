@@ -60,6 +60,7 @@ main(void)
         service_qc_setup();
         distr_seqn_setup();
         nfd_cfg_setup();
+        nfd_cfg_flr_setup();
 
         notify_setup_shared();
 
@@ -99,6 +100,8 @@ main(void)
             service_qc();
 
             distr_seqn();
+
+            nfd_cfg_check_flr_ap();
 
             nfd_cfg_check_cfg_ap();
 

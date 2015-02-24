@@ -16,6 +16,8 @@
 #define NFD_CFG_RING_SZ         (4 * 512)
 #define NFD_CFG_VF_OFFSET       64
 
+#define NFD_CFG_FLR_EVENT_FILTER 15
+
 
 /* nfd_in */
 #define NFD_IN_MAX_BATCH_SZ     4

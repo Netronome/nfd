@@ -112,6 +112,34 @@ NFD_CFG_RINGS_INIT(3);
 #endif
 
 
+/* XXX temp defines that match the BSP pcie_monitor_api.h */
+#define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c
+#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL        16
+#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE                15
+#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE                   14
+#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS            13
+#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0           0x00100080
+#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1           0x00100084
+#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc
+#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_MASK             0x3f
+
+
+
+#define NFD_CFG_FLR_INIT_IND1(_csr)                                     \
+    __asm {.init_csr _csr##.PcieIntMgr.IntEnableHigh.IntEnables 0x304 const} \
+    __asm {.init_csr _csr##.PcieIntMgr.StatusEventConfig0.Edge9 2 const} \
+    __asm {.init_csr _csr##.PcieIntMgr.StatusEventConfig0.Edge8 2 const} \
+    __asm {.init_csr _csr##.PcieIntMgr.StatusEventConfig0.Edge2 2 const}
+
+#define NFD_CFG_FLR_INIT_IND0(_isl)                                     \
+    NFD_CFG_FLR_INIT_IND1(xpbm:Pcie##_isl##IsldXpbmMap.Island.PcieXpb)
+
+#define NFD_CFG_FLR_INIT(_isl) NFD_CFG_FLR_INIT_IND0(_isl)
+
+#ifdef PCIE_ISL
+NFD_CFG_FLR_INIT(PCIE_ISL);
+#endif
+
 /*
  * Compute constants to help map from the configuration bitmask
  * to configuration queues. We need to compute the spacing between
@@ -147,6 +175,9 @@ static SIGNAL cfg_ap_sig;
 static __xread unsigned int cfg_ap_xfer;
 static volatile __gpr unsigned int cfg_vnic_bmsk = 0;
 static __gpr unsigned int cfg_vnic_queue_test_cnt = 0;
+
+static SIGNAL flr_ap_sig;
+static __xread unsigned int flr_ap_xfer;
 
 
 #ifdef NFD_CFG_SIG_NEXT_ME
@@ -361,14 +392,8 @@ _nfd_cfg_queue_setup()
     struct nfp_em_filter_status status;
     unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
         ((unsigned int) __MEID>>4), NFP_EVENT_PROVIDER_INDEX_PCIE);
-    /*
-     * Mask set to be fairly permissive now
-     * Can make it stricter (based on number of active vNICs) if justified
-     */
-    unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0xF81, 0xF);
-    unsigned int event_match = NFP_EVENT_MATCH(pcie_provider,
-                                               ((NFD_CFG_EVENT_DATA<<6) |
-                                                NFD_CFG_QUEUE), 0);
+    unsigned int event_mask, event_match;
+
 
     /*
      * Config queues are small and issue events on not empty.
@@ -384,11 +409,20 @@ _nfd_cfg_queue_setup()
     init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
                    2 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS + NFD_MAX_PFS);
 
-    /* Setup the Event filter and autopush */
+    /* Setup the config event filter and autopush */
     __implicit_write(&cfg_ap_sig);
     __implicit_write(&cfg_ap_xfer);
 
+    /*
+     * Mask set to be fairly permissive now
+     * Can make it stricter (based on number of active vNICs) if justified
+     */
+    event_mask = NFP_EVENT_MATCH(0xFF, 0xF81, 0xF);
+    event_match = NFP_EVENT_MATCH(pcie_provider,
+                                  (NFD_CFG_EVENT_DATA<<6) | NFD_CFG_QUEUE,
+                                  0);
     status.__raw = 0; /* bitmask32 requires no further settings */
+
     event_filter = event_cls_filter_handle(NFD_CFG_EVENT_FILTER);
 
     event_cls_filter_setup(event_filter,
@@ -400,6 +434,7 @@ _nfd_cfg_queue_setup()
                                     ctx(),
                                     __signal_number(&cfg_ap_sig),
                                     __xfer_reg_number(&cfg_ap_xfer));
+
     event_cls_autopush_filter_reset(
         NFD_CFG_EVENT_FILTER,
         NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
@@ -471,6 +506,45 @@ nfd_cfg_setup()
 }
 
 
+
+/**
+ * Perform per PCIe island FLR event filter and autopush initialisation
+ */
+void
+nfd_cfg_flr_setup()
+{
+    __cls struct event_cls_filter *event_filter;
+    struct nfp_em_filter_status status;
+    unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
+        ((unsigned int) __MEID>>4), NFP_EVENT_PROVIDER_INDEX_PCIE);
+    unsigned int event_mask, event_match;
+
+    __implicit_write(&flr_ap_sig);
+    __implicit_write(&flr_ap_xfer);
+
+    event_mask = NFP_EVENT_MATCH(0xFF, 0x000, 0xF);
+    event_match = NFP_EVENT_MATCH(pcie_provider, 0,
+                                  NFP_EVENT_TYPE_STATUS_CHANGED);
+    status.__raw = 0; /* No throttling used */
+
+    event_filter = event_cls_filter_handle(NFD_CFG_FLR_EVENT_FILTER);
+
+    event_cls_filter_setup(event_filter, NFP_EM_FILTER_MASK_TYPE_FIRSTEV,
+                           event_match, event_mask, status);
+
+    event_cls_autopush_signal_setup(NFD_CFG_FLR_EVENT_FILTER,
+                                    (unsigned int) __MEID,
+                                    ctx(),
+                                    __signal_number(&flr_ap_sig),
+                                    __xfer_reg_number(&flr_ap_xfer));
+
+    event_cls_autopush_filter_reset(
+        NFD_CFG_FLR_EVENT_FILTER,
+        NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+        NFD_CFG_FLR_EVENT_FILTER);
+}
+
+
 /**
  * Look for notification of configuration events
  */
@@ -485,6 +559,69 @@ nfd_cfg_check_cfg_ap()
          * so that the compiler keeps them reserved. */
         __implicit_write(&cfg_ap_sig);
         __implicit_write(&cfg_ap_xfer);
+    }
+}
+
+
+/**
+ * Look for and handle FLR events
+ * XXX Just acknowledge for now...
+ */
+void
+nfd_cfg_check_flr_ap()
+{
+    if (signal_test(&flr_ap_sig)) {
+        unsigned int flr_status;
+        int vf;
+
+        local_csr_write(NFP_MECSR_MAILBOX_0, flr_ap_xfer);
+        flr_status = xpb_read(NFP_PCIEX_COMPCFG_CNTRLR3);
+
+        local_csr_write(NFP_MECSR_MAILBOX_1, flr_status);
+
+        /* XXX This doesn't seem to completely recover the PF */
+        if (flr_status & (1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS)) {
+            xpb_write(NFP_PCIEX_COMPCFG_CNTRLR3,
+                      1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE);
+        }
+
+        /* Handle VFs 0 to 31 */
+        flr_status = xpb_read(NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0);
+        local_csr_write(NFP_MECSR_MAILBOX_2, flr_status);
+        while ((vf = _ffs(flr_status)) >= 0) {
+            flr_status &= ~(1 << vf);
+            xpb_write(NFP_PCIEX_COMPCFG_CNTRLR3,
+                      ((vf << NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL) |
+                       (1 << NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE)));
+        }
+
+        /* Handle VFs 32 to 63 */
+        flr_status = xpb_read(NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1);
+        local_csr_write(NFP_MECSR_MAILBOX_3, flr_status);
+        while ((vf = _ffs(flr_status)) >= 0) {
+            flr_status &= ~(1 << vf);
+            xpb_write(NFP_PCIEX_COMPCFG_CNTRLR3,
+                      (((vf + 32) <<
+                        NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL) |
+                       (1 << NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE)));
+        }
+
+        /* Acknowledge PCIe state changes */
+        flr_status = xpb_read(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT);
+        if (flr_status & NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_MASK) {
+            flr_status &= NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_MASK;
+            xpb_write(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT, flr_status);
+        }
+
+        /* Mark the autopush signal and xfer as used
+         * so that the compiler keeps them reserved. */
+        __implicit_write(&flr_ap_sig);
+        __implicit_write(&flr_ap_xfer);
+
+        event_cls_autopush_filter_reset(
+            NFD_CFG_FLR_EVENT_FILTER,
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+            NFD_CFG_FLR_EVENT_FILTER);
     }
 }
 
