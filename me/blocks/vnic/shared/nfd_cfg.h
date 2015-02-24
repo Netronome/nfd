@@ -219,4 +219,19 @@ __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
 __intrinsic void nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                                               __dram void *isl_base);
 
+/**
+ * Pass this message to the next stage, and check for a new message
+ * @param cfg_msg           completed message, refilled with new message
+ * @param cfg_sig_remote    signal to set for next recipient
+ * @param next_me           ME to signal
+ * @param rnum_out          output ring number
+ * @param rbase_out         output ring address
+ * @param rnum_in           input ring number
+ * @param rbase_in          input ring address
+ */
+__intrinsic void nfd_cfg_svc_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
+                          __remote SIGNAL *cfg_sig_remote,
+                          unsigned int next_me, unsigned int rnum_out,
+                          unsigned int rnum_in);
+
 #endif /* !_BLOCKS__SHARED_NFD_CFG_H_ */

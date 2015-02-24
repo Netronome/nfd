@@ -34,6 +34,7 @@
  *
  */
 
+#include <assert.h>
 #include <nfp.h>
 #include <stdint.h>
 #include <types.h>
@@ -396,7 +397,24 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsi
 
     SIGNAL msix_sig, mask_sig;
 
-    mem_read8(tmp, NFD_CFG_BAR_ISL(PCIE_ISL, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
+    switch((pcie_nr-4)) {
+    case 0:
+        mem_read8(tmp, NFD_CFG_BAR_ISL(0, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
+        break;
+    case 1:
+        mem_read8(tmp, NFD_CFG_BAR_ISL(1, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
+        break;
+    case 2:
+        mem_read8(tmp, NFD_CFG_BAR_ISL(2, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
+        break;
+    case 3:
+        mem_read8(tmp, NFD_CFG_BAR_ISL(3, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
+        break;
+    default:
+        assert(0);
+        break;
+    }
+
     flags =   tmp[PCI_MSIX_TBL_MSG_FLAGS_IDX32];
     data =    tmp[PCI_MSIX_TBL_MSG_DATA_IDX32];
     addr_hi = tmp[PCI_MSIX_TBL_MSG_ADDR_HI_IDX32];
@@ -421,14 +439,41 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsi
                  sizeof(msix_data), sizeof(msix_data), sig_done, &msix_sig);
 
     if (mask_en != 0) {
-	mask_data = PCIE_MSIX_FLAGS_MASKED;
-        __mem_write8(&mask_data, NFD_CFG_BAR_ISL(PCIE_ISL, vf_nr) + 
-                                 0x2000 + (vec_nr*0x10) + 
-                                 PCI_MSIX_TBL_MSG_FLAGS, 
-                     sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
-	wait_for_all(&msix_sig, &mask_sig);
+        mask_data = PCIE_MSIX_FLAGS_MASKED;
+
+        switch((pcie_nr-4)) {
+        case 0:
+            __mem_write8(&mask_data, NFD_CFG_BAR_ISL(0, vf_nr) +
+                    0x2000 + (vec_nr*0x10) +
+                    PCI_MSIX_TBL_MSG_FLAGS,
+                    sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
+            break;
+        case 1:
+            __mem_write8(&mask_data, NFD_CFG_BAR_ISL(1, vf_nr) +
+                    0x2000 + (vec_nr*0x10) +
+                    PCI_MSIX_TBL_MSG_FLAGS,
+                    sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
+            break;
+        case 2:
+            __mem_write8(&mask_data, NFD_CFG_BAR_ISL(2, vf_nr) +
+                    0x2000 + (vec_nr*0x10) +
+                    PCI_MSIX_TBL_MSG_FLAGS,
+                    sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
+            break;
+        case 3:
+            __mem_write8(&mask_data, NFD_CFG_BAR_ISL(3, vf_nr) +
+                    0x2000 + (vec_nr*0x10) +
+                    PCI_MSIX_TBL_MSG_FLAGS,
+                    sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
+            break;
+        default:
+            assert(0);
+            break;
+        }
+
+        wait_for_all(&msix_sig, &mask_sig);
     } else{
-	wait_for_all(&msix_sig);
+        wait_for_all(&msix_sig);
     }
 
     return 0;

@@ -15,7 +15,7 @@
 #include <nfp6000/nfp_me.h>
 
 #include <vnic/shared/nfd_cfg.h>
-#include <vnic/shared/nfd_cfg_internal.c>
+//#include <vnic/shared/nfd_cfg_internal.c>
 
 #ifdef SVC_ME_MSIX_EN
 #include <msix_gen.h>
@@ -27,18 +27,22 @@ __visible SIGNAL nfd_cfg_sig_svc_me2;
 __visible SIGNAL nfd_cfg_sig_svc_me3;
 
 #if NFD_USE_PCIE0
+__remote SIGNAL NFD_CFG_SIG_NEXT_ME_0;
 NFD_CFG_BASE_DECLARE(0);
 #endif
 
 #if NFD_USE_PCIE1
+__remote SIGNAL NFD_CFG_SIG_NEXT_ME_1;
 NFD_CFG_BASE_DECLARE(1);
 #endif
 
 #if NFD_USE_PCIE2
+__remote SIGNAL NFD_CFG_SIG_NEXT_ME_2;
 NFD_CFG_BASE_DECLARE(2);
 #endif
 
 #if NFD_USE_PCIE3
+__remote SIGNAL NFD_CFG_SIG_NEXT_ME_3;
 NFD_CFG_BASE_DECLARE(3);
 #endif
 
@@ -108,16 +112,16 @@ main(void)
            switch (i) {
 
 #if NFD_USE_PCIE0            
-           case 0:  
+           case 0:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me0,
                                      NFD_CFG_RING_NUM(0, 2));
-   
+
                if (cfg_msg.msg_valid) {
                    ncfg++;
                    mem_read64(cfg_bar_data,
                               NFD_CFG_BAR_ISL(0, cfg_msg.vnic),
                               sizeof cfg_bar_data);
-   
+
 #ifdef SVC_ME_MSIX_EN
                    mem_read64(rx_ring_vector_data,
                               (NFD_CFG_BAR_ISL(0, cfg_msg.vnic) + VNIC_CONFIG_RX_VECS),
@@ -134,11 +138,11 @@ main(void)
 #endif
                    /* Complete the message */
                    cfg_msg.msg_valid = 0;
-                   nfd_cfg_complete_cfg_msg(&cfg_msg,
-                                            &NFD_CFG_SIG_NEXT_ME_0,
-                                            NFD_CFG_NEXT_ME_0,
-                                            NFD_CFG_RING_NUM(0, 3),
-                                            NFD_CFG_RING_NUM(0, 2));
+                   nfd_cfg_svc_complete_cfg_msg(&cfg_msg,
+                                                &NFD_CFG_SIG_NEXT_ME_0,
+                                                NFD_CFG_NEXT_ME_0,
+                                                NFD_CFG_RING_NUM(0, 3),
+                                                NFD_CFG_RING_NUM(0, 2));
                }
                break;
 #endif
@@ -170,11 +174,11 @@ main(void)
 #endif
                    /* Complete the message */
                    cfg_msg.msg_valid = 0;
-                   nfd_cfg_complete_cfg_msg(&cfg_msg,
-                                            &NFD_CFG_SIG_NEXT_ME_1,
-                                            NFD_CFG_NEXT_ME_1,
-                                            NFD_CFG_RING_NUM(1, 3),
-                                            NFD_CFG_RING_NUM(1, 2));
+                   nfd_cfg_svc_complete_cfg_msg(&cfg_msg,
+                                                &NFD_CFG_SIG_NEXT_ME_1,
+                                                NFD_CFG_NEXT_ME_1,
+                                                NFD_CFG_RING_NUM(1, 3),
+                                                NFD_CFG_RING_NUM(1, 2));
                }
                break;
 #endif
@@ -206,11 +210,11 @@ main(void)
 #endif
                    /* Complete the message */
                    cfg_msg.msg_valid = 0;
-                   nfd_cfg_complete_cfg_msg(&cfg_msg,
-                                            &NFD_CFG_SIG_NEXT_ME_2,
-                                            NFD_CFG_NEXT_ME_2,
-                                            NFD_CFG_RING_NUM(2, 3),
-                                            NFD_CFG_RING_NUM(2, 2));
+                   nfd_cfg_svc_complete_cfg_msg(&cfg_msg,
+                                                &NFD_CFG_SIG_NEXT_ME_2,
+                                                NFD_CFG_NEXT_ME_2,
+                                                NFD_CFG_RING_NUM(2, 3),
+                                                NFD_CFG_RING_NUM(2, 2));
                }
                break;
 #endif
@@ -242,11 +246,11 @@ main(void)
 #endif
                    /* Complete the message */
                    cfg_msg.msg_valid = 0;
-                   nfd_cfg_complete_cfg_msg(&cfg_msg,
-                                            &NFD_CFG_SIG_NEXT_ME_3,
-                                            NFD_CFG_NEXT_ME_3,
-                                            NFD_CFG_RING_NUM(3, 3),
-                                            NFD_CFG_RING_NUM(3, 2));
+                   nfd_cfg_svc_complete_cfg_msg(&cfg_msg,
+                                                &NFD_CFG_SIG_NEXT_ME_3,
+                                                NFD_CFG_NEXT_ME_3,
+                                                NFD_CFG_RING_NUM(3, 3),
+                                                NFD_CFG_RING_NUM(3, 2));
                }
                break;
 #endif
