@@ -45,7 +45,7 @@ typedef struct queue_pend_intr_t {
     uint64_t tx;
 } queue_pend_intr_t;
 
-__shared __gpr queue_pend_intr_t queue_pending_intr[MAX_NUM_PCI_ISLS];
+__shared __lmem queue_pend_intr_t queue_pending_intr[MAX_NUM_PCI_ISLS];
 
 
 typedef struct queue_en_t {
@@ -53,7 +53,7 @@ typedef struct queue_en_t {
     uint64_t tx;
 } queue_en_t;
 
-__shared __gpr queue_en_t queue_enabled[MAX_NUM_PCI_ISLS];
+__shared __lmem queue_en_t queue_enabled[MAX_NUM_PCI_ISLS];
 
 
 typedef struct vec_num_per_queue_t {
