@@ -19,15 +19,17 @@
 
 /*
   TODO:
-  need to clear all pending interrupts when function comes up or down (what if the state didn't change? save state?)
+  - need to clear all pending interrupts when function comes up or down (what if the state didn't change? save state?)
+  - any other operation when link comes down
+  - read counters in bulk
+  - race condition when sending interrupt
 */
 
 #define MAX_QUEUE_NUM (NFD_MAX_VFS*NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1) 
 
 #define MAX_NUM_PCI_ISLS 4
 
-#define _PCIE_NR   4   // should be defined externally
-#define _AUTO_MASK 1   // defined externally ? 
+#define _AUTO_MASK 1   // should come from config 
 
 
 typedef struct prev_cnt_t {
@@ -134,8 +136,6 @@ rx_queue_monitor_update_config(unsigned int pcie_isl,
 
     reg_cp((void *)&rx_ring_vector_data_byte, (void *)&rx_ring_vector_data,64);
 
-//    local_csr_write(NFP_MECSR_MAILBOX_2, cfg_bar_data[4]);
-
     if (vnic==NFD_MAX_VFS) {
         // this is a PF
         num_of_queues = NFD_MAX_PF_QUEUES;
@@ -144,8 +144,7 @@ rx_queue_monitor_update_config(unsigned int pcie_isl,
         num_of_queues = NFD_MAX_VF_QUEUES;
     }
 
-
-    // For every possible queue fo this function, update enabled RX queues and vectors
+    // For every possible queue for this function, update enabled RX queues and vectors
     for (indx=0; indx<num_of_queues; indx++) {
         if (indx==32) {
            bit_data = bit_data >> 32;
@@ -165,7 +164,6 @@ rx_queue_monitor_update_config(unsigned int pcie_isl,
             msix_gen_set_rx_queue_enabled(pcie_isl, queue_num, 0);
         }
     }
-    
 }
 
 void 

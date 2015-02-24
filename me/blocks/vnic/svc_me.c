@@ -15,7 +15,6 @@
 #include <nfp6000/nfp_me.h>
 
 #include <vnic/shared/nfd_cfg.h>
-//#include <vnic/shared/nfd_cfg_internal.c>
 
 #ifdef SVC_ME_MSIX_EN
 #include <msix_gen.h>
