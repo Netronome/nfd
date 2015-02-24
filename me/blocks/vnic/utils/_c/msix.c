@@ -114,6 +114,32 @@ enum pcie_cpp2pci_bar {
 __gpr unsigned int msi_cur_cpp2pci_addr  = -1;
 __gpr unsigned int msix_cur_cpp2pci_addr = -1;
 
+__emem char* get_cfg_bar_vf_base(unsigned int pcie_nr, unsigned int vf_nr) 
+{
+    __emem char* cfg_bar_vf_addr;
+
+    switch(pcie_nr-4) {
+    case 0:
+        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(0, vf_nr);
+        break;
+    case 1:
+        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(1, vf_nr);
+        break;
+    case 2:
+        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(2, vf_nr);
+        break;
+    case 3:
+        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(3, vf_nr);
+        break;
+    default:
+        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(0, vf_nr); // is that the corrrect default to have ?
+        break;
+    }
+   
+    return cfg_bar_vf_addr;
+     
+}
+
 /*
  -----------------------------------------------------------------------------
  MSI support
@@ -390,6 +416,7 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsi
     __gpr unsigned int addr_lo;
     __gpr unsigned int flags;
     __gpr unsigned int bar_addr;
+    __emem char* cfg_bar_vf_addr;
 
     __xread uint32_t tmp[PCI_MSIX_TBL_ENTRY_SZ32];
     __xwrite uint32_t msix_data;
@@ -397,23 +424,8 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsi
 
     SIGNAL msix_sig, mask_sig;
 
-    switch((pcie_nr-4)) {
-    case 0:
-        mem_read8(tmp, NFD_CFG_BAR_ISL(0, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
-        break;
-    case 1:
-        mem_read8(tmp, NFD_CFG_BAR_ISL(1, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
-        break;
-    case 2:
-        mem_read8(tmp, NFD_CFG_BAR_ISL(2, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
-        break;
-    case 3:
-        mem_read8(tmp, NFD_CFG_BAR_ISL(3, vf_nr) + 0x2000 + (vec_nr*0x10), sizeof(tmp));
-        break;
-    default:
-        assert(0);
-        break;
-    }
+    cfg_bar_vf_addr = get_cfg_bar_vf_base(pcie_nr, vf_nr);
+    mem_read8(tmp, cfg_bar_vf_addr + 0x2000 + (vec_nr*0x10), sizeof(tmp));
 
     flags =   tmp[PCI_MSIX_TBL_MSG_FLAGS_IDX32];
     data =    tmp[PCI_MSIX_TBL_MSG_DATA_IDX32];
@@ -440,36 +452,10 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsi
 
     if (mask_en != 0) {
         mask_data = PCIE_MSIX_FLAGS_MASKED;
-
-        switch((pcie_nr-4)) {
-        case 0:
-            __mem_write8(&mask_data, NFD_CFG_BAR_ISL(0, vf_nr) +
-                    0x2000 + (vec_nr*0x10) +
-                    PCI_MSIX_TBL_MSG_FLAGS,
-                    sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
-            break;
-        case 1:
-            __mem_write8(&mask_data, NFD_CFG_BAR_ISL(1, vf_nr) +
-                    0x2000 + (vec_nr*0x10) +
-                    PCI_MSIX_TBL_MSG_FLAGS,
-                    sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
-            break;
-        case 2:
-            __mem_write8(&mask_data, NFD_CFG_BAR_ISL(2, vf_nr) +
-                    0x2000 + (vec_nr*0x10) +
-                    PCI_MSIX_TBL_MSG_FLAGS,
-                    sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
-            break;
-        case 3:
-            __mem_write8(&mask_data, NFD_CFG_BAR_ISL(3, vf_nr) +
-                    0x2000 + (vec_nr*0x10) +
-                    PCI_MSIX_TBL_MSG_FLAGS,
-                    sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
-            break;
-        default:
-            assert(0);
-            break;
-        }
+        __mem_write8(&mask_data, cfg_bar_vf_addr +
+                     0x2000 + (vec_nr*0x10) +
+                     PCI_MSIX_TBL_MSG_FLAGS,
+                     sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
 
         wait_for_all(&msix_sig, &mask_sig);
     } else{
