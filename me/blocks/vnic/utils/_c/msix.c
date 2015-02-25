@@ -74,6 +74,11 @@
 
 #define PCIE_MSIX_FLAGS_MASKED          (1 << 0)
 
+__gpr unsigned int _msix_data;
+__gpr unsigned int _msix_addr_hi;
+__gpr unsigned int _msix_addr_lo;
+ 
+
 /*
 
   temporary here
@@ -321,15 +326,6 @@ void msi_vf_send(unsigned int pcie_nr, unsigned int vf_nr,  unsigned int vec_nr,
  MSI-X support
  -----------------------------------------------------------------------------
 */
-
-/**
-  * Returns MSI-X mask status for given interrupt vector number
-  * @param pcie_nr     - PCIe cluster number
-  * @param vec_nr      - interrupt vector number
-  * @return            - the status of the interrupt vector
-  *                      0 - interrupt not masked
-  *                      1 - interrupt masked
-  */
 unsigned int msix_pf_status(unsigned int pcie_nr, unsigned int vec_nr) 
 {
     __gpr unsigned int addr_hi;
@@ -383,24 +379,16 @@ void msix_pf_mask(unsigned int pcie_nr, unsigned int vec_nr)
  
 }
 
-int msix_pf_send(unsigned int pcie_nr, unsigned int vec_nr, unsigned int mask_en)
+void msix_pf_send(unsigned int pcie_nr, unsigned int vec_nr, unsigned int mask_en)
 {
     
     __gpr uint32_t addr_hi;
     __gpr uint32_t addr_lo;
-    int tmp;
 
     __xwrite uint32_t msix_wdata;
    
     SIGNAL msix_sig;
  
-    tmp = msix_pf_status(pcie_nr, vec_nr);
-
-    if (tmp != 0) {
-        /* vector is masked */
-        return -1;
-    }
-
     // calculate SRAM address for given vector definition
     addr_hi = pcie_nr << 30;
 
@@ -410,56 +398,60 @@ int msix_pf_send(unsigned int pcie_nr, unsigned int vec_nr, unsigned int mask_en
     msix_wdata = vec_nr;
     __asm pcie[write_pci, msix_wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msix_sig]
    
-    if (mask_en==0) {
-       return 0;
+    if (mask_en != 0) {
+        msix_pf_mask(pcie_nr, vec_nr);
     }
 
-    msix_pf_mask(pcie_nr, vec_nr);
-
-    return 0;
 } 
 
-//__forceinline static __gpr int
-int
-msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsigned int mask_en)
+unsigned int
+msix_vf_status(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr)
 {
-    __gpr unsigned int data;
-    __gpr unsigned int addr_hi;
-    __gpr unsigned int addr_lo;
     __gpr unsigned int flags;
-    __gpr unsigned int bar_addr;
     __emem char* cfg_bar_vf_addr;
 
     __xread uint32_t tmp[PCI_MSIX_TBL_ENTRY_SZ32];
+
+    cfg_bar_vf_addr = get_cfg_bar_vf_base(pcie_nr, vf_nr);
+    mem_read8(tmp, cfg_bar_vf_addr + 0x2000 + (vec_nr*0x10), sizeof(tmp));
+
+    flags =         tmp[PCI_MSIX_TBL_MSG_FLAGS_IDX32];
+    _msix_data =    tmp[PCI_MSIX_TBL_MSG_DATA_IDX32];
+    _msix_addr_hi = tmp[PCI_MSIX_TBL_MSG_ADDR_HI_IDX32];
+    _msix_addr_lo = tmp[PCI_MSIX_TBL_MSG_ADDR_LO_IDX32];
+
+    if (flags != 0) {
+        /* vector is masked */
+        return 1;
+    }
+
+    return 0;
+}
+
+void
+msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsigned int mask_en)
+{
+    __gpr unsigned int bar_addr;
+    __emem char* cfg_bar_vf_addr;
+
     __xwrite uint32_t msix_data;
     __xwrite uint32_t mask_data;
 
     SIGNAL msix_sig, mask_sig;
 
     cfg_bar_vf_addr = get_cfg_bar_vf_base(pcie_nr, vf_nr);
-    mem_read8(tmp, cfg_bar_vf_addr + 0x2000 + (vec_nr*0x10), sizeof(tmp));
-
-    flags =   tmp[PCI_MSIX_TBL_MSG_FLAGS_IDX32];
-    data =    tmp[PCI_MSIX_TBL_MSG_DATA_IDX32];
-    addr_hi = tmp[PCI_MSIX_TBL_MSG_ADDR_HI_IDX32];
-    addr_lo = tmp[PCI_MSIX_TBL_MSG_ADDR_LO_IDX32];
-
-    if (flags != 0) {
-	/* vector is masked */
-        return -1;
-    }
 
     /* Check if we need to re-configure the CPP2PCI BAR */
-    bar_addr = pcie_c2p_barcfg_addr(addr_hi, addr_lo, (vf_nr + 64));
+    bar_addr = pcie_c2p_barcfg_addr(_msix_addr_hi, _msix_addr_lo, (vf_nr + 64));
     if (bar_addr != msix_cur_cpp2pci_addr) {
-        pcie_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSIX, addr_hi, addr_lo, (vf_nr + 64));
+        pcie_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSIX, _msix_addr_hi, _msix_addr_lo, (vf_nr + 64));
         msix_cur_cpp2pci_addr = bar_addr;
     }
 
     /* Send the MSI-X and automask.  We overlap the commands so that
      * they happen roughly at the same time. */
-    msix_data = data;
-    __pcie_write(&msix_data, pcie_nr, PCIE_CPP2PCI_MSIX, addr_hi, addr_lo,  
+    msix_data = _msix_data;
+    __pcie_write(&msix_data, pcie_nr, PCIE_CPP2PCI_MSIX, _msix_addr_hi, _msix_addr_lo,  
                  sizeof(msix_data), sizeof(msix_data), sig_done, &msix_sig);
 
     if (mask_en != 0) {
@@ -474,153 +466,5 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsi
         wait_for_all(&msix_sig);
     }
 
-    return 0;
 }
 
-#if 0
-
-/* NOTE: In ovs-nfp.hg/me/blocks/pcie/svc_msix.c when MSI-X are sent, 
-         the following logic is added to check if vector was masked, then
-         that information is stored for later:
-
-        ret = msix_vf_send(pcie_nr, vf_nr, vec_nr, mask_en);
-        if (ret)
-            msix_rx_rings_pending |= (1ull << ring);
-        else
-            msix_rx_rings_pending &= ~(1ull << ring);
-
-
-	The above is done for each type of transaction:
-        - msix_rx_rings_pending - for issuing RX ints
-        - msix_tx_rings_pending - for issuing TX ints
-	- msix_lsc_pending - for issuing LSC ints
-
-	Then, there is the function (provided below) for testing any
-        pending interrupts and if no longer masked, the interrupt is 
-        issued
-
-	My guess is that each PF/VF needs to have copy
-*/
-
-
-#if 0
-/* PROVIDED FOR REFERENCE */
-
-/*
- * Process any pending MSI-X, entries which were masked in the past
- *
- * Here we go through the bitmasks for rings which have pending MSI-X,
- * starting with the RX rings.
- *
- * For the RX rings we check if the queue is still non-empty and if it
- * does, attempt to send the MSI-X.  If it succeeded, we clear the
- * pending bit.
- *
- * With @msix_tried and @msix_sent we keep track for which entries we
- * already tried and sent an MSI-X, so that we don't retry for TX
- * rings.  If a given entry is shared between a RX and a TX ring and
- * the entry gets unmasked between processing RX rings and TX rings,
- * we would potentially generate multiple MSI-X when it is not
- * necessary.
- *
- * @msix_tried and @msix_sent are bitmasks, (entry >> 5) is a divide
- * by 32 to select the correct word and (entry & 0x1f) gives us the
- * modulo 32 to select the bit in the entry.
- */
-__forceinline static void
-svc_msix_process_pending(void)
-{
-    __gpr uint64_t rings;
-    __gpr int ring;
-    __gpr int entry;
-    __gpr unsigned int status;
-    __gpr int ret;
-
-    __lmem uint32_t msix_tried[8];
-    __lmem uint32_t msix_sent[8];
-
-    /* If nothing is pending, return */
-    if (msix_rx_rings_pending == 0 && msix_tx_rings_pending == 0)
-        return;
-
-    reg_zero(msix_tried, sizeof(msix_tried));
-    reg_zero(msix_sent, sizeof(msix_sent));
-
-    rings = msix_rx_rings_pending;
-    while (rings) {
-        ring = ffs64(rings);
-        entry = msix_rx_entries[ring];
-        rings &= ~(1ull << ring);
-
-        /* If ring is empty, no need to send MSI-X */
-        status = qcp_read(PCIE_RXR2QCPQ(ring), NFP_QC_QUEUE_STS_LO);
-        if (status & NFP_QC_QUEUE_STS_LO_EMPTY) {
-            msix_rx_rings_pending &= ~(1ull << ring);
-            continue;
-        }
-
-        PCIE_SVC_MSIX_DBG(0xbeef0000 | ring << 8 | entry);
-
-        /* Mark that we tried this entry so that we don't retry for TX later */
-        msix_tried[entry >> 5] |= (1 << (entry & 0x1f));
-
-        /* Try sending an MSI-X */
-        ret = svc_msix_send(entry);
-        if (ret)
-            continue;
-
-        /* MSI-X sent. Mark that we did and remove pending bit */
-        msix_sent[entry >> 5] |= (1 << (entry & 0x1f));
-        msix_rx_rings_pending &= ~(1ull << ring);
-    }
-
-    PCIE_SVC_MSIX_DBG(0xbeefffff);
-    PCIE_SVC_MSIX_DBG((uint32_t)(msix_rx_rings_pending >> 32));
-    PCIE_SVC_MSIX_DBG((uint32_t)msix_rx_rings_pending);
-
-    rings = msix_tx_rings_pending;
-    while (rings) {
-        ring = ffs64(rings);
-        entry = msix_tx_entries[ring];
-        rings &= ~(1ull << ring);
-
-        /* Stash the read pointer away for watchdog */
-        status = qcp_read(PCIE_TXR2QCPQ(ring), NFP_QC_QUEUE_STS_LO);
-        msix_tx_rd_qptrs[ring] = status & NFP_QC_QUEUE_STS_LO_READPTR_mask;
-
-        /* If we already sent a MSI-X, don't do it again */
-        if (msix_sent[entry >> 5] & (1 << (entry & 0x1f))) {
-            msix_tx_rings_pending &= ~(1ull << ring);
-            continue;
-        }
-
-        /* If we already tried, don't bother again this time round */
-        if (msix_tried[entry >> 5] & (1 << (entry & 0x1f)))
-            continue;
-
-        PCIE_SVC_MSIX_DBG(0xb11f0000 | ring << 8 | entry);
-
-        /* Try send MSI-X */
-        ret = svc_msix_send(entry);
-        if (ret)
-            continue;
-
-        /* MSI-X succeed. Remove pending bit */
-        msix_tx_rings_pending &= ~(1ull << ring);
-    }
-
-    PCIE_SVC_MSIX_DBG(0xbeefeeee);
-    PCIE_SVC_MSIX_DBG((uint32_t)(msix_tx_rings_pending >> 32));
-    PCIE_SVC_MSIX_DBG((uint32_t)msix_tx_rings_pending);
-
-    if (msix_lsc_pending && (msix_lsc_entry != 0xff)) {
-        ret = svc_msix_send(msix_lsc_entry);
-        if (ret)
-            msix_lsc_pending = 1;
-        else
-            msix_lsc_pending = 0;
-    }
-}
-#endif
-
-#endif

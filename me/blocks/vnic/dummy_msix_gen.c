@@ -26,7 +26,6 @@ void main(void)
 {
 
   __gpr unsigned int reg_a;
-  __gpr unsigned int tmp;
   __gpr unsigned int pcie_nr;
   __gpr unsigned int vf_fn_nr;
   __gpr unsigned int int_nr;
@@ -53,32 +52,30 @@ void main(void)
             mask=(reg_a & 0xFF) >> 0;
          
             if (((reg_a & 0xF000000) >> 24) == 0) {
-               tmp = msix_pf_send(pcie_nr, int_nr, mask);
+               msix_pf_send(pcie_nr, int_nr, mask);
                local_csr_write(NFP_MECSR_MAILBOX_2, (local_csr_read(NFP_MECSR_MAILBOX_2) +1) );
-               local_csr_write(NFP_MECSR_MAILBOX_3,tmp);
             }
 
-/*            if (((reg_a & 0xF000000) >> 24) == 2) {
-               local_csr_write(NFP_MECSR_MAILBOX_3, msix_status(pcie_nr, int_nr));
+            if (((reg_a & 0xF000000) >> 24) == 2) {
+               local_csr_write(NFP_MECSR_MAILBOX_3, msix_pf_status(pcie_nr, int_nr));
                local_csr_write(NFP_MECSR_MAILBOX_2, (local_csr_read(NFP_MECSR_MAILBOX_2) + 0x10000) );
             }
   
-*/
+
             if (((reg_a & 0xF000000) >> 24) == 4) {
                vf_fn_nr = pcie_nr;
                pcie_nr = 4;
-               tmp = msix_vf_send(pcie_nr, vf_fn_nr, int_nr, mask);
+               msix_vf_send(pcie_nr, vf_fn_nr, int_nr, mask);
                local_csr_write(NFP_MECSR_MAILBOX_2, (local_csr_read(NFP_MECSR_MAILBOX_2) + 0x100) );
-               local_csr_write(NFP_MECSR_MAILBOX_3,tmp);
             }
 
-/*            if (((reg_a & 0xF000000) >> 24) == 6) {
+            if (((reg_a & 0xF000000) >> 24) == 6) {
                vf_fn_nr = pcie_nr;
                pcie_nr = 4;
                local_csr_write(NFP_MECSR_MAILBOX_3, msi_vf_status(pcie_nr, vf_fn_nr, int_nr));
-               local_csr_write(NFP_MECSR_MAILBOX_2, (local_csr_read(NFP_MECSR_MAILBOX_2) + 0x10000) );
+               local_csr_write(NFP_MECSR_MAILBOX_2, (local_csr_read(NFP_MECSR_MAILBOX_2) + 0x1000000) );
             }
-*/    
+    
          }
       } else {
         if ((reg_a & 0x80000000) == 0) {

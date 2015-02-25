@@ -22,7 +22,10 @@
   - need to clear all pending interrupts when function comes up or down (what if the state didn't change? save state?)
   - any other operation when link comes down
   - read counters in bulk
-  - race condition when sending interrupt
+  - race condition when sending interrupt on PF -  because of mask setting read modify write
+  - read _AUTO_MASK from config
+  - interrupt moderation
+  - tx interrupts
 */
 
 #define MAX_QUEUE_NUM (NFD_MAX_VFS*NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1) 
@@ -36,47 +39,46 @@ typedef struct prev_cnt_t {
     uint32_t rx_cnt[MAX_QUEUE_NUM+1];
     uint32_t tx_cnt[MAX_QUEUE_NUM+1];
 } prev_cnt_t;
-
 prev_cnt_t prev_cnt[MAX_NUM_PCI_ISLS];
-
 
 typedef struct queue_pend_intr_t {
     uint64_t rx;
     uint64_t tx;
 } queue_pend_intr_t;
-
 __shared __lmem queue_pend_intr_t queue_pending_intr[MAX_NUM_PCI_ISLS];
-
 
 typedef struct queue_en_t {
     uint64_t rx;
     uint64_t tx;
 } queue_en_t;
-
 __shared __lmem queue_en_t queue_enabled[MAX_NUM_PCI_ISLS];
-
 
 typedef struct vec_num_per_queue_t {
     unsigned int vec_num[MAX_QUEUE_NUM+1];
 } vec_num_per_queue_t;
-
 __shared __imem_n(0) vec_num_per_queue_t vector_num_per_q[MAX_NUM_PCI_ISLS];
+
 
 // assert on size of rx_queue_pending_intr and rx_queue_enabled if NFD_OUT_MAX_QUEUES !=64
 
-
-
-#define __NFD_OUT_ATOMICS_SZ 16   /// why defined as 8 ?
 __intrinsic uint32_t
 __get_rx_queue_cnt(unsigned int pcie_nr, unsigned int queue)
 {
     unsigned int addr_hi;
     unsigned int addr_lo;
+    unsigned int row, column;
     __xread uint32_t rdata;
     SIGNAL rsig;
 
+    // queues can be described as ordered in the table in the following way 
+    // 0(4B) 32(4B) 
+    // 1(4B) 33(4B) ...
+    // calculating offset using row/column 
+    row = queue & ~(1<<5);
+    column = ((queue>>5) & (1));
+
     addr_hi = (0x84 | pcie_nr) << 24;
-    addr_lo = (queue * __NFD_OUT_ATOMICS_SZ) + NFD_OUT_ATOMICS_SENT;
+    addr_lo = ((row*NFD_OUT_ATOMICS_SZ*2) + column*NFD_OUT_ATOMICS_SZ) + NFD_OUT_ATOMICS_SENT;
 
     __asm mem[atomic_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rsig];
 
@@ -186,7 +188,7 @@ rx_queue_monitor_init(unsigned int pcie_isl)
 void 
 rx_queue_monitor(unsigned int pcie_isl) 
 {
-    int tmp;
+    unsigned int int_is_masked;
     int qnum, vf_num;
 
     uint32_t rx_cnt;
@@ -202,15 +204,26 @@ rx_queue_monitor(unsigned int pcie_isl)
             if ((queue_pending_intr[pcie_isl].rx & (1<<qnum)) != 0) {
                 // attempt to send an interrupt
                 if (queue_is_pf(qnum)==1) {
-                    tmp = msix_pf_send(pcie_isl+4, vector_num_per_q[pcie_isl].vec_num[qnum], _AUTO_MASK);
+                    int_is_masked = msix_pf_status(pcie_isl+4, vector_num_per_q[pcie_isl].vec_num[qnum]);
+                    if (int_is_masked == 0) {
+                        // interrupt is not masked
+                        // check queue is enabled again
+                        if ((queue_enabled[pcie_isl].rx & (1<<qnum)) != 0) {
+                            msix_pf_send(pcie_isl+4, vector_num_per_q[pcie_isl].vec_num[qnum], _AUTO_MASK);
+                            queue_pending_intr[pcie_isl].rx &= ~(1 << qnum);
+                        }
+                    }
                 } else {
                     vf_num = qnum / NFD_MAX_VF_QUEUES;
-                    tmp = msix_vf_send(pcie_isl+4, vf_num, vector_num_per_q[pcie_isl].vec_num[qnum], _AUTO_MASK);
-                }
-      
-                // clear the pending bit if send was successful
-                if (tmp==0) {
-                    queue_pending_intr[pcie_isl].rx &= ~(1 << qnum);
+                    int_is_masked = msix_vf_status(pcie_isl+4, vf_num, vector_num_per_q[pcie_isl].vec_num[qnum]);
+                    if (int_is_masked == 0) {
+                        // interrupt is not masked
+                        // check queue is enabled again
+                        if ((queue_enabled[pcie_isl].rx & (1<<qnum)) != 0) {
+                            msix_vf_send(pcie_isl+4, vf_num, vector_num_per_q[pcie_isl].vec_num[qnum], _AUTO_MASK);
+                            queue_pending_intr[pcie_isl].rx &= ~(1 << qnum);
+                        }
+                    }
                 }
             }
         }
