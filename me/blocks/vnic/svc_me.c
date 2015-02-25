@@ -25,22 +25,22 @@ __visible SIGNAL nfd_cfg_sig_svc_me1;
 __visible SIGNAL nfd_cfg_sig_svc_me2;
 __visible SIGNAL nfd_cfg_sig_svc_me3;
 
-#if NFD_PCIE0_EMEM
+#ifdef NFD_USE_PCIE0
 __remote SIGNAL NFD_CFG_SIG_NEXT_ME_0;
 NFD_CFG_BASE_DECLARE(0);
 #endif
 
-#if NFD_PCIE1_EMEM
+#ifdef NFD_USE_PCIE1
 __remote SIGNAL NFD_CFG_SIG_NEXT_ME_1;
 NFD_CFG_BASE_DECLARE(1);
 #endif
 
-#if NFD_PCIE2_EMEM
+#ifdef NFD_USE_PCIE2
 __remote SIGNAL NFD_CFG_SIG_NEXT_ME_2;
 NFD_CFG_BASE_DECLARE(2);
 #endif
 
-#if NFD_PCIE3_EMEM
+#ifdef NFD_USE_PCIE3
 __remote SIGNAL NFD_CFG_SIG_NEXT_ME_3;
 NFD_CFG_BASE_DECLARE(3);
 #endif
@@ -60,19 +60,19 @@ main(void)
 
     if (ctx() == 0) {
 
-#if NFD_PCIE0_EMEM
+#ifdef NFD_USE_PCIE0
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me0, &cfg_msg);
 #endif
 
-#if NFD_PCIE1_EMEM
+#ifdef NFD_USE_PCIE1
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me1, &cfg_msg);
 #endif
 
-#if NFD_PCIE2_EMEM
+#ifdef NFD_USE_PCIE2
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me2, &cfg_msg);
 #endif
 
-#if NFD_PCIE3_EMEM
+#ifdef NFD_USE_PCIE3
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me3, &cfg_msg);
 #endif
 
@@ -80,25 +80,25 @@ main(void)
 
 #ifdef SVC_ME_MSIX_EN
 
-#if NFD_PCIE0_EMEM
+#ifdef NFD_USE_PCIE0
     if (ctx() == 1) {
         rx_queue_monitor_init(0);
     }
 #endif
 
-#if NFD_PCIE1_EMEM
+#ifdef NFD_USE_PCIE1
     if (ctx() == 2) {
         rx_queue_monitor_init(1);
     }
 #endif
 
-#if NFD_PCIE2_EMEM
+#ifdef NFD_USE_PCIE2
     if (ctx() == 3) {
         rx_queue_monitor_init(2);
     }
 #endif
 
-#if NFD_PCIE3_EMEM
+#ifdef NFD_USE_PCIE3
     if (ctx() == 4) {
         rx_queue_monitor_init(3);
     }
@@ -110,7 +110,7 @@ main(void)
         if (ctx() == 0) {
            switch (i) {
 
-#if NFD_PCIE0_EMEM            
+#ifdef NFD_USE_PCIE0            
            case 0:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me0,
                                      NFD_CFG_RING_NUM(0, 2));
@@ -146,7 +146,7 @@ main(void)
                break;
 #endif
 
-#if NFD_PCIE1_EMEM            
+#ifdef NFD_USE_PCIE1            
            case 1:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me1,
                                      NFD_CFG_RING_NUM(1, 2));
@@ -182,7 +182,7 @@ main(void)
                break;
 #endif
             
-#if NFD_PCIE2_EMEM            
+#ifdef NFD_USE_PCIE2            
            case 2:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me2,
                                      NFD_CFG_RING_NUM(2, 2));
@@ -218,7 +218,7 @@ main(void)
                break;
 #endif
             
-#if NFD_PCIE3_EMEM            
+#ifdef NFD_USE_PCIE3            
            case 3:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me3,
                                      NFD_CFG_RING_NUM(3, 2));
@@ -267,25 +267,25 @@ main(void)
 
 #ifdef SVC_ME_MSIX_EN
 
-#if NFD_PCIE0_EMEM
+#ifdef NFD_USE_PCIE0
         if (ctx() == 1) {
             rx_queue_monitor(0);
         }
 #endif
 
-#if NFD_PCIE1_EMEM
+#ifdef NFD_USE_PCIE1
         if (ctx() == 2) {
             rx_queue_monitor(1);
         }
 #endif
 
-#if NFD_PCIE2_EMEM
+#ifdef NFD_USE_PCIE2
         if (ctx() == 3) {
             rx_queue_monitor(2);
         }
 #endif
 
-#if NFD_PCIE3_EMEM
+#ifdef NFD_USE_PCIE3
         if (ctx() == 4) {
             rx_queue_monitor(3);
         }
