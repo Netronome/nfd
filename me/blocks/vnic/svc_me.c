@@ -17,7 +17,7 @@
 #include <vnic/shared/nfd_cfg.h>
 
 #ifdef SVC_ME_MSIX_EN
-#include <msix_gen.h>
+#include <vnic/utils/msix_gen.h>
 #endif
 
 __visible SIGNAL nfd_cfg_sig_svc_me0;
