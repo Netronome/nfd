@@ -42,9 +42,9 @@
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
 #include <nfp/mem_bulk.h>
+#include <nfp/pcie.h>
 #include <vnic/shared/nfd_cfg.h>
 //#include <vnic/shared/nfd_cfg_internal.c>
-#include <pcie.h>
 
 #define PCIE_XPB_TARGET_ID_COMP_CFG_REGS	(0x10) 
 #define PCIE_XPB_TARGET_ID_PF_REGS      	(0x20)

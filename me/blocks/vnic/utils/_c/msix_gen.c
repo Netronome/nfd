@@ -9,10 +9,10 @@
 #include <stdint.h>
 #include <types.h>
 
-#include <msix.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd_internal.h>
+#include <vnic/utils/msix.h>
 #include <nfp/mem_atomic.h>
 #include <std/reg_utils.h>
 

@@ -61,7 +61,6 @@
 NFD_CFG_RINGS_RES(NFD_CFG_RING_EMEM);
 
 
-#ifdef USE_SVC_ME
 #define NFD_CFG_RINGS_DECL_IND(_isl)                                    \
     ASM(.declare_resource nfd_cfg_ring_nums##_isl global NFD_CFG_NUM_RINGS \
         nfd_cfg_ring_nums)                                              \
@@ -73,17 +72,6 @@ NFD_CFG_RINGS_RES(NFD_CFG_RING_EMEM);
         global 1)                                                       \
     ASM(.alloc_resource nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_nums##_isl \
         global 1)
-#else
-#define NFD_CFG_RINGS_DECL_IND(_isl)                                    \
-    ASM(.declare_resource nfd_cfg_ring_nums##_isl global NFD_CFG_NUM_RINGS \
-        nfd_cfg_ring_nums)                                              \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##0 nfd_cfg_ring_nums##_isl \
-        global 1)                                                       \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##1 nfd_cfg_ring_nums##_isl \
-        global 1)                                                       \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_nums##_isl \
-        global 1)                                                       
-#endif
 
 #define NFD_CFG_RINGS_DECL(_isl) NFD_CFG_RINGS_DECL_IND(_isl)
 
