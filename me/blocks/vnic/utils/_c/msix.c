@@ -119,20 +119,32 @@ __emem char* get_cfg_bar_vf_base(unsigned int pcie_nr, unsigned int vf_nr)
     __emem char* cfg_bar_vf_addr;
 
     switch(pcie_nr-4) {
+#ifdef NFD_PCIE0_EMEM 
     case 0:
         cfg_bar_vf_addr = NFD_CFG_BAR_ISL(0, vf_nr);
         break;
+#endif
+
+#ifdef NFD_PCIE1_EMEM 
     case 1:
         cfg_bar_vf_addr = NFD_CFG_BAR_ISL(1, vf_nr);
         break;
+#endif
+
+#ifdef NFD_PCIE2_EMEM 
     case 2:
         cfg_bar_vf_addr = NFD_CFG_BAR_ISL(2, vf_nr);
         break;
+#endif
+
+#ifdef NFD_PCIE3_EMEM 
     case 3:
         cfg_bar_vf_addr = NFD_CFG_BAR_ISL(3, vf_nr);
         break;
+#endif
+
     default:
-        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(0, vf_nr); // is that the corrrect default to have ?
+        // we should not get here - handle error 
         break;
     }
    
