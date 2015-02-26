@@ -118,8 +118,7 @@ main(void)
 #endif
                 }
             } else {
-              
- 
+
                 __xwrite unsigned int link_state;
 
                 __implicit_read(cfg_bar_data, 6);

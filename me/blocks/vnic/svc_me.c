@@ -76,7 +76,7 @@ main(void)
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me3, &cfg_msg);
 #endif
 
-    } 
+    }
 
 #ifdef SVC_ME_MSIX_EN
 
@@ -110,7 +110,7 @@ main(void)
         if (ctx() == 0) {
            switch (i) {
 
-#ifdef NFD_USE_PCIE0            
+#ifdef NFD_USE_PCIE0
            case 0:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me0,
                                      NFD_CFG_RING_NUM(0, 2));
@@ -146,7 +146,7 @@ main(void)
                break;
 #endif
 
-#ifdef NFD_USE_PCIE1            
+#ifdef NFD_USE_PCIE1
            case 1:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me1,
                                      NFD_CFG_RING_NUM(1, 2));
@@ -181,8 +181,8 @@ main(void)
                }
                break;
 #endif
-            
-#ifdef NFD_USE_PCIE2            
+
+#ifdef NFD_USE_PCIE2
            case 2:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me2,
                                      NFD_CFG_RING_NUM(2, 2));
@@ -217,8 +217,8 @@ main(void)
                }
                break;
 #endif
-            
-#ifdef NFD_USE_PCIE3            
+
+#ifdef NFD_USE_PCIE3
            case 3:
                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_svc_me3,
                                      NFD_CFG_RING_NUM(3, 2));
