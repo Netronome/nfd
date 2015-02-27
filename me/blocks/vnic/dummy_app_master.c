@@ -21,7 +21,13 @@
 #include <msix_gen.h>
 #endif
 
+/* XXX make signals visible for all islands
+ * Actually using the signals is WIP */
+__visible SIGNAL nfd_cfg_sig_app_master0;
 __visible SIGNAL nfd_cfg_sig_app_master1;
+__visible SIGNAL nfd_cfg_sig_app_master2;
+__visible SIGNAL nfd_cfg_sig_app_master3;
+
 
 struct nfd_cfg_msg cfg_msg;
 
@@ -71,7 +77,7 @@ int
 main(void)
 {
     if (ctx() == 0) {
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_app_master1, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_app_master0, &cfg_msg);
 
     } else {
         unsigned int buf_base;
@@ -104,7 +110,7 @@ main(void)
     for (;;) {
         if (ctx() == 0) {
             if (!cfg_msg.msg_valid) {
-                nfd_cfg_master_chk_cfg_msg(&cfg_msg, &nfd_cfg_sig_app_master1,
+                nfd_cfg_master_chk_cfg_msg(&cfg_msg, &nfd_cfg_sig_app_master0,
                                            PCIE_ISL);
 
                 if (cfg_msg.msg_valid) {
@@ -161,7 +167,4 @@ main(void)
         }
     }
 }
-
-
-
 
