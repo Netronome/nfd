@@ -110,14 +110,44 @@ NFD_CFG_RINGS_INIT(3);
 
 
 
-#define NFD_CFG_FLR_INIT_IND1(_csr)                                     \
-    __asm {.init_csr _csr##.PcieIntMgr.IntEnableHigh.IntEnables 0x304 const} \
-    __asm {.init_csr _csr##.PcieIntMgr.StatusEventConfig0.Edge9 2 const} \
-    __asm {.init_csr _csr##.PcieIntMgr.StatusEventConfig0.Edge8 2 const} \
-    __asm {.init_csr _csr##.PcieIntMgr.StatusEventConfig0.Edge2 2 const}
+/* Configure interrupt manager to send events for interesting interrupts
+ * and require that BSP configuration of the registers we touch is as
+ * expected.  Confirming the BSP configuration is as expected allows
+ * us to perform writes rather than read-modify-writes. */
+#define NFD_CFG_FLR_INIT_IND1(_csr_int, _csr_comp)                      \
+    __asm {.init_csr _csr_int##.IntEnableHigh.IntEnables 0x304 const} \
+    __asm {.init_csr _csr_int##.StatusEventConfig0.Edge9 2 const} \
+    __asm {.init_csr _csr_int##.StatusEventConfig0.Edge8 2 const} \
+    __asm {.init_csr _csr_int##.StatusEventConfig0.Edge2 2 const} \
+    __asm {.init_csr _csr_comp##.PCIeCntrlrConfig3.IntAMask 0 required} \
+    __asm {.init_csr _csr_comp##.PCIeCntrlrConfig3.IntBMask 0 required} \
+    __asm {.init_csr _csr_comp##.PCIeCntrlrConfig3.IntCMask 0 required} \
+    __asm {.init_csr _csr_comp##.PCIeCntrlrConfig3.IntDMask 0 required} \
+    __asm {.init_csr _csr_comp##.PCIeCntrlrConfig3.PresetSweepMask 0 required} \
+    __asm {.init_csr                                                    \
+            _csr_comp##.PCIeCntrlrConfig3.BypassRemoteTxEq 0 required}  \
+    __asm {.init_csr _csr_comp##.PCIeCntrlrConfig3.BypassPhase23 0 required} \
+    __asm {.init_csr                                                    \
+            _csr_comp##.PCIeStateChangeStat.HotResetAssertIntMask 0 required} \
+    __asm {.init_csr                                                    \
+            _csr_comp##.PCIeStateChangeStat.FuncStatusChgIntMask 0 required} \
+    __asm {.init_csr                                                    \
+            _csr_comp##.PCIeStateChangeStat.PwrStateChgIntMask 0 required} \
+    __asm {.init_csr                                                    \
+            _csr_comp##.PCIeStateChangeStat.VfBusMstrEnStateChangeIntMask \
+            0 required}                                                 \
+    __asm {.init_csr                                                    \
+            _csr_comp##.PCIeStateChangeStat.VfEnableStateChangeIntMask  \
+            0 required}                                                 \
+    __asm {.init_csr                                                    \
+            _csr_comp##.PCIeStateChangeStat.LinkPwrStateChgIntMask 0 required} \
+    __asm {.init_csr                                                    \
+            _csr_comp##.PCIeStateChangeStat.LinkStatusChgIntMask 0 required}
 
 #define NFD_CFG_FLR_INIT_IND0(_isl)                                     \
-    NFD_CFG_FLR_INIT_IND1(xpbm:Pcie##_isl##IsldXpbmMap.Island.PcieXpb)
+    NFD_CFG_FLR_INIT_IND1(                                              \
+        xpbm:Pcie##_isl##IsldXpbmMap.Island.PcieXpb.PcieIntMgr,         \
+        xpbm:Pcie##_isl##IsldXpbmMap.Island.PcieXpb.PcieComponentCfgXpb)
 
 #define NFD_CFG_FLR_INIT(_isl) NFD_CFG_FLR_INIT_IND0(_isl)
 
