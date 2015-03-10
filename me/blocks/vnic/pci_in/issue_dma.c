@@ -564,7 +564,7 @@ issue_dma()
     __implicit_read(&tx_desc_sig);
     __implicit_read(&dma_order_sig);
 
-    while (data_dma_seq_issued == data_dma_seq_safe) {
+    while ((int)(data_dma_seq_issued - data_dma_seq_safe) >= 0) {
         /* We can't process this batch yet.
          * Swap then recompute seq_safe.
          * NB: only one ctx can execute this at any given time */
