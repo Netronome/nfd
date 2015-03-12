@@ -252,7 +252,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     queue_s = NFD_BUILD_NATQ(cfg_msg->vnic, queue_s);
     bmsk_queue = NFD_NATQ2BMQ(queue_s);
 
-    rxq.watermark    = NFP_QC_STS_HI_WATERMARK_8; /* XXX use 16 instead? */
+    rxq.watermark    = NFP_QC_STS_HI_WATERMARK_16; /* XXX use 32 instead? */
     rxq.event_data   = NFD_OUT_Q_EVENT_DATA;
     rxq.ptr          = 0;
 

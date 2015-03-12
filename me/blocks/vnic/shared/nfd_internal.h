@@ -79,7 +79,8 @@
 
 /* Additional check queue constants */
 #define NFD_OUT_MAX_RETRIES             5
-#define NFD_OUT_FL_BATCH_SZ             8   /* Match configured watermark! */
+#define NFD_OUT_FL_BATCH_SZ             16   /* Match configured watermark! */
+
 
 #define NFD_OUT_STAGE_START_CTX         1
 #define NFD_OUT_STAGE_WAIT_CYCLES       200
