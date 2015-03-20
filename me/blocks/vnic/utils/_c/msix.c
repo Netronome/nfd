@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * @file   msix.c       
- * @brief  MSI/MSI-X library 
+ * @file   msix.c
+ * @brief  MSI-X library
  */
 
 
@@ -44,21 +44,23 @@
 #include <nfp/mem_bulk.h>
 #include <nfp/pcie.h>
 #include <vnic/shared/nfd_cfg.h>
-//#include <vnic/shared/nfd_cfg_internal.c>
 
-#define PCIE_XPB_TARGET_ID_COMP_CFG_REGS	(0x10) 
-#define PCIE_XPB_TARGET_ID_PF_REGS      	(0x20)
-#define PCIE_XPB_TARGET_ID_RC_REGS      	(0x21)
-#define PCIE_XPB_TARGET_ID_LM_REGS      	(0x22)
-#define PCIE_XPB_TARGET_ID_VF_REGS      	(0x23)
-
-// !!! COPIED from /opt/netronome/include/nfp6000/nfp_pcie.h
-//#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_PEND          0x000000a4
-#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK             0x000000a0
-#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_LOW_ADDR  	0x00000094
-#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_HI_ADDR      0x00000098
-#define NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_DATA      	0x0000009c
-
+/*
+ * MSI-X definitions:
+ * @PCI_MSIX_TBL_ENTRY_SZ          Size in Bytes for a MSI-X table entry
+ * @PCI_MSIX_TBL_ENTRY_SZ32        Size in 32bit words for a MSI-X table entry
+ * @PCI_MSIX_TBL_ENTRY_OFF         Offset in MSI-X table for a given vector
+ *
+ * @PCI_MSIX_TBL_MSG_FLAGS_IDX32   Word index for flags in an entry
+ * @PCI_MSIX_TBL_MSG_DATA_IDX32    Word index for message data in an entry
+ * @PCI_MSIX_TBL_MSG_ADDR_HI_IDX32 Word index for message address in an entry
+ * @PCI_MSIX_TBL_MSG_ADDR_LO_IDX32 Word index for message address in an entry
+ *
+ * @PCI_MSIX_FLAGS_MASKED          Bit the flags to mask an entry
+ *
+ * Note, the order for the TBL entries seems wrong, but that's how
+ * they pop up in the read transfer registers.
+ */
 #define PCI_MSIX_TBL_ENTRY_SZ           (4 * 4)
 #define PCI_MSIX_TBL_ENTRY_SZ32         (PCI_MSIX_TBL_ENTRY_SZ / 4)
 #define PCI_MSIX_TBL_ENTRY_OFF(_x)      (PCI_MSIX_TBL_ENTRY_SZ * (_x))
@@ -74,19 +76,18 @@
 
 #define PCIE_MSIX_FLAGS_MASKED          (1 << 0)
 
-__gpr unsigned int _msix_data;
-__gpr unsigned int _msix_addr_hi;
-__gpr unsigned int _msix_addr_lo;
- 
+/*
+ * Offset of the MSI-X table in the VF control BAR
+ */
+#define NFD_VF_MSIX_TABLE_OFF   0x2000
+
 
 /*
-
-  temporary here
-
-*/
-
+ * Calculate the CPP2PCIe bar value (should be somewhere else)
+ */
 __intrinsic unsigned int
-pcie_c2p_barcfg_addr(unsigned int addr_hi, unsigned int addr_lo, unsigned int req_id)
+pcie_c2p_barcfg_addr(unsigned int addr_hi,
+                     unsigned int addr_lo, unsigned int req_id)
 {
     unsigned int tmp;
 
@@ -98,16 +99,17 @@ pcie_c2p_barcfg_addr(unsigned int addr_hi, unsigned int addr_lo, unsigned int re
         tmp |= NFP_PCIE_BARCFG_C2P_ARI_ENABLE;
         tmp |= NFP_PCIE_BARCFG_C2P_ARI(req_id);
     }
-   
-    return tmp; 
+
+    return tmp;
 }
 
 /*
  * CPP2PCIe BAR allocation
+ * XXX Are these defined as resources somewhere?
  */
 enum pcie_cpp2pci_bar {
     PCIE_CPP2PCI_MSIX = 0,
-    PCIE_CPP2PCI_MSI,
+    PCIE_CPP2PCI_FREE1,
     PCIE_CPP2PCI_FREE2,
     PCIE_CPP2PCI_FREE3,
     PCIE_CPP2PCI_FREE4,
@@ -116,355 +118,209 @@ enum pcie_cpp2pci_bar {
     PCIE_CPP2PCI_FREE7
 };
 
-__gpr unsigned int msi_cur_cpp2pci_addr  = -1;
-__gpr unsigned int msix_cur_cpp2pci_addr = -1;
+/* Global variable to cache the current CPP 2 PCIe BAR */
+__gpr static unsigned int msix_cur_cpp2pci_addr = 0;
 
-__emem char* get_cfg_bar_vf_base(unsigned int pcie_nr, unsigned int vf_nr) 
+
+/*
+ * Send an MSI-X interrupt for a PF.
+ *
+ * The PF MSI-X table is in SRAM in the PCIe Island and the hardware
+ * support a mechanism for generating a MSI-X via a CSR write.  The
+ * hardware currently does not handle pending MSI-X correctly, so we
+ * check the MSI-X control word manually.
+ *
+ * The steps are as follows:
+ * - Check if the entry is masked
+ * - If not, generate an interrupt (by writing to the appropriate CSR)
+ * - If the caller asks us to mask, mask the entry.
+ *
+ * Note, there is a race potential race between reading the status and
+ * generating the interrupt, but this race can only happen if the
+ * driver masks the interrupt in between the ME reading the MSI-X
+ * control word and attempting to send the interrupt.  Since the
+ * driver is not masking the interrupt the race should not happen.
+ */
+__intrinsic int
+msix_pf_send(unsigned int pcie_nr, unsigned int entry_nr, unsigned int mask_en)
+{
+    uint32_t entry_addr_hi;
+    uint32_t entry_addr_lo;
+
+    uint32_t gen_addr_hi;
+    uint32_t gen_addr_lo;
+
+    __xwrite uint32_t msix_wdata;
+    __xread uint32_t flags_r;
+    __xwrite uint32_t flags_w;
+
+    SIGNAL sig;
+
+    int ret = 1;
+
+    /* Calculate address for MSI-X table entry. The table is located
+     * in PCIe SRAM offset 0 */
+    entry_addr_hi = pcie_nr << 30;
+    entry_addr_lo = NFP_PCIE_SRAM_BASE;
+    entry_addr_lo += PCI_MSIX_TBL_ENTRY_OFF(entry_nr) + PCI_MSIX_TBL_MSG_FLAGS;
+
+    /* Check if the entry is currently masked */
+    __asm {
+        pcie[read_pci, flags_r, entry_addr_hi, <<8, entry_addr_lo, 1], \
+            ctx_swap[sig]
+    }
+
+    /* If vector masked, return */
+    if (flags_r & PCIE_MSIX_FLAGS_MASKED)
+        goto out;
+
+    /* Send the interrupt. */
+    gen_addr_hi = pcie_nr << 30;
+    gen_addr_lo = NFP_PCIE_DMA_MSIX_INSTR_GEN(0);
+    msix_wdata = entry_nr;
+    __asm {
+        pcie[write_pci, msix_wdata, gen_addr_hi, <<8, gen_addr_lo, 1], \
+            ctx_swap[sig]
+    }
+
+    if (mask_en) {
+        flags_w = flags_r | PCIE_MSIX_FLAGS_MASKED;
+        __asm {
+            pcie[write_pci, flags_w, entry_addr_hi, <<8, entry_addr_lo, 1], \
+                ctx_swap[sig]
+        }
+    }
+
+    ret = 0;
+
+out:
+    return ret;
+}
+
+/*
+ * Calculate the base address of the Configuration BAR for a VF.
+ *
+ * XXX Shouldn't this be shared with some NFD code?
+ */
+__intrinsic static __emem char*
+get_cfg_bar_vf_base(unsigned int pcie_nr, unsigned int vf_nr)
 {
     __emem char* cfg_bar_vf_addr;
 
-    switch(pcie_nr-4) {
-#ifdef NFD_PCIE0_EMEM 
+    switch(pcie_nr - 4) {
+#ifdef NFD_PCIE0_EMEM
     case 0:
         cfg_bar_vf_addr = NFD_CFG_BAR_ISL(0, vf_nr);
         break;
 #endif
 
-#ifdef NFD_PCIE1_EMEM 
+#ifdef NFD_PCIE1_EMEM
     case 1:
         cfg_bar_vf_addr = NFD_CFG_BAR_ISL(1, vf_nr);
         break;
 #endif
 
-#ifdef NFD_PCIE2_EMEM 
+#ifdef NFD_PCIE2_EMEM
     case 2:
         cfg_bar_vf_addr = NFD_CFG_BAR_ISL(2, vf_nr);
         break;
 #endif
 
-#ifdef NFD_PCIE3_EMEM 
+#ifdef NFD_PCIE3_EMEM
     case 3:
         cfg_bar_vf_addr = NFD_CFG_BAR_ISL(3, vf_nr);
         break;
 #endif
 
     default:
-        // we should not get here - handle error 
-        break;
+        /* This should not happen */
+        halt();
     }
-   
+
     return cfg_bar_vf_addr;
-     
 }
 
 /*
- -----------------------------------------------------------------------------
- MSI support
- -----------------------------------------------------------------------------
-*/
-unsigned int msi_vf_status(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr) 
+ * Send an MSI-X interrupt for a VF.
+ *
+ * There is no hardware support for MSI-X in VFs so this is
+ * implemented entirely in software.  The MSI-X table for each VF is
+ * located in its control BAR.  We use a single CPP-2-PCIe BAR for
+ * performing the PCI write to generate a MSI-X.  We cache its config
+ * so we don't need to re-program the CPP2PCIe BAR for every MSI-X.
+ *
+ * The steps are as follows:
+ * - Read the table entry
+ * - Check if the entry is masked
+ * - Reprogram the CPP2PCIe BAR if necessary
+ * - If not, generate an interrupt (by performing a PCIe write)
+ * - If the caller asks us to mask, mask the entry.
+ *
+ * The same potential race as for the PF exists in this code too.
+ */
+__intrinsic int
+msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
+             unsigned int entry_nr, unsigned int mask_en)
 {
-    __gpr unsigned int addr_hi;
-    __gpr unsigned int addr_lo;
+    unsigned int data;
+    unsigned int addr_hi;
+    unsigned int addr_lo;
+    unsigned int flags;
+    unsigned int bar_addr;
 
-    __xread  uint32_t rdata;
-
-    SIGNAL r_sig;
-
-    // configure address to access PCIe internal PF Registers
-    addr_hi = 0;
-
-    addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
-              NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK +
-              (vf_nr << 12);
-    addr_lo |= (pcie_nr << 24);
-    
-    __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[r_sig]
-
-    return ((rdata >> vec_nr) & 1);
-
-}
-
-/**
-  * Sets the per vf, per-vector mask bit 
-  * @param pcie_nr   the PCIe cluster number
-  * @param vec_nr    interrupt vector number
-  */
-void msi_vf_mask(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr)
-{
-    __gpr unsigned int addr_hi;
-    __gpr unsigned int addr_lo;
-
-    __xread  uint32_t rdata;
-    __xwrite uint32_t wdata;
-
-    SIGNAL rw_sig;
-
-    // configure address to access PCIe internal PF Registers
-    addr_hi = 0;
-
-    addr_lo = (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
-              NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MASK +
-              (vf_nr << 12);
-    addr_lo |= (pcie_nr << 24);
-
-
-    __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
-
-    // mask the vector
-    wdata = rdata | (1 << vec_nr);
-
-    // write back
-    __asm ct[xpb_write, wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
-
-}
-
-
-#ifdef MSI_USE_HW
-void msi_vf_send(unsigned int pcie_nr, unsigned int vf_nr,  unsigned int vec_nr, unsigned int mask_en)
-{
-
-    __gpr unsigned int addr_hi;
-    __gpr unsigned int addr_lo;
-
-    __xwrite uint32_t msi_wdata;
-
-    SIGNAL msi_sig;
-
-    // calculate SRAM address for given vector definition
-    addr_hi = pcie_nr << 30;
-
-    // MSI Address is 0x60040+fn_number
-    addr_lo = 0x60040 + vf_nr;
-
-    msi_wdata = vec_nr;
-    __asm pcie[write_pci, msi_wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]
-
-    if (mask_en==0) {
-       return;
-    }
-
-    msi_vf_mask(pcie_nr, vf_nr, vec_nr);
-
-}
-
-#else
-void msi_vf_send(unsigned int pcie_nr, unsigned int vf_nr,  unsigned int vec_nr, unsigned int mask_en)
-{
-
-    __gpr unsigned int addr_hi;
-    __gpr unsigned int addr_lo;
-
-    __xwrite uint32_t msi_wdata;
-    __xread  uint32_t rdata;
-
-    __gpr unsigned int msi_addr_hi;
-    __gpr unsigned int msi_addr_lo;
-    __gpr unsigned int msi_data;
-
-    __gpr unsigned int bar_addr;
-
-    SIGNAL msi_sig;
-
-    // configure address to access PCIe internal PF Registers
-    //addr_hi = pcie_nr << 30;
-    addr_hi = 0;
-
-    // read MSI low address
-    addr_lo = (pcie_nr << 24) +
-              (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
-	      NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_LOW_ADDR +
-              (vf_nr << 12);
-    
-    __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]
-    msi_addr_lo = rdata;
-
-
-    // read MSI high address
-    addr_lo = (pcie_nr << 24) +
-              (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
-	      NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_HI_ADDR +
-              (vf_nr << 12);
-   
-    __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]
-    msi_addr_hi = rdata;
-
-    // read MSI data
-    addr_lo = (pcie_nr << 24) +
-              (PCIE_XPB_TARGET_ID_VF_REGS << 16) +
-              NFP_PCIEX_VF_i_vf_MSI_cap_struct_I_MSI_MSG_DATA +
-              (vf_nr << 12);
-   
-    __asm ct[xpb_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msi_sig]
-    msi_data = rdata;
-
-
-    /* Check if we need to re-configure the CPP2PCI BAR */
-    bar_addr = pcie_c2p_barcfg_addr(msi_addr_hi, msi_addr_lo, (vf_nr + 64));
-    if (bar_addr != msi_cur_cpp2pci_addr) {
-        pcie_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSI, msi_addr_hi, msi_addr_lo, (vf_nr + 64));
-        msi_cur_cpp2pci_addr = bar_addr;
-    }
-
-
-    /* Send the MSI-X and automask.  We overlap the commands so that
-     * they happen roughly at the same time. */
-    msi_wdata = msi_data + vec_nr;
-    pcie_write(&msi_wdata, pcie_nr, PCIE_CPP2PCI_MSI, msi_addr_hi, msi_addr_lo, sizeof(msi_wdata));
-
-    if (mask_en==0) {
-       return;
-    }
-
-    msi_vf_mask(pcie_nr, vf_nr, vec_nr);
-}
-#endif
-
-
-/*
- -----------------------------------------------------------------------------
- MSI-X support
- -----------------------------------------------------------------------------
-*/
-unsigned int msix_pf_status(unsigned int pcie_nr, unsigned int vec_nr) 
-{
-    __gpr unsigned int addr_hi;
-    __gpr unsigned int addr_lo;
-
-    __xread uint32_t rdata;
-
-    SIGNAL r_sig;
-
-    // calculate SRAM address for given vector definition
-    addr_hi = pcie_nr << 30;
-    addr_lo = vec_nr << 4; // 4 32-bit words/table entry
-    addr_lo = addr_lo | 0xc;  // vector mask bit is bit 96 (4th byte)
-
-    // vector mask bit is in bit 96
-    __asm pcie[read_pci, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[r_sig]
-   
-    return (rdata & 1);
-
-}
-
-/**
-  * Sets the per-vector mask bit in the MSI-X vector table located
-  * in PCIe SRAM
-  * @param pcie_nr   the PCIe cluster number
-  * @param vec_nr    interrupt vector number
-  */
-void msix_pf_mask(unsigned int pcie_nr, unsigned int vec_nr)
-{
-    __gpr unsigned int addr_hi;
-    __gpr unsigned int addr_lo;
-
-    __xread  uint32_t rdata;
-    __xwrite uint32_t wdata;
-
-    SIGNAL rw_sig;
-
-    // calculate SRAM address for given vector definition
-    addr_hi = pcie_nr << 30;
-    addr_lo = vec_nr << 4; // 4 32-bit words/table entry
-    addr_lo = addr_lo | 0xc;  // vector mask bit is bit 96 (4th byte)
-
-    // vector mask bit is in bit 96
-    __asm pcie[read_pci, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
-     
-    // mask the vector
-    wdata = rdata | 1;
-
-    // write back
-    __asm pcie[write_pci, wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rw_sig]
- 
-}
-
-void msix_pf_send(unsigned int pcie_nr, unsigned int vec_nr, unsigned int mask_en)
-{
-    
-    __gpr uint32_t addr_hi;
-    __gpr uint32_t addr_lo;
-
-    __xwrite uint32_t msix_wdata;
-   
-    SIGNAL msix_sig;
- 
-    // calculate SRAM address for given vector definition
-    addr_hi = pcie_nr << 30;
-
-    // MSI-X Address is 0x60000
-    addr_lo = 0x60000;
- 
-    msix_wdata = vec_nr;
-    __asm pcie[write_pci, msix_wdata, addr_hi, <<8, addr_lo, 1], ctx_swap[msix_sig]
-   
-    if (mask_en != 0) {
-        msix_pf_mask(pcie_nr, vec_nr);
-    }
-
-} 
-
-unsigned int
-msix_vf_status(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr)
-{
-    __gpr unsigned int flags;
-    __emem char* cfg_bar_vf_addr;
-
+    __emem char* msix_table_addr;
     __xread uint32_t tmp[PCI_MSIX_TBL_ENTRY_SZ32];
 
-    cfg_bar_vf_addr = get_cfg_bar_vf_base(pcie_nr, vf_nr);
-    mem_read8(tmp, cfg_bar_vf_addr + 0x2000 + (vec_nr*0x10), sizeof(tmp));
-
-    flags =         tmp[PCI_MSIX_TBL_MSG_FLAGS_IDX32];
-    _msix_data =    tmp[PCI_MSIX_TBL_MSG_DATA_IDX32];
-    _msix_addr_hi = tmp[PCI_MSIX_TBL_MSG_ADDR_HI_IDX32];
-    _msix_addr_lo = tmp[PCI_MSIX_TBL_MSG_ADDR_LO_IDX32];
-
-    if (flags != 0) {
-        /* vector is masked */
-        return 1;
-    }
-
-    return 0;
-}
-
-void
-msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr, unsigned int vec_nr, unsigned int mask_en)
-{
-    __gpr unsigned int bar_addr;
-    __emem char* cfg_bar_vf_addr;
-
     __xwrite uint32_t msix_data;
-    __xwrite uint32_t mask_data;
+    __xwrite uint32_t flags_w;
 
     SIGNAL msix_sig, mask_sig;
 
-    cfg_bar_vf_addr = get_cfg_bar_vf_base(pcie_nr, vf_nr);
+    int ret = 1;
+
+    msix_table_addr = get_cfg_bar_vf_base(pcie_nr, vf_nr);
+    msix_table_addr += NFD_VF_MSIX_TABLE_OFF;
+
+    /* Read the full table entry */
+    mem_read8(tmp,
+              msix_table_addr + PCI_MSIX_TBL_ENTRY_OFF(entry_nr), sizeof(tmp));
+    flags =   tmp[PCI_MSIX_TBL_MSG_FLAGS_IDX32];
+    data =    tmp[PCI_MSIX_TBL_MSG_DATA_IDX32];
+    addr_hi = tmp[PCI_MSIX_TBL_MSG_ADDR_HI_IDX32];
+    addr_lo = tmp[PCI_MSIX_TBL_MSG_ADDR_LO_IDX32];
+
+    /* If masked, we are done */
+    if (flags & PCIE_MSIX_FLAGS_MASKED)
+        goto out;
 
     /* Check if we need to re-configure the CPP2PCI BAR */
-    bar_addr = pcie_c2p_barcfg_addr(_msix_addr_hi, _msix_addr_lo, (vf_nr + 64));
+    bar_addr = pcie_c2p_barcfg_addr(addr_hi, addr_lo, (vf_nr + 64));
     if (bar_addr != msix_cur_cpp2pci_addr) {
-        pcie_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSIX, _msix_addr_hi, _msix_addr_lo, (vf_nr + 64));
+        pcie_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSIX,
+                        addr_hi, addr_lo, (vf_nr + 64));
         msix_cur_cpp2pci_addr = bar_addr;
     }
 
     /* Send the MSI-X and automask.  We overlap the commands so that
      * they happen roughly at the same time. */
-    msix_data = _msix_data;
-    __pcie_write(&msix_data, pcie_nr, PCIE_CPP2PCI_MSIX, _msix_addr_hi, _msix_addr_lo,  
+    msix_data = data;
+    __pcie_write(&msix_data, pcie_nr, PCIE_CPP2PCI_MSIX, addr_hi, addr_lo,
                  sizeof(msix_data), sizeof(msix_data), sig_done, &msix_sig);
 
-    if (mask_en != 0) {
-        mask_data = PCIE_MSIX_FLAGS_MASKED;
-        __mem_write8(&mask_data, cfg_bar_vf_addr +
-                     0x2000 + (vec_nr*0x10) +
+    if (mask_en) {
+        flags_w = flags | PCIE_MSIX_FLAGS_MASKED;
+        __mem_write8(&flags_w,
+                     msix_table_addr + PCI_MSIX_TBL_ENTRY_OFF(entry_nr) +
                      PCI_MSIX_TBL_MSG_FLAGS,
-                     sizeof(mask_data), sizeof(mask_data), sig_done, &mask_sig);
+                     sizeof(flags_w), sizeof(flags_w), sig_done, &mask_sig);
 
         wait_for_all(&msix_sig, &mask_sig);
-    } else{
+    } else {
         wait_for_all(&msix_sig);
     }
 
-}
+    ret = 0;
 
+out:
+    return ret;
+}

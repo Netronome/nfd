@@ -18,8 +18,6 @@
 
 #ifdef SVC_ME_MSIX_EN
 #include <vnic/utils/msix_gen.h>
-__xread unsigned int rx_ring_vector_data[16];
-#define VNIC_CONFIG_RX_VECS 0xa40
 #endif
 
 #ifdef NFD_PCIE0_EMEM
@@ -61,12 +59,9 @@ NFD_CFG_BASE_DECLARE(3);
 
 #ifdef SVC_ME_MSIX_EN
 #define MSIX_CFG_MSG_PROC_IND(_isl)                                     \
-    mem_read64(rx_ring_vector_data,                                     \
-               (NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic) +             \
-                VNIC_CONFIG_RX_VECS),                                   \
-               sizeof rx_ring_vector_data);                             \
-    rx_queue_monitor_update_config(_isl, cfg_msg##_isl.vnic,            \
-                                   cfg_bar_data##_isl, rx_ring_vector_data);
+    msix_reconfig(_isl, cfg_msg##_isl.vnic,                             \
+                  NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),            \
+                  cfg_bar_data##_isl);
 
 #else
 #define MSIX_CFG_MSG_PROC_IND(_isl)
@@ -77,19 +72,18 @@ NFD_CFG_BASE_DECLARE(3);
 do {                                                                    \
     nfd_cfg_check_cfg_msg(&cfg_msg##_isl, &nfd_cfg_sig_svc_me##_isl,    \
                           NFD_CFG_RING_NUM(_isl, 2));                   \
-                                                                        \
     if (cfg_msg##_isl.msg_valid) {                                      \
         ncfg++;                                                         \
         mem_read64(cfg_bar_data##_isl,                                  \
                    NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),           \
                    sizeof cfg_bar_data##_isl);                          \
                                                                         \
-        MSIX_CFG_MSG_PROC_IND(_isl);                                    \
-                                                                        \
         local_csr_write(NFP_MECSR_MAILBOX_0, (0x0CF | (_isl << 8)));    \
         local_csr_write(NFP_MECSR_MAILBOX_1, cfg_msg##_isl.vnic);       \
         local_csr_write(NFP_MECSR_MAILBOX_2, cfg_bar_data##_isl[0]);    \
-        local_csr_write(NFP_MECSR_MAILBOX_3, ncfg);                     \
+        local_csr_write(NFP_MECSR_MAILBOX_3, cfg_bar_data##_isl[1]);    \
+                                                                        \
+        MSIX_CFG_MSG_PROC_IND(_isl);                                    \
                                                                         \
         /* Complete the message */                                      \
         cfg_msg##_isl.msg_valid = 0;                                    \
@@ -154,58 +148,36 @@ main(void)
 
 #ifdef NFD_PCIE0_EMEM
     if (ctx() == 1) {
-        rx_queue_monitor_init(0);
-
-        for (;;) {
-            rx_queue_monitor(0);
-
-            ctx_swap();
-        }
+        msix_qmon_init(0);
+        msix_qmon_loop(0);
     }
 #endif
 
 #ifdef NFD_PCIE1_EMEM
     if (ctx() == 2) {
-        rx_queue_monitor_init(1);
-
-        for (;;) {
-            rx_queue_monitor(1);
-
-            ctx_swap();
-        }
+        msix_qmon_init(1);
+        msix_qmon_loop(1);
     }
 #endif
 
 #ifdef NFD_PCIE2_EMEM
     if (ctx() == 3) {
-        rx_queue_monitor_init(2);
-
-        for (;;) {
-            rx_queue_monitor(2);
-
-            ctx_swap();
-        }
+        msix_qmon_init(2);
+        msix_qmon_loop(2);
     }
 #endif
 
 #ifdef NFD_PCIE3_EMEM
     if (ctx() == 4) {
-        rx_queue_monitor_init(3);
-
-        for (;;) {
-            rx_queue_monitor(3);
-
-            ctx_swap();
-        }
+        msix_qmon_init(3);
+        msix_qmon_loop(3);
     }
 #endif
 
 #endif
-
 
     /* Catch and kill unused threads */
     for (;;) {
         ctx_wait(kill);
     }
 }
-
