@@ -200,12 +200,9 @@ msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
     control = cfg_bar_data[NS_VNIC_CFG_CTRL_IDX];
     update = cfg_bar_data[NS_VNIC_CFG_UPDATE_IDX];
 
-#if 0
-    /* XXX Commented out for now.  May screw up FLR */
     /* If no MSI-X updates, return */
     if (!(update & NS_VNIC_CFG_UPDATE_MSIX))
         return;
-#endif
 
     /* Check if we are up and rings have changed */
     if ((control & NS_VNIC_CFG_CTRL_ENABLE) &&
