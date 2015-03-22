@@ -15,8 +15,6 @@
  *
  * vim:shiftwidth=8:noexpandtab
  *
- * @file kernel/nfp_net_ctrl.h
- *
  * Netronome network device driver: Control BAR layout
  */
 #ifndef _NFP_NET_CTRL_H_
