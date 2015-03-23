@@ -253,12 +253,19 @@ msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
     /* Convert VF RX ring bitmask into Queue mask */
     rx_queues_new = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
 
-    /* Work out which queues have been freshly enabled */
+    /* Work out which queues have been newly enabled */
     new_queues =
         (msix_rx_enabled[pcie_isl] | rx_queues_new) ^ msix_rx_enabled[pcie_isl];
 
     /* Make sure they have no pending bits set */
     msix_rx_pending[pcie_isl] &= ~new_queues;
+
+    /* Zero the local packet count for newly enabled queues */
+    while (new_queues) {
+        qnum = ffs64(new_queues);
+        new_queues &= ~(1ull << qnum);
+        msix_prev_rx_cnt[pcie_isl][qnum] = 0;
+    }
 
     /* Update the enabled bit mask with queues for this VF.
      *
