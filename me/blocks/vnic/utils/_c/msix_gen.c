@@ -29,7 +29,6 @@
  * - interrupt moderation
  * - any other operation when link comes down?
  * - *maybe* read counters in bulk
- * - read _AUTO_MASK from config
  */
 
 #define MAX_QUEUE_NUM (NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1)
@@ -84,6 +83,9 @@ __shared __lmem uint32_t msix_prev_tx_cnt[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
 __export __cls volatile uint64_t nfd_msix_rx_enabled[MAX_NUM_PCI_ISLS];
 __export __cls volatile uint64_t nfd_msix_rx_qmask[MAX_NUM_PCI_ISLS];
 __export __cls volatile uint64_t nfd_msix_rx_new[MAX_NUM_PCI_ISLS];
+__export __cls volatile uint64_t nfd_msix_tx_enabled[MAX_NUM_PCI_ISLS];
+__export __cls volatile uint64_t nfd_msix_tx_qmask[MAX_NUM_PCI_ISLS];
+__export __cls volatile uint64_t nfd_msix_tx_new[MAX_NUM_PCI_ISLS];
 #endif
 
 /*
@@ -147,9 +149,24 @@ msix_qmon_init(unsigned int pcie_isl)
 #define NS_VNIC_CFG_RXRS_ENABLE_IDX   (NS_VNIC_CFG_RXRS_ENABLE / 4)
 
 
+/*
+ * Reconfigure RX and TX rings
+ *
+ * @pcie_isl        PCIe Island this function is handling
+ * @vnic            vNIC inside the island this function is handling
+ * @cfg_bar         points to the control bar for the vnic
+ * @rx_rings        Boolean, if set, handle RX rings, else RX rings
+ * @vf_rings        Bitmask of enabled tings for the VF/vNIC.
+ *
+ * This function updates the internal state (used by other MEs) for
+ * handling MSI-X generation for RX and TX rings. The logic is
+ * identical for RX and TX rings, only different data structures are
+ * updated.  This is a bit ugly, but the other option would be
+ * significant code duplication, which isn't pretty either.
+ */
 __intrinsic static void
-msix_reconfig_rx(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
-                 uint64_t vf_rings)
+msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
+                    __mem char *cfg_bar, int rx_rings, uint64_t vf_rings)
 {
     unsigned int qnum;
     uint64_t rings;
@@ -182,24 +199,36 @@ msix_reconfig_rx(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
 
         /* Get MSI-X entry number and stash it into local memory */
         temp = (ring & ~3) + (3 - (ring & 3));
-        msix_rx_entries[pcie_isl][qnum] = ring_entries[temp];
+
+        if (rx_rings)
+            msix_rx_entries[pcie_isl][qnum] = ring_entries[temp];
+        else
+            msix_tx_entries[pcie_isl][qnum] = ring_entries[temp];
     }
 
     /* Convert VF ring bitmask into Queue mask */
     queues = vf_rings << (vnic * NFD_MAX_VF_QUEUES);
 
-    /* Work out which queues have been newly enabled */
-    new_queues_en =
-        (msix_rx_enabled[pcie_isl] | queues) ^ msix_rx_enabled[pcie_isl];
-
-    /* Make sure they have no pending bits set */
-    msix_rx_pending[pcie_isl] &= ~new_queues_en;
+    /* Work out which queues have been newly enabled and make sure
+     * they don't have pending bits set. */
+    if (rx_rings) {
+        new_queues_en =
+            (msix_rx_enabled[pcie_isl] | queues) ^ msix_rx_enabled[pcie_isl];
+        msix_rx_pending[pcie_isl] &= ~new_queues_en;
+    } else {
+        new_queues_en =
+            (msix_tx_enabled[pcie_isl] | queues) ^ msix_tx_enabled[pcie_isl];
+        msix_tx_pending[pcie_isl] &= ~new_queues_en;
+    }
 
     /* Zero the local packet count for newly enabled queues */
     while (new_queues_en) {
         qnum = ffs64(new_queues_en);
         new_queues_en &= ~(1ull << qnum);
-        msix_prev_rx_cnt[pcie_isl][qnum] = 0;
+        if (rx_rings)
+            msix_prev_rx_cnt[pcie_isl][qnum] = 0;
+        else
+            msix_prev_tx_cnt[pcie_isl][qnum] = 0;
     }
 
     /* Update the enabled bit mask with queues for this VF.
@@ -212,15 +241,28 @@ msix_reconfig_rx(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
     else
         vf_queue_mask = MSIX_VF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
 
-    __no_swap_begin();
-    msix_rx_enabled[pcie_isl] &= ~vf_queue_mask;
-    msix_rx_enabled[pcie_isl] |= queues;
-    __no_swap_end();
+    if (rx_rings) {
+        __no_swap_begin();
+        msix_rx_enabled[pcie_isl] &= ~vf_queue_mask;
+        msix_rx_enabled[pcie_isl] |= queues;
+        __no_swap_end();
+    } else {
+        __no_swap_begin();
+        msix_tx_enabled[pcie_isl] &= ~vf_queue_mask;
+        msix_tx_enabled[pcie_isl] |= queues;
+        __no_swap_end();
+    }
 
 #ifdef NFD_SVC_MSIX_DEBUG
-    nfd_msix_rx_qmask[pcie_isl] = vf_queue_mask;
-    nfd_msix_rx_new[pcie_isl] = queues;
-    nfd_msix_rx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl];
+    if (rx_rings) {
+        nfd_msix_rx_qmask[pcie_isl] = vf_queue_mask;
+        nfd_msix_rx_new[pcie_isl] = queues;
+        nfd_msix_rx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl];
+    } else {
+        nfd_msix_tx_qmask[pcie_isl] = vf_queue_mask;
+        nfd_msix_tx_new[pcie_isl] = queues;
+        nfd_msix_tx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl];
+    }
 #endif
 }
 
@@ -228,6 +270,8 @@ msix_reconfig_rx(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
 /*
  * Handle reconfiguration changes of RX queues
  *
+ * @pcie_isl        PCIe Island this function is handling
+ * @vnic            vNIC inside the island this function is handling
  * @cfg_bar         points to the control bar for the vnic
  * @cfg_bar_data[]  contains the first 6 words of the control bar.
  *
@@ -273,8 +317,8 @@ msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
         vf_rx_rings_new &= MSIX_VF_RINGS_MASK;
     }
 
-    /* XXX Ignore TX  rings from here on...for now! */
-    msix_reconfig_rx(pcie_isl, vnic, cfg_bar, vf_rx_rings_new);
+    msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 1, vf_rx_rings_new);
+    msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 0, vf_rx_rings_new);
 }
 
 
