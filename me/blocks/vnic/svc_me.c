@@ -14,11 +14,8 @@
 
 #include <nfp6000/nfp_me.h>
 
-#include <vnic/shared/nfd_cfg.h>
-
-#ifdef SVC_ME_MSIX_EN
-#include <vnic/utils/msix_gen.h>
-#endif
+#include "shared/nfd_cfg.h"
+#include "utils/msix_gen.h"
 
 #ifdef NFD_PCIE0_EMEM
 __visible SIGNAL nfd_cfg_sig_svc_me0;
@@ -57,17 +54,6 @@ NFD_CFG_BASE_DECLARE(3);
 #endif
 
 
-#ifdef SVC_ME_MSIX_EN
-#define MSIX_CFG_MSG_PROC_IND(_isl)                                     \
-    msix_reconfig(_isl, cfg_msg##_isl.vnic,                             \
-                  NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),            \
-                  cfg_bar_data##_isl);
-
-#else
-#define MSIX_CFG_MSG_PROC_IND(_isl)
-#endif
-
-
 #define CHECK_CFG_MSG(_isl)                                             \
 do {                                                                    \
     nfd_cfg_check_cfg_msg(&cfg_msg##_isl, &nfd_cfg_sig_svc_me##_isl,    \
@@ -83,7 +69,9 @@ do {                                                                    \
         local_csr_write(NFP_MECSR_MAILBOX_2, cfg_bar_data##_isl[0]);    \
         local_csr_write(NFP_MECSR_MAILBOX_3, cfg_bar_data##_isl[1]);    \
                                                                         \
-        MSIX_CFG_MSG_PROC_IND(_isl);                                    \
+        msix_reconfig(_isl, cfg_msg##_isl.vnic,                         \
+                      NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),        \
+                      cfg_bar_data##_isl);                              \
                                                                         \
         /* Complete the message */                                      \
         cfg_msg##_isl.msg_valid = 0;                                    \
@@ -143,9 +131,6 @@ main(void)
         }
     }
 
-
-#ifdef SVC_ME_MSIX_EN
-
 #ifdef NFD_PCIE0_EMEM
     if (ctx() == 1) {
         msix_qmon_init(0);
@@ -172,8 +157,6 @@ main(void)
         msix_qmon_init(3);
         msix_qmon_loop(3);
     }
-#endif
-
 #endif
 
     /* Catch and kill unused threads */
