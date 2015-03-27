@@ -63,7 +63,7 @@
 #define NFP_NET_RXR_MASK                (NFP_NET_RXR_MAX - 1)
 
 /**
- * Read/Write config words
+ * Read/Write config words (0x0000 - 0x002c)
  * @NFP_NET_CFG_CTRL:        Global control
  * @NFP_NET_CFG_UPDATE:      Indicate which fields are updated
  * @NFP_NET_CFG_TXRS_ENABLE: Bitmask of enabled TX rings
@@ -115,7 +115,7 @@
 #define NFP_NET_CFG_MACADDR             0x0024
 
 /**
- * Read-only words:
+ * Read-only words (0x0030 - 0x0058):
  * @NFP_NET_CFG_VERSION:     Firmware version number
  * @NFP_NET_CFG_STS:         Status
  * @NFP_NET_CFG_CAP:         Capabilities (same bits as @NFP_NET_CFG_CTRL)
@@ -124,6 +124,7 @@
  * @NFP_NET_MAX_MTU:         Maximum support MTU
  * @NFP_NET_CFG_START_TXQ:   Start Queue Control Queue to use for TX (PF only)
  * @NFP_NET_CFG_START_RXQ:   Start Queue Control Queue to use for RX (PF only)
+ * @NFP_NET_CFG_SPARE_ADDR:  DMA address for ME code to use (e.g. YDS-155 fix)
  *
  * TODO:
  * - define more STS bits
@@ -138,15 +139,17 @@
 /* Next two words are being used by VFs for solving THB350 issue */
 #define NFP_NET_CFG_START_TXQ           0x0048
 #define NFP_NET_CFG_START_RXQ           0x004c
-
-/*
- * YDS-155 workaround for the NFP-3200
- * @NFP_NET_CFG_SPARE_ADDR:  Host DMA address for ME code to use as it likes
- */
-#define NFP_NET_CFG_SPARE_ADDR          0x0060
+#define NFP_NET_CFG_SPARE_ADDR          0x0050
 
 /**
- * RSS configuration (only when NFP_NET_CFG_CTRL_RSS is enabled)
+ * 64B reserved for future use (0x0080 - 0x00c0)
+ */
+#define NFP_NET_CFG_RESERVED            0x0080
+#define NFP_NET_CFG_RESERVED_SZ         0x0040
+
+/**
+ * RSS configuration (0x0100 - 0x01ac):
+ * Used only when NFP_NET_CFG_CTRL_RSS is enabled
  * @NFP_NET_CFG_RSS_CFG:     RSS configuration word
  * @NFP_NET_CFG_RSS_KEY:     RSS "secret" key
  * @NFP_NET_CFG_RSS_ITBL:    RSS indirection table
@@ -169,13 +172,14 @@
 #define NFP_NET_CFG_RSS_ITBL_SZ         0x80
 
 /**
- * TX ring configuration
+ * TX ring configuration (0x200 - 0x800)
  * @NFP_NET_CFG_TXR_BASE:    Base offset for TX ring configuration
- * @NFP_NET_CFG_TXR_ADDR:    Offset of host address for TX ring _x
- * @NFP_NET_CFG_TXR_WB_ADDR: Offset of host addr for TX ring _x ptr write back
- * @NFP_NET_CFG_TXR_SZ:      Offset to configure size for ring _x
- * @NFP_NET_CFG_TXR_VEC:     Offset to set MSI-X table entry for ring _x
- * @NFP_NET_CFG_TXR_PRIO:    Offset to set per TX ring priorities for ring _x.
+ * @NFP_NET_CFG_TXR_ADDR:    Per TX ring DMA address (8B entries)
+ * @NFP_NET_CFG_TXR_WB_ADDR: Per TX ring write back DMA address (8B entries)
+ * @NFP_NET_CFG_TXR_SZ:      Per TX ring ring size (1B entries)
+ * @NFP_NET_CFG_TXR_VEC:     Per TX ring MSI-X table entry (1B entries)
+ * @NFP_NET_CFG_TXR_PRIO:    Per TX ring priority (1B entries)
+ * @NFP_NET_CFG_TXR_IRQ_MOD: Per TX ring interrupt moderation (4B entries)
  */
 #define NFP_NET_CFG_TXR_BASE            0x0200
 #define NFP_NET_CFG_TXR_ADDR(_x)        (NFP_NET_CFG_TXR_BASE + ((_x) * 0x8))
@@ -184,25 +188,29 @@
 #define NFP_NET_CFG_TXR_SZ(_x)          (NFP_NET_CFG_TXR_BASE + 0x400 + (_x))
 #define NFP_NET_CFG_TXR_VEC(_x)         (NFP_NET_CFG_TXR_BASE + 0x440 + (_x))
 #define NFP_NET_CFG_TXR_PRIO(_x)        (NFP_NET_CFG_TXR_BASE + 0x480 + (_x))
+#define NFP_NET_CFG_TXR_IRQ_MOD(_x)     (NFP_NET_CFG_TXR_BASE + 0x500 + (_x))
 
 /**
- * RX ring configuration
+ * RX ring configuration (0x0800 - 0x0c00)
  * @NFP_NET_CFG_RXR_BASE:    Base offset for RX ring configuration
- * @NFP_NET_CFG_RXR_ADDR:    Offset of host address for RX ring _x
- * @NFP_NET_CFG_RXR_SZ:      Offset to configure size for ring _x
- * @NFP_NET_CFG_RXR_VEC:     Offset to set MSI-X table entry for ring _x
- * @NFP_NET_CFG_TXR_PRIO:    Offset to set per RX ring priorities for ring _x.
+ * @NFP_NET_CFG_RXR_ADDR:    Per TX ring DMA address (8B entries)
+ * @NFP_NET_CFG_RXR_SZ:      Per TX ring ring size (1B entries)
+ * @NFP_NET_CFG_RXR_VEC:     Per TX ring MSI-X table entry (1B entries)
+ * @NFP_NET_CFG_RXR_PRIO:    Per TX ring priority (1B entries)
+ * @NFP_NET_CFG_RXR_IRQ_MOD: Per TX ring interrupt moderation (4B entries)
  */
 #define NFP_NET_CFG_RXR_BASE            0x0800
 #define NFP_NET_CFG_RXR_ADDR(_x)        (NFP_NET_CFG_RXR_BASE + ((_x) * 0x8))
 #define NFP_NET_CFG_RXR_SZ(_x)          (NFP_NET_CFG_RXR_BASE + 0x200 + (_x))
 #define NFP_NET_CFG_RXR_VEC(_x)         (NFP_NET_CFG_RXR_BASE + 0x240 + (_x))
 #define NFP_NET_CFG_RXR_PRIO(_x)        (NFP_NET_CFG_RXR_BASE + 0x280 + (_x))
+#define NFP_NET_CFG_RXR_IRQ_MOD(_x)     (NFP_NET_CFG_RXR_BASE + 0x300 + (_x))
 
 /**
- * General device stats (all counters are 64bit)
+ * General device stats (0x0c00 - 0x0c90)
+ * all counters are 64bit.
  */
-#define NFP_NET_CFG_STATS_BASE          0x0b00
+#define NFP_NET_CFG_STATS_BASE          0x0c00
 
 #define NFP_NET_CFG_STATS_RX_DISCARDS   (NFP_NET_CFG_STATS_BASE + 0x00)
 #define NFP_NET_CFG_STATS_RX_ERRORS     (NFP_NET_CFG_STATS_BASE + 0x08)
@@ -225,7 +233,8 @@
 #define NFP_NET_CFG_STATS_TX_BC_FRAMES  (NFP_NET_CFG_STATS_BASE + 0x88)
 
 /**
- * Per ring stats (optional)
+ * Per ring stats (0x1000 - 0x1800)
+ * options, 64bit per entry
  * @NFP_NET_CFG_TXR_STATS:   TX ring statistics (Packet and Byte count)
  * @NFP_NET_CFG_RXR_STATS:   RX ring statistics (Packet and Byte count)
  */
