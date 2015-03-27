@@ -58,6 +58,9 @@ __intrinsic void  __qc_read(unsigned char pcie_isl, unsigned int queue,
                             enum qc_ptr_type ptr,
                             __xread unsigned int *value,
                             sync_t sync, SIGNAL *sig);
+__intrinsic unsigned int qc_read(unsigned char pcie_isl, unsigned int queue,
+                                 enum qc_ptr_type ptr);
+
 
 /**
  * Write QC configuration and status, or pointer only, for one queue
@@ -75,6 +78,7 @@ __intrinsic void  __qc_read(unsigned char pcie_isl, unsigned int queue,
 __intrinsic void __qc_write(unsigned char pcie_isl, unsigned int queue,
                             __xwrite unsigned int *value,
                             unsigned int offset, sync_t sync, SIGNAL *sig);
+
 
 /**
  * Initialise a queue controller queue using the supplied configuration

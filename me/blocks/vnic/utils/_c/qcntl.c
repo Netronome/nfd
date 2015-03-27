@@ -42,6 +42,17 @@ __qc_read(unsigned char pcie_isl, unsigned int queue, enum qc_ptr_type ptr,
     }
 }
 
+__intrinsic unsigned int
+qc_read(unsigned char pcie_isl, unsigned int queue, enum qc_ptr_type ptr)
+{
+    __xread unsigned int xfer;
+    SIGNAL sig;
+
+    __qc_read(pcie_isl, queue, ptr, &xfer, ctx_swap, &sig);
+    return xfer;
+}
+
+
 /* XXX This method could possibly be generalised and moved to libnfp.h */
 __intrinsic void
 __qc_write(unsigned char pcie_isl, unsigned int queue,
