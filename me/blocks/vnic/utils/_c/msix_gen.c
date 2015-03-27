@@ -33,7 +33,6 @@
 
 #define MAX_QUEUE_NUM (NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1)
 #define MAX_NUM_PCI_ISLS 4
-#define _AUTO_MASK 1   /* should come from config */
 
 /*
  * Return if a given queue belongs to the PF (or not).
@@ -57,6 +56,7 @@
  * - @msix_tx_enabled: Bitmask of which TX queues are enabled
  * - @msix_rx_pending: Bitmask of which RX queues have pending interrupts
  * - @msix_tx_pending: Bitmask of which TX queues have pending interrupts
+ * - @msix_automask:   Bitmask of which RX/TX queues should automask MSI-X
  *
  * - @msix_rx_entries: Indexed by RX Q, MSI-X table entry for this Q
  * - @msix_tx_entries: Indexed by TX Q, MSI-X table entry for this Q
@@ -73,6 +73,7 @@ __shared __gpr static uint64_t msix_rx_enabled[MAX_NUM_PCI_ISLS];
 __shared __gpr static uint64_t msix_tx_enabled[MAX_NUM_PCI_ISLS];
 __shared __gpr static uint64_t msix_rx_pending[MAX_NUM_PCI_ISLS];
 __shared __gpr static uint64_t msix_tx_pending[MAX_NUM_PCI_ISLS];
+__shared __gpr static uint64_t msix_automask[MAX_NUM_PCI_ISLS];
 
 __shared __lmem uint8_t msix_rx_entries[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
 __shared __lmem uint8_t msix_tx_entries[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
@@ -80,12 +81,16 @@ __shared __lmem uint32_t msix_prev_rx_cnt[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
 __shared __lmem uint32_t msix_prev_tx_cnt[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
 
 #ifdef NFD_SVC_MSIX_DEBUG
+#define NFD_MSIX_DBG(_x) _x
 __export __cls volatile uint64_t nfd_msix_rx_enabled[MAX_NUM_PCI_ISLS];
 __export __cls volatile uint64_t nfd_msix_rx_qmask[MAX_NUM_PCI_ISLS];
 __export __cls volatile uint64_t nfd_msix_rx_new[MAX_NUM_PCI_ISLS];
 __export __cls volatile uint64_t nfd_msix_tx_enabled[MAX_NUM_PCI_ISLS];
 __export __cls volatile uint64_t nfd_msix_tx_qmask[MAX_NUM_PCI_ISLS];
 __export __cls volatile uint64_t nfd_msix_tx_new[MAX_NUM_PCI_ISLS];
+__export __cls volatile uint64_t nfd_msix_automask[MAX_NUM_PCI_ISLS];
+#else
+#define NFD_MSIX_DBG(_x)
 #endif
 
 /*
@@ -253,17 +258,12 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
         __no_swap_end();
     }
 
-#ifdef NFD_SVC_MSIX_DEBUG
-    if (rx_rings) {
-        nfd_msix_rx_qmask[pcie_isl] = vf_queue_mask;
-        nfd_msix_rx_new[pcie_isl] = queues;
-        nfd_msix_rx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl];
-    } else {
-        nfd_msix_tx_qmask[pcie_isl] = vf_queue_mask;
-        nfd_msix_tx_new[pcie_isl] = queues;
-        nfd_msix_tx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl];
-    }
-#endif
+    NFD_MSIX_DBG(nfd_msix_rx_qmask[pcie_isl] = vf_queue_mask);
+    NFD_MSIX_DBG(nfd_msix_rx_new[pcie_isl] = queues);
+    NFD_MSIX_DBG(nfd_msix_rx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl]);
+    NFD_MSIX_DBG(nfd_msix_tx_qmask[pcie_isl] = vf_queue_mask);
+    NFD_MSIX_DBG(nfd_msix_tx_new[pcie_isl] = queues);
+    NFD_MSIX_DBG(nfd_msix_tx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl]);
 }
 
 
@@ -287,6 +287,7 @@ msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
 
     uint64_t vf_tx_rings_new;
     uint64_t vf_rx_rings_new;
+    uint64_t queues;
 
     control = cfg_bar_data[NS_VNIC_CFG_CTRL_IDX];
     update = cfg_bar_data[NS_VNIC_CFG_UPDATE_IDX];
@@ -317,6 +318,18 @@ msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
         vf_rx_rings_new &= MSIX_VF_RINGS_MASK;
     }
 
+    /* Set MSI-X automask bits.  We assume that a VF/PF has the same
+     * number of RX and TX rings and simple set the auto-mask bits for
+     * all queues of the VF/PF depending on the auto-mask bit in the
+     * control word. */
+    queues = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
+    if (control & NS_VNIC_CFG_CTRL_MSIXAUTO)
+        msix_automask[pcie_isl] |= queues;
+    else
+        msix_automask[pcie_isl] &= ~queues;
+    NFD_MSIX_DBG(nfd_msix_automask[pcie_isl] = msix_automask[pcie_isl]);
+
+    /* Reconfigure the RX/TX ring state */
     msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 1, vf_rx_rings_new);
     msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 0, vf_rx_rings_new);
 }
@@ -396,12 +409,14 @@ msix_qmon_loop(unsigned int pcie_isl)
             /* Attempt to send an interrupt */
             if (MSIX_Q_IS_PF(qnum)) {
                 ret = msix_pf_send(pcie_isl + 4,
-                                   msix_rx_entries[pcie_isl][qnum], _AUTO_MASK);
+                                   msix_rx_entries[pcie_isl][qnum],
+                                   msix_automask[pcie_isl] & (1ull << qnum));
             } else {
                 vf_num = qnum / NFD_MAX_VF_QUEUES;
 
                 ret = msix_vf_send(pcie_isl + 4, vf_num,
-                                   msix_rx_entries[pcie_isl][qnum], _AUTO_MASK);
+                                   msix_rx_entries[pcie_isl][qnum],
+                                   msix_automask[pcie_isl] & (1ull << qnum));
             }
 
             /* If successful, remove from the pending list */
