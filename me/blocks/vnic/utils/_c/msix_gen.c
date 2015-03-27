@@ -192,7 +192,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
         reg_cp(ring_entries, ring_entries_r, sizeof(ring_entries));
     }
 
-    /* Update the interrupt vector data, ie the MSI-X table entry
+    /* Update the interrupt vector data, i.e. the MSI-X table entry
      * number, for all active rings. */
     rings = vf_rings;
     while (rings) {
@@ -376,54 +376,106 @@ msix_get_rx_queue_cnt(unsigned int pcie_nr, unsigned int queue)
     return rdata;
 }
 
+
+/*
+ * Attempt to send an MSI-X for a given queue
+ * @pcie_isl:  PCIe Island number
+ * @qnum:      Queue number
+ * @rx_queue:  Boolean, set if this is for an RX queue, TX queue otherwise
+ */
+static int
+msix_send_q_irq(unsigned int pcie_isl, int qnum, int rx_queue)
+{
+    unsigned int automask;
+    unsigned int entry;
+    int vf_num;
+    int ret;
+
+    if (rx_queue)
+        entry = msix_rx_entries[pcie_isl][qnum];
+    else
+        entry = msix_tx_entries[pcie_isl][qnum];
+
+    /* Should we automask for this queue? */
+    automask = msix_automask[pcie_isl] & (1ull << qnum);
+
+    if (MSIX_Q_IS_PF(qnum)) {
+        ret = msix_pf_send(pcie_isl + 4, entry, automask);
+    } else {
+        vf_num = qnum / NFD_MAX_VF_QUEUES;
+        ret = msix_vf_send(pcie_isl + 4, vf_num, entry, automask);
+    }
+
+    return ret;
+}
+
+
 void
 msix_qmon_loop(unsigned int pcie_isl)
 {
-    unsigned int int_is_masked;
-    int qnum, vf_num;
-
+    int qnum;
     uint32_t rx_cnt;
+    uint64_t pending;
 
     int ret;
 
-    for (;;) {
-        for (qnum = 0; qnum <= MAX_QUEUE_NUM; qnum++) {
 
-            /* Skip if queue is not active */
+    for (;;) {
+
+        /*
+         * Handle RX queues:
+         *
+         * We check for all active RX queues and if their packet count
+         * changed immediately try to send an MSI-X.
+         */
+        for (qnum = 0; qnum <= MAX_QUEUE_NUM; qnum++) {
+            /* Skip if no queues are enabled or a queue is not enabled */
+            if (!msix_rx_enabled[pcie_isl])
+                break;
             if (!(msix_rx_enabled[pcie_isl] & (1ull << qnum)))
                 continue;
 
-            /* Check if new packets got received on queue and mark in
-             * pending if */
+            /* Check if queue got new packets and try to send MSI-X if so */
             rx_cnt = msix_get_rx_queue_cnt(pcie_isl + 4, qnum);
-
             if (rx_cnt != msix_prev_rx_cnt[pcie_isl][qnum]) {
-                msix_rx_pending[pcie_isl] |= (1ull << qnum);
+                ret = msix_send_q_irq(pcie_isl, qnum, 1);
+
+                /* If un-successful, mark queue in the pending mask,
+                 * else remove it from the pending mask. */
+                if (ret)
+                    msix_rx_pending[pcie_isl] |= (1ull << qnum);
+                else
+                    msix_rx_pending[pcie_isl] &= ~(1ull << qnum);
+
+                /* Update the count to the new value */
                 msix_prev_rx_cnt[pcie_isl][qnum] = rx_cnt;
             }
+        }
 
-            /* If queue has no pending interrupts, go to next */
-            if (!(msix_rx_pending[pcie_isl] & (1ull << qnum)))
+        /*
+         * Handle Pending interrupts.
+         * RX first
+         */
+        pending = msix_rx_pending[pcie_isl];
+        while (pending) {
+            qnum = ffs64(pending);
+            pending &= ~(1ull << qnum);
+
+            /* If the Queue got disabled in the meantime, skip it */
+            if (!(msix_rx_enabled[pcie_isl] & (1ull << qnum)))
                 continue;
 
-            /* Attempt to send an interrupt */
-            if (MSIX_Q_IS_PF(qnum)) {
-                ret = msix_pf_send(pcie_isl + 4,
-                                   msix_rx_entries[pcie_isl][qnum],
-                                   msix_automask[pcie_isl] & (1ull << qnum));
-            } else {
-                vf_num = qnum / NFD_MAX_VF_QUEUES;
+            /* MAYBE TODO: We could check here if the packet count has
+             * increased and update the local state  */
 
-                ret = msix_vf_send(pcie_isl + 4, vf_num,
-                                   msix_rx_entries[pcie_isl][qnum],
-                                   msix_automask[pcie_isl] & (1ull << qnum));
-            }
-
-            /* If successful, remove from the pending list */
+            /* Try to send MSI-X. If successful remove from pending */
+            ret = msix_send_q_irq(pcie_isl, qnum, 1);
             if (!ret)
                 msix_rx_pending[pcie_isl] &= ~(1ull << qnum);
         }
 
+        /* In the loop above we perform sufficient IO for others to
+         * run, but give them another chance here. */
         ctx_swap();
     }
 }
