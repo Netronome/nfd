@@ -520,6 +520,7 @@ issue_dma()
 
     struct nfd_in_batch_desc batch;
     unsigned int queue;
+    unsigned int num;
 
     __implicit_write(&jumbo0);
     __implicit_write(&jumbo1);
@@ -583,15 +584,16 @@ issue_dma()
      * just yet. */
 
     queue = batch.queue;
+    num = batch.num;
     data_dma_seq_issued++;
 
     issued_tmp.sp0 = 0;
-    issued_tmp.num_batch = batch.num;   /* Only needed in pkt0 */
+    issued_tmp.num_batch = num;   /* Only needed in pkt0 */
     issued_tmp.sp1 = 0;
     issued_tmp.q_num = queue;
 
     /* Maybe add "full" bit */
-    if (batch.num == 4) {
+    if (num == 4) {
         /* Full batches are the critical path */
         /* XXX maybe tricks with an extra nfd_in_dma_state
          * struct would convince nfcc to use one set LM index? */
@@ -600,19 +602,19 @@ issue_dma()
         _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(3, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-    } else if (batch.num == 3) {
+    } else if (num == 3) {
         _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(2, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
 
         _ISSUE_CLR(3);
-    } else if (batch.num == 2) {
+    } else if (num == 2) {
         _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(1, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
 
         _ISSUE_CLR(2);
         _ISSUE_CLR(3);
-    } else if (batch.num == 1) {
+    } else if (num == 1) {
         _ISSUE_PROC(0, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
 
         _ISSUE_CLR(1);
