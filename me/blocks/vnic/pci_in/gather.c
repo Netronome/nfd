@@ -102,7 +102,7 @@ gather_setup()
  * A batch message is placed in the next-neighbour ring for the ME, and the
  * descriptors are DMA'ed into the next slot in the CLS "desc_ring".
  */
-int
+__forceinline int
 gather()
 {
     int ret;

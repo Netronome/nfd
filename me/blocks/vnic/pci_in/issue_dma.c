@@ -509,7 +509,7 @@ do {                                                                    \
  * "data_dma_seq_issued" indicate that it is safe to continue.  Two ordering
  * stages ensure that packet DMAs are issued in sequence.
  */
-void
+__forceinline void
 issue_dma()
 {
     static __xread struct _tx_desc_batch tx_desc;

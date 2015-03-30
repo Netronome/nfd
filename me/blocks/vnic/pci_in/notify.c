@@ -231,7 +231,7 @@ do {                                                                    \
  * (EOP bit set).  A count of the total number of descriptors in the batch is
  * added by the "issue_dma" block.
  */
-void
+__forceinline void
 notify()
 {
 
