@@ -549,10 +549,11 @@ issue_dma()
 
     reorder_done_opt(&next_ctx, &desc_order_sig);
 
+#ifdef NFD_ERROR_CHCECKING
     if (nn_ring_empty()) {
         halt();          /* A serious error has occurred */
     }
-
+#endif
     /*
      * Increment gather_dma_seq_serv upfront to avoid ambiguity
      * about sequence number zero
