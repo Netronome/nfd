@@ -280,6 +280,8 @@ do {                                                                    \
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     unsigned int dma_len;                                               \
+    __gpr unsigned int buf_addr;                                        \
+    __gpr unsigned int curr_buf;                                        \
                                                                         \
     /* THS-54 workaround, round DMA up to next 4B multiple size */      \
     dma_len = ((tx_desc.pkt##_pkt##.dma_len + NFD_IN_DATA_ROUND - 1) &  \
@@ -290,10 +292,11 @@ do {                                                                    \
         __critical_path();                                              \
                                                                         \
         /* Set NFP buffer address and offset */                         \
-        issued_tmp.buf_addr = precache_bufs_use();                      \
-        _ISSUE_PROC_MU_CHK(issued_tmp.buf_addr);                        \
-        descr_tmp.cpp_addr_hi = issued_tmp.buf_addr>>21;                \
-        descr_tmp.cpp_addr_lo = issued_tmp.buf_addr<<11;                \
+        buf_addr = precache_bufs_use();                                 \
+        issued_tmp.buf_addr = buf_addr;                                 \
+        _ISSUE_PROC_MU_CHK(buf_addr);                                   \
+        descr_tmp.cpp_addr_hi = buf_addr>>21;                           \
+        descr_tmp.cpp_addr_lo = buf_addr<<11;                           \
         descr_tmp.cpp_addr_lo += NFD_IN_DATA_OFFSET;                    \
         descr_tmp.cpp_addr_lo -= tx_desc.pkt##_pkt##.offset;            \
                                                                         \
@@ -408,20 +411,22 @@ do {                                                                    \
             /* Initialise continuation data */                          \
                                                                         \
             /* XXX check efficiency */                                  \
-            queue_data[queue].curr_buf = precache_bufs_use();           \
-            _ISSUE_PROC_MU_CHK(queue_data[queue].curr_buf);             \
+            curr_buf = precache_bufs_use();                             \
+            _ISSUE_PROC_MU_CHK(curr_buf);                               \
             queue_data[queue].cont = 1;                                 \
             queue_data[queue].offset = NFD_IN_DATA_OFFSET;              \
             queue_data[queue].offset -= tx_desc.pkt##_pkt##.offset;     \
+            queue_data[queue].curr_buf = curr_buf;                      \
         }                                                               \
+        curr_buf = queue_data[queue].curr_buf;                          \
                                                                         \
         /* Use continuation data */                                     \
-        descr_tmp.cpp_addr_hi = queue_data[queue].curr_buf>>21;         \
-        descr_tmp.cpp_addr_lo = queue_data[queue].curr_buf<<11;         \
+        descr_tmp.cpp_addr_hi = curr_buf>>21;                           \
+        descr_tmp.cpp_addr_lo = curr_buf<<11;                           \
         descr_tmp.cpp_addr_lo += queue_data[queue].offset;              \
         queue_data[queue].offset += dma_len;                            \
                                                                         \
-        issued_tmp.buf_addr = queue_data[queue].curr_buf;               \
+        issued_tmp.buf_addr = curr_buf;                                 \
                                                                         \
         if (tx_desc.pkt##_pkt##.eop) {                                  \
             /* Clear continuation data on EOP */                        \
