@@ -93,6 +93,7 @@ static SIGNAL_MASK wait_msk;
 
 static SIGNAL jumbo0, jumbo1;
 static SIGNAL_MASK jumbo_msk = 0;
+unsigned int next_ctx;
 
 /* Configure the NN ring */
 NN_RING_ZERO_PTRS;
@@ -239,6 +240,7 @@ issue_dma_setup()
     /* wait_msk initially only needs tx_desc_sig and dma_order_sig
      * No DMAs or messages have been issued at this stage */
     wait_msk = __signals(&tx_desc_sig, &dma_order_sig);
+    next_ctx = reorder_get_next_ctx(NFD_IN_ISSUE_START_CTX);
 }
 
 /* XXX temporarily enable _ISSUE_PROC_MU_CHK even without debug checks.
@@ -545,7 +547,7 @@ issue_dma()
         ctx_swap(); /* Yield while waiting for work */
     }
 
-    reorder_done(NFD_IN_ISSUE_START_CTX, &desc_order_sig);
+    reorder_done_opt(&next_ctx, &desc_order_sig);
 
     if (nn_ring_empty()) {
         halt();          /* A serious error has occurred */
@@ -636,7 +638,7 @@ issue_dma()
     }
 
     /* We have finished processing the batch, let the next continue */
-    reorder_done(NFD_IN_ISSUE_START_CTX, &dma_order_sig);
+    reorder_done_opt(&next_ctx, &dma_order_sig);
 
     /* XXX THS-50 workaround */
     /* cls_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, */
