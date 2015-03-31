@@ -347,7 +347,9 @@ do {                                                                    \
         }                                                               \
                                                                         \
         /* Issue final DMA for the packet */                            \
-        pcie_dma_set_event(&descr_tmp, _type, _src);                    \
+        /* mode_sel and dma_mode set replaced pcie_dma_set_event */     \
+        descr_tmp.mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;               \
+        descr_tmp.dma_mode = (((_type & 0xF) << 12) | (_src & 0xFFF));  \
         descr_tmp.length = dma_len - 1;                                 \
         dma_out.pkt##_pkt## = descr_tmp;                                \
                                                                         \
@@ -384,8 +386,10 @@ do {                                                                    \
             descr_tmp.cpp_addr_lo = 0;                                  \
             descr_tmp.pcie_addr_hi = 0;                                 \
             descr_tmp.pcie_addr_lo = 0;                                 \
-            pcie_dma_set_event(&descr_tmp, NFD_IN_DATA_EVENT_TYPE,      \
-                               data_dma_seq_issued);                    \
+            /* mode_sel and dma_mode set replaced pcie_dma_set_event */ \
+            descr_tmp.mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;           \
+            descr_tmp.dma_mode = (((NFD_IN_DATA_EVENT_TYPE & 0xF) << 12)\
+                                    | (data_dma_seq_issued & 0xFFF));   \
             descr_tmp.length = 0;                                       \
                                                                         \
             descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG_SIG_ONLY;     \
@@ -479,7 +483,9 @@ do {                                                                    \
         }                                                               \
                                                                         \
         /* Issue final DMA for the packet */                            \
-        pcie_dma_set_event(&descr_tmp, _type, _src);                    \
+        /* mode_sel and dma_mode set replaced pcie_dma_set_event */     \
+        descr_tmp.mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;               \
+        descr_tmp.dma_mode = (((_type & 0xF) << 12) | (_src & 0xFFF));  \
         descr_tmp.length = dma_len - 1;                                 \
         dma_out.pkt##_pkt## = descr_tmp;                                \
                                                                         \
