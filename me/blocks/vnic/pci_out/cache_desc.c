@@ -73,7 +73,18 @@ __shared __gpr struct qc_bitmask urgent_bmsk;
 /*
  * Memory for PCI.OUT
  */
-__shared __lmem struct nfd_out_queue_info queue_data[NFD_OUT_MAX_QUEUES];
+/*
+ * For PCI.OUT ME0, queue_data is forced to LMEM 0 so that it can be
+ * accessed more efficiently.  We allocate the memory via the
+ * ".alloc_mem lmem+offset" notation, and then declare queue_data
+ * as a pointer, which we set to zero.
+ * XXX NFCC doesn't seem to acknowledge linker allocated LMEM,
+ * so we also specify -Qlm_start=512 on the command line to reserve
+ * the LMEM from NFCC's perspective.
+ */
+__asm { .alloc_mem queue_data_mem lmem+0 me             \
+        (NFD_OUT_QUEUE_INFO_SZ * NFD_OUT_MAX_QUEUES)};
+__shared __lmem struct nfd_out_queue_info *queue_data;
 
 __shared __lmem unsigned int fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
 
@@ -159,6 +170,8 @@ void
 cache_desc_setup_shared()
 {
     struct pcie_dma_cfg_one cfg;
+
+    queue_data = 0;
 
     /* Zero bitmasks */
     init_bitmasks(&active_bmsk);
@@ -251,7 +264,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     queue_s = NFD_BUILD_NATQ(cfg_msg->vnic, queue_s);
     bmsk_queue = NFD_NATQ2BMQ(queue_s);
 
-    rxq.watermark    = NFP_QC_STS_HI_WATERMARK_16; /* XXX use 32 instead? */
+    rxq.watermark    = NFP_QC_STS_HI_WATERMARK_32; /* XXX Tune */
     rxq.event_data   = NFD_OUT_Q_EVENT_DATA;
     rxq.ptr          = 0;
 

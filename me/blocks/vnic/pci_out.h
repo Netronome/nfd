@@ -47,25 +47,21 @@ struct nfd_out_rx_desc {
  * The BLM queue for the MU buffer is selected by queue = ("nbi"<<2) | bls.
  * If BLM queues are shared between the NBIs, "nbi" should be set to zero.
  *
- * "sop" must be set for the first descriptor for a packet, and "eop" for the
- * final descriptor for a packet.  If "sop" is set, the descriptor will transfer
- * the first 4kB of the packet data (possibly as two DMAs).  If "sop" is not
- * set, the descriptor will transfer the balance of the packet data, also
- * possibly requiring two DMAs.
+ * Packets that are contained entirely in CTM must be flagged for fastpath
+ * processing by setting "ctm_only".
  */
 struct nfd_out_cpp_desc {
     union {
         struct {
             unsigned int isl:6;         /* CTM island, zero for MU only pkts */
-            unsigned int down:1;        /* Queue down, must be zero */
+            unsigned int ctm_only:1;    /* The packet is entirely in CTM */
             unsigned int pktnum:9;      /* CTM packet number */
-            unsigned int bls:2;         /* NBI buffer list */
-            unsigned int sop:1;         /* Set for start of packet */
-            unsigned int eop:1;         /* Set for end of packet */
-            unsigned int offset:12;     /* Offset where data starts in NFP */
-
             unsigned int split:2;       /* Split length allocated to the pkt */
+            unsigned int reserved:1;    /* Must be zero from application */
+            unsigned int offset:13;     /* Offset where data starts in NFP */
+
             unsigned int nbi:1;         /* NBI that received the pkt */
+            unsigned int bls:2;         /* NBI buffer list */
             unsigned int mu_addr:29;    /* Pkt MU address */
         };
         unsigned int __raw[2];
@@ -222,6 +218,17 @@ __intrinsic void nfd_out_fill_desc(__gpr struct nfd_out_input *desc,
                                    unsigned int pkt_start,
                                    unsigned int meta_len);
 
+/**
+ * Set "ctm_only" correctly based on other fields in "desc"
+ *
+ * This function will parse "desc" and compute whether the whole packet
+ * is held in the CTM buffer (if any).  If so, it will set "ctm_only" to 1.
+ * Accessing the necessary data from "desc" may be less efficient than
+ * setting "ctm_only" based on other context specific knowledge.  "ctm_only"
+ * may be set directly in these cases.
+ */
+__intrinsic void nfd_out_check_ctm_only(__gpr struct nfd_out_input *desc);
+
 
 __intrinsic void nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc,
                                     unsigned int vlan, unsigned int flags);
@@ -240,7 +247,7 @@ __intrinsic void nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc,
  * signalling with "sop" and "eop" appropriately.
  * */
 __intrinsic void __nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
-                                __xrw struct nfd_out_input desc_out[2],
+                                __xrw struct nfd_out_input *desc_out,
                                 __gpr struct nfd_out_input *desc,
                                 sync_t sync, SIGNAL_PAIR *sigpair);
 
@@ -253,7 +260,7 @@ __intrinsic void __nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
  * that indicate whether a "__nfd_out_send" call failed.  "desc_out" must have
  * been used in the "__nfd_out_send" call of interest, immediately before.
  */
-__intrinsic int nfd_out_send_test(__xrw struct nfd_out_input desc_out[2]);
+__intrinsic int nfd_out_send_test(__xrw struct nfd_out_input *desc_out);
 
 
 /**

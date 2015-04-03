@@ -189,6 +189,31 @@ nfd_out_fill_desc(__gpr struct nfd_out_input *desc, void *pkt_info,
 
 
 __intrinsic void
+nfd_out_check_ctm_only(__gpr struct nfd_out_input *desc)
+{
+    unsigned int ctm_bytes;
+    unsigned int dma_end;
+
+    /* Check whether this is an MU only packet.
+     * MU only packets can't be "ctm_only" */
+    if (desc->cpp.isl == 0) {
+        desc->cpp.ctm_only = 0;
+        return;
+    }
+
+    ctm_bytes = 256 << desc->cpp.split;
+    dma_end = desc->cpp.offset + desc->rxd.data_len;
+
+    /* Check whether the packet will spill over the end of the CTM buffer  */
+    if (ctm_bytes >= dma_end) {
+        desc->cpp.ctm_only = 1;
+    } else {
+        desc->cpp.ctm_only = 0;
+    }
+}
+
+
+__intrinsic void
 nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc, unsigned int vlan,
                    unsigned int flags)
 {
@@ -202,7 +227,7 @@ nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc, unsigned int vlan,
  * the calling applications is able to make. */
 __intrinsic void
 __nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
-               __xrw struct nfd_out_input desc_out[2],
+               __xrw struct nfd_out_input *desc_out,
                __gpr struct nfd_out_input *desc,
                sync_t sync, SIGNAL_PAIR *sigpair)
 {
@@ -220,35 +245,20 @@ __nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
     /* Complete the basic descriptor */
     desc->rxd.dd = 1;
     desc->rxd.queue = bmsk_queue;
-    desc->cpp.down = 0;
-    desc->cpp.sop = 1;
+    desc->cpp.reserved = 0;
+    *desc_out = *desc;
 
-    if (desc->rxd.data_len < 4096) {
-        desc->cpp.eop = 1;
-        desc_out[0] = *desc;
-
-        __mem_ring_put(rnum, raddr, desc_out, desc_sz, desc_sz,
-                       sig_done, sigpair);
-    } else {
-        desc->cpp.eop = 0;
-        desc_out[0] = *desc;
-
-        desc->cpp.sop = 0;
-        desc->cpp.eop = 1;
-        desc_out[1] = *desc;
-
-        __mem_ring_put(rnum, raddr, desc_out, 2 * desc_sz, 2 * desc_sz,
-                       sig_done, sigpair);
-    }
+    __mem_ring_put(rnum, raddr, desc_out, desc_sz, desc_sz,
+                   sig_done, sigpair);
 }
 
 
 __intrinsic int
-nfd_out_send_test(__xrw struct nfd_out_input desc_out[2])
+nfd_out_send_test(__xrw struct nfd_out_input *desc_out)
 {
     int result;
 
-    result = desc_out[0].cpp.__raw[0];
+    result = desc_out->cpp.__raw[0];
     return (result & (1 << 31)) ? (result << 2) : -1;
 }
 

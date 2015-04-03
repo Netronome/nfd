@@ -15,6 +15,7 @@ struct nfd_out_issue_dma_status {
     unsigned int data_dma_seq_compl;
     unsigned int data_dma_seq_served;
     unsigned int data_dma_seq_safe;
+    unsigned int data_dma_resv_avail;
 };
 
 

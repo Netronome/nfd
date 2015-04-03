@@ -25,7 +25,7 @@ extern __shared __gpr unsigned int data_dma_seq_issued;
 extern __shared __gpr unsigned int data_dma_seq_compl;
 extern __shared __gpr unsigned int data_dma_seq_served;
 extern __shared __gpr unsigned int data_dma_seq_safe;
-
+extern __shared __gpr unsigned int data_dma_resv_avail;
 
 /**
  * Xfers to display state
@@ -59,6 +59,7 @@ issue_dma_status()
         status_issued.data_dma_seq_compl = data_dma_seq_compl;
         status_issued.data_dma_seq_served = data_dma_seq_served;
         status_issued.data_dma_seq_safe = data_dma_seq_safe;
+        status_issued.data_dma_resv_avail = data_dma_resv_avail;
 
         /*
          * Reset the alarm

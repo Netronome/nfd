@@ -20,7 +20,7 @@
 /**
  * Per queue state to show
  */
-extern __shared __lmem struct nfd_out_queue_info queue_data[64];
+extern __shared __lmem struct nfd_out_queue_info *queue_data;
 
 
 /**

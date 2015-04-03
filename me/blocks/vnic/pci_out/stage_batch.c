@@ -47,7 +47,7 @@ struct _input_batch {
 /*
  * Variables "owned" by cache_desc
  */
-extern __shared __lmem struct nfd_out_queue_info queue_data[NFD_OUT_MAX_QUEUES];
+extern __shared __lmem struct nfd_out_queue_info *queue_data;
 extern __shared __gpr struct qc_bitmask urgent_bmsk;
 
 
@@ -132,7 +132,6 @@ __shared __gpr unsigned int full_cnt1 = 0;
 __shared __gpr unsigned int send_desc_msg_addr;
 __shared __gpr unsigned int send_desc_msg_sz_msk = NFD_OUT_RING_SZ - 1;
 __shared __gpr unsigned int send_desc_cpp_msk = 0xfc000fff;
-__shared __gpr unsigned int queue_data_base;
 __shared __gpr unsigned int inc_sent_msg_addr;
 
 unsigned int next_ctx;
@@ -266,51 +265,72 @@ _nn_put_msg(struct nfd_out_data_dma_info *msg)
 /**
  * Construct messages for the "data_batch_ring" and the "desc_batch_ring".
  *
- * The "desc_batch_ring" needs the queue number from the RX descriptor and
- * the "EOP" bit from the CPP descriptor.  If the queue is down, we signal
- * this to the descriptor DMA using the "EOP" bit.
+ * The "desc_batch_ring" only needs the queue number from the RX descriptor.
+ * "send_pktX" is set if the queue is up.  It determines whether the
+ * RX descriptor is DMAed to the host and the NFD_OUT_ATOMICS_SENT is
+ * incremented or not.
  *
  * The "data_batch_ring" needs the CPP descriptor and the address of a
- * freelist descriptor to use.  The freelist index is only advanced on
- * "EOP".  If the queue is down, the freelist index should not be advanced.
- * Marking the "down" bit will prevent the data DMA, but allow the buffer
- * to be freed as normal on "EOP".  For down queues, "SOP" is cleared to
- * push the packet off the fast path in the "issue_dma" block.
+ * freelist descriptor to use.  If the queue is down, the freelist index
+ * should not be advanced.  The "reserved" bit in the CPP descriptor is
+ * must be zero when received from the app, and is set to one if the queue
+ * is up.  This will allow the data DMA(s) to go to the host.  The buffer
+ * is always freed whether the queue is down or not.
  */
-#define _STAGE_BATCH_PROC(_pkt)                                         \
+/* XXX unclear why we can't accessin_batch.pkt3.rxd.__raw[0] in ASM  */
+#define _STAGE_BATCH_PROC(_pkt, _num)                                   \
 do {                                                                    \
-    queue = in_batch.pkt##_pkt##.rxd.queue;                             \
-    desc_batch_tmp.queue_pkt##_pkt = queue;                             \
-    queue_ptr = &queue_data[queue];                                     \
+    rx_desc_info = in_batch.pkt##_pkt##.rxd.__raw[0];                   \
+    __asm {                                                             \
+        __asm { alu[queue, NFD_OUT_RX_DESC_QUEUE_msk, and, rx_desc_info, \
+                    >>NFD_OUT_RX_DESC_QUEUE_shf] }                      \
+        __asm { alu[queue_ptr, --, b, queue, <<NFD_OUT_QUEUE_INFO_SZ_lg2] } \
+        __asm { local_csr_wr[active_lm_addr_2, queue_ptr] }             \
+        __asm { alu[desc_batch_tmp, desc_batch_tmp, or, queue,          \
+                    <<NFD_OUT_DESC_QUEUE_PKT##_pkt##_shf] }             \
+        __asm { alu[fl_index, fl_cache_mem_addr_lo, or, queue,          \
+                    <<NFD_OUT_FL_CACHE_Q_SZ_lg2] }                      \
                                                                         \
-    up = queue_ptr->up;                                                 \
-    desc_batch_tmp.send_pkt##_pkt = up;                                 \
+        __asm { br_inp_state[nn_full, sb_full1##_pkt##_num] }           \
+    sb_cont1##_pkt##_num:                                               \
+        __asm { alu[up, 1, AND, *l$index2[NFD_OUT_QUEUE_INFO_BITFIELD], \
+                    >>NFD_OUT_QUEUE_INFO_UP_shf] }                      \
+        __asm { alu[*n$index++, in_batch + (0 + 16 * _pkt), or, up,     \
+                    <<NFD_OUT_CPP_CTM_RESERVED_shf] }                   \
+        __asm { alu[*n$index++, --, b, in_batch + (4 + 16 * _pkt)] }    \
+        __asm { alu[desc_batch_tmp, desc_batch_tmp, or, up,             \
+                    <<NFD_OUT_DESC_SEND_PKT##_pkt##_shf] }              \
+        __asm { ld_field[rx_desc_info, 4,                               \
+                         *l$index2[NFD_OUT_QUEUE_INFO_BITFIELD],        \
+                         >>(NFD_OUT_QUEUE_INFO_RID_shf -                \
+                            NFD_OUT_RX_DESC_QUEUE_shf)] }               \
                                                                         \
-    while (nn_ring_full()) {                                            \
-        full_cnt1++;                                                    \
-        local_csr_write(NFP_MECSR_MAILBOX_1, full_cnt1);                \
-        ctx_swap();                                                     \
+        __asm { br_inp_state[nn_full, sb_full2##_pkt##_num] }           \
+    sb_cont2##_pkt##_num:                                               \
+                                                                        \
+        __asm { alu[*n$index++, --, b, rx_desc_info] }                  \
+        __asm { alu[used_seq, (NFD_OUT_FL_BUFS_PER_QUEUE - 1), and,     \
+                    *l$index2[NFD_OUT_QUEUE_INFO_FLU]] }                \
+        __asm { alu[*n$index++, fl_index, or, used_seq, <<3] }          \
+        __asm { alu[*l$index2[NFD_OUT_QUEUE_INFO_FLU],                  \
+                    *l$index2[NFD_OUT_QUEUE_INFO_FLU], +, up] }         \
+        __asm { br[sb_end##_pkt##_num] }                                \
+                                                                        \
+    sb_full1##_pkt##_num:                                               \
+        __asm { alu[full_cnt1, full_cnt1, +, 1] }                       \
+        __asm { local_csr_wr[NFP_MECSR_MAILBOX_1 >> 2, full_cnt1] }     \
+        __asm { ctx_arb[voluntary] }                                    \
+        __asm { br_inp_state[nn_full, sb_full1##_pkt##_num] }           \
+        __asm { br[sb_cont1##_pkt##_num] }                              \
+                                                                        \
+    sb_full2##_pkt##_num:                                               \
+        __asm { alu[full_cnt1, full_cnt1, +, 1] }                       \
+        __asm { local_csr_wr[NFP_MECSR_MAILBOX_1 >> 2, full_cnt1] }     \
+        __asm { ctx_arb[voluntary] }                                    \
+        __asm { br_inp_state[nn_full, sb_full2##_pkt##_num] }           \
+        __asm { br[sb_cont2##_pkt##_num] }                              \
+    sb_end##_pkt##_num:                                                 \
     }                                                                   \
-    data_batch_tmp.cpp = in_batch.pkt##_pkt##.cpp;                      \
-    data_batch_tmp.cpp.down = ~up;                                      \
-    nn_ring_put(data_batch_tmp.cpp.__raw[0]);                           \
-    nn_ring_put(data_batch_tmp.cpp.__raw[1]);                           \
-                                                                        \
-    while (nn_ring_full()) {                                            \
-        full_cnt1++;                                                    \
-        local_csr_write(NFP_MECSR_MAILBOX_1, full_cnt1);                \
-        ctx_swap();                                                     \
-    }                                                                   \
-    data_batch_tmp.__raw[2] = in_batch.pkt##_pkt##.rxd.__raw[0];        \
-    data_batch_tmp.rid = queue_data[queue].requester_id;                \
-    nn_ring_put(data_batch_tmp.__raw[2]);                               \
-                                                                        \
-    used_seq = queue_ptr->fl_u;                                         \
-    data_batch_tmp.fl_cache_index =                                     \
-        cache_desc_compute_fl_addr(&queue, used_seq);                   \
-    queue_ptr->fl_u += up;                                              \
-    nn_ring_put(data_batch_tmp.__raw[3]);                               \
-                                                                        \
 } while (0)
 
 
@@ -336,7 +356,10 @@ stage_batch()
 {
     __gpr unsigned int queue;
     unsigned int up, used_seq;
-    __shared __lmem struct nfd_out_queue_info *queue_ptr;
+    unsigned int rx_desc_info;
+    unsigned int queue_ptr;
+    unsigned int fl_index;
+    /* __shared __lmem struct nfd_out_queue_info *queue_ptr; */
     struct nfd_out_data_batch_msg data_batch_msg = {0};
     struct nfd_out_desc_batch_msg desc_batch_tmp;
     struct nfd_out_data_dma_info data_batch_tmp;
@@ -418,10 +441,10 @@ stage_batch()
         desc_batch_tmp.__raw = 4;
         nn_ring_put(data_batch_msg.__raw);
 
-        _STAGE_BATCH_PROC(0);
-        _STAGE_BATCH_PROC(1);
-        _STAGE_BATCH_PROC(2);
-        _STAGE_BATCH_PROC(3);
+        _STAGE_BATCH_PROC(0, 4);
+        _STAGE_BATCH_PROC(1, 4);
+        _STAGE_BATCH_PROC(2, 4);
+        _STAGE_BATCH_PROC(3, 4);
 
     } else {
         if (in_batch.pkt0.cpp.__raw[0] == 0) {
@@ -446,7 +469,7 @@ stage_batch()
             desc_batch_tmp.__raw = 1;
             nn_ring_put(data_batch_msg.__raw);
 
-            _STAGE_BATCH_PROC(0);
+            _STAGE_BATCH_PROC(0, 1);
 
             _STAGE_BATCH_CLR(1);
             _STAGE_BATCH_CLR(2);
@@ -458,8 +481,8 @@ stage_batch()
             desc_batch_tmp.__raw = 2;
             nn_ring_put(data_batch_msg.__raw);
 
-            _STAGE_BATCH_PROC(0);
-            _STAGE_BATCH_PROC(1);
+            _STAGE_BATCH_PROC(0, 2);
+            _STAGE_BATCH_PROC(1, 2);
 
             _STAGE_BATCH_CLR(2);
             _STAGE_BATCH_CLR(3);
@@ -470,9 +493,9 @@ stage_batch()
             desc_batch_tmp.__raw = 3;
             nn_ring_put(data_batch_msg.__raw);
 
-            _STAGE_BATCH_PROC(0);
-            _STAGE_BATCH_PROC(1);
-            _STAGE_BATCH_PROC(2);
+            _STAGE_BATCH_PROC(0, 3);
+            _STAGE_BATCH_PROC(1, 3);
+            _STAGE_BATCH_PROC(2, 3);
 
             _STAGE_BATCH_CLR(3);
 
@@ -598,11 +621,6 @@ send_desc_setup_shared()
     pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DESC_CFG_REG, cfg);
 
     /* XXX tidy up */
-    /* XXX referencing queue_data_base is a hack to get NFCC to
-     * allocate it at address 0 in LM.  NFCC itself can add in
-     * a constant as the queue starting offset when accessing LM, but if we
-     * compute addresses manually we can't. */
-    queue_data_base = &queue_data[0];
     send_desc_msg_addr = &desc_batch_msg[desc_batch_served];
     inc_sent_msg_addr = &desc_batch_msg[desc_batch_compl];
 }
@@ -639,48 +657,55 @@ send_desc_setup()
  * "send_desc_off" must be updated even if we don't actually DMA
  * the descriptor for a given packet.
  */
-#define SEND_DESC_PROC(_pkt)                                                \
-do {                                                                        \
-    if (msg & (1 << NFD_OUT_DESC_SEND_PKT##_pkt##_shf)) {                   \
-        __asm { alu[queue, NFD_OUT_DESC_QUEUE_msk, and, msg,                \
-                    >>NFD_OUT_DESC_QUEUE_PKT##_pkt##_shf] }                 \
-        __asm { alu[queue, --, b, queue, <<5] }                             \
-        __asm { local_csr_wr[(NFP_MECSR_ACTIVE_LM_ADDR_2 >> 2), queue] }    \
-        __asm { alu[desc_dma_issued, desc_dma_issued, +, 1] }               \
-        __asm { alu[send_desc_off, send_desc_off, and,                      \
-                    send_desc_msg_sz_msk] }                                 \
-        __asm { alu[dma_out + (16 * _pkt), send_desc_addr_lo, or,           \
-                    send_desc_off] }                                        \
-                                                                            \
-        /* PCIe addr lo */                                                  \
-        __asm { alu[pcie_addr_lo, --, b, *l$index2[2], <<3] }               \
-        __asm { alu[pcie_addr_lo, pcie_addr_lo, and, *l$index2[7], <<3] }   \
-        __asm { alu[*l$index2[7], *l$index2[7], +, 1] }                     \
-        __asm { alu[dma_out + (8 + 16 * _pkt), pcie_addr_lo, +,             \
-                    *l$index2[4]] }                                         \
-                                                                            \
-        /* PCIe addr hi */                                                  \
-        __asm { ld_field[descr_tmp + 12, 0001, *l$index2[3]] }              \
-        __asm { alu[dma_out + (12 + 16 * _pkt), descr_tmp + 12, or,         \
-                    *l$index2[3], >>(24-12)] }                              \
-                                                                            \
-        /* CPP addr hi */                                                   \
-        __asm { alu[descr_tmp + 4, descr_tmp + 4, and,                      \
-                    send_desc_cpp_msk] }                                    \
-        __asm { alu[dma_event, desc_dma_issued, and, send_desc_cpp_msk] }   \
-        /* __asm { br[send_done##_pkt##_num], defer[2] }    */              \
-        __asm { alu[dma_out + (4 + 16 * _pkt), descr_tmp + 4, or,           \
-                    dma_event, <<14] }                                      \
-                                                                            \
-        /* Issue DMA */                                                     \
-        __asm { pcie[write_pci, dma_out + (16 * _pkt), addr_hi, <<8, addr_lo, \
-                    4], sig_done[desc_sig##_pkt] }                          \
-                                                                            \
-    } else {                                                                \
-        desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);                   \
-    }                                                                       \
-    __asm { alu[send_desc_off, send_desc_off, +,                            \
-                sizeof(struct nfd_out_input)] }                             \
+#define SEND_DESC_PROC(_pkt)                                            \
+do {                                                                    \
+    if (msg & (1 << NFD_OUT_DESC_SEND_PKT##_pkt##_shf)) {               \
+        __asm { alu[queue, NFD_OUT_DESC_QUEUE_msk, and, msg,            \
+                    >>NFD_OUT_DESC_QUEUE_PKT##_pkt##_shf] }             \
+        __asm { alu[queue, --, b, queue, <<NFD_OUT_QUEUE_INFO_SZ_lg2] } \
+        __asm { local_csr_wr[(NFP_MECSR_ACTIVE_LM_ADDR_2 >> 2), queue] } \
+        __asm { alu[desc_dma_issued, desc_dma_issued, +, 1] }           \
+        __asm { alu[send_desc_off, send_desc_off, and,                  \
+                    send_desc_msg_sz_msk] }                             \
+        __asm { alu[dma_out + (16 * _pkt), send_desc_addr_lo, or,       \
+                    send_desc_off] }                                    \
+                                                                        \
+        /* PCIe addr lo */                                              \
+        __asm { alu[pcie_addr_lo, --, b,                                \
+                    *l$index2[NFD_OUT_QUEUE_INFO_RING_SZ_MSK],          \
+                    <<NFD_OUT_FL_ENTRY_SZ_lg2] }                        \
+        __asm { alu[pcie_addr_lo, pcie_addr_lo, and,                    \
+                    *l$index2[NFD_OUT_QUEUE_INFO_RXW],                  \
+                    <<NFD_OUT_FL_ENTRY_SZ_lg2] }                        \
+        __asm { alu[*l$index2[NFD_OUT_QUEUE_INFO_RXW],                  \
+                    *l$index2[NFD_OUT_QUEUE_INFO_RXW], +, 1] }          \
+        __asm { alu[dma_out + (8 + 16 * _pkt), pcie_addr_lo, +,         \
+                    *l$index2[NFD_OUT_QUEUE_INFO_RING_LO]] }            \
+                                                                        \
+        /* PCIe addr hi */                                              \
+        __asm { ld_field[descr_tmp + 12, 0001,                          \
+                         *l$index2[NFD_OUT_QUEUE_INFO_BITFIELD]] }      \
+        __asm { alu[dma_out + (12 + 16 * _pkt), descr_tmp + 12, or,     \
+                    *l$index2[NFD_OUT_QUEUE_INFO_BITFIELD],             \
+                    >>(NFD_OUT_QUEUE_INFO_RID_shf -                     \
+                       NFP_PCIE_DMA_CMD_RID_shf)] }                     \
+                                                                        \
+        /* CPP addr hi */                                               \
+        __asm { alu[descr_tmp + 4, descr_tmp + 4, and,                  \
+                    send_desc_cpp_msk] }                                \
+        __asm { alu[dma_event, desc_dma_issued, and, send_desc_cpp_msk] } \
+        __asm { alu[dma_out + (4 + 16 * _pkt), descr_tmp + 4, or,       \
+                    dma_event, <<NFP_PCIE_DMA_CMD_DMA_MODE_shf] }       \
+                                                                        \
+        /* Issue DMA */                                                 \
+        __asm { pcie[write_pci, dma_out + (16 * _pkt), addr_hi, <<8,    \
+                     addr_lo, 4], sig_done[desc_sig##_pkt] }            \
+                                                                        \
+    } else {                                                            \
+        desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);               \
+    }                                                                   \
+    __asm { alu[send_desc_off, send_desc_off, +,                        \
+                sizeof(struct nfd_out_input)] }                         \
 } while (0)
 
 /**
