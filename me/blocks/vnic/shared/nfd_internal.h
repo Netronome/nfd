@@ -49,8 +49,8 @@
 
 
 /* DMA defines */
-#define NFD_IN_GATHER_MAX_IN_FLIGHT 16
-#define NFD_IN_DATA_MAX_IN_FLIGHT   32
+#define NFD_IN_GATHER_MAX_IN_FLIGHT 32
+#define NFD_IN_DATA_MAX_IN_FLIGHT   128
 #define NFD_IN_GATHER_DMA_QUEUE     NFP_PCIE_DMA_FROMPCI_HI
 #define NFD_IN_DATA_DMA_QUEUE       NFP_PCIE_DMA_FROMPCI_LO
 #define NFD_IN_DATA_DMA_TOKEN       2
@@ -78,7 +78,7 @@
 #define NFD_OUT_Q_EVENT_DATA            (3<<4)
 
 /* Additional check queue constants */
-#define NFD_OUT_MAX_RETRIES             5
+#define NFD_OUT_MAX_RETRIES             2
 #define NFD_OUT_FL_BATCH_SZ             16   /* Match configured watermark! */
 
 
@@ -96,8 +96,8 @@
 
 /* DMA defines */
 #define NFD_OUT_FL_MAX_IN_FLIGHT        16
-#define NFD_OUT_DATA_MAX_IN_FLIGHT      64
-#define NFD_OUT_DESC_MAX_IN_FLIGHT      32
+#define NFD_OUT_DATA_MAX_IN_FLIGHT      128
+#define NFD_OUT_DESC_MAX_IN_FLIGHT      64
 #define NFD_OUT_FL_DMA_QUEUE            NFP_PCIE_DMA_FROMPCI_HI
 #define NFD_OUT_DATA_DMA_QUEUE          NFP_PCIE_DMA_TOPCI_LO
 #define NFD_OUT_DESC_DMA_QUEUE          NFP_PCIE_DMA_TOPCI_MED
@@ -118,8 +118,8 @@
 
 
 /* Ring defines */
-#define NFD_OUT_DESC_BATCH_RING_BAT     32
-#define NFD_OUT_CPP_BATCH_RING_BAT      32
+#define NFD_OUT_DESC_BATCH_RING_BAT     128
+#define NFD_OUT_CPP_BATCH_RING_BAT      64
 
 /* Debug defines */
 #define NFD_OUT_DBG_CACHE_DESC_INTVL    1000000
@@ -282,6 +282,16 @@ struct nfd_out_desc_batch_msg {
     };
 };
 
+#define NFD_OUT_DESC_SEND_PKT0_shf  31
+#define NFD_OUT_DESC_SEND_PKT1_shf  30
+#define NFD_OUT_DESC_SEND_PKT2_shf  29
+#define NFD_OUT_DESC_SEND_PKT3_shf  28
+#define NFD_OUT_DESC_QUEUE_PKT0_shf 22
+#define NFD_OUT_DESC_QUEUE_PKT1_shf 16
+#define NFD_OUT_DESC_QUEUE_PKT2_shf 10
+#define NFD_OUT_DESC_QUEUE_PKT3_shf 4
+#define NFD_OUT_DESC_QUEUE_msk      0x3f
+#define NFD_OUT_DESC_NUM_msk        0xf
 
 /**
  * Batch header used on the "stage_batch" to "issue_dma" NN ring
@@ -303,7 +313,8 @@ struct nfd_out_data_dma_info {
     union {
         struct {
             struct nfd_out_cpp_desc cpp;    /* CPP descriptor */
-            unsigned int meta_len:8;        /* Length of meta data prepended */
+            unsigned int dd:1;              /* Descriptor done, must be set */
+            unsigned int meta_len:7;        /* Length of meta data prepended */
             unsigned int rid:8;             /* Requester ID for the pkt */
             unsigned int data_len:16;       /* Total data length */
             unsigned int fl_cache_index;    /* FL descriptor index */

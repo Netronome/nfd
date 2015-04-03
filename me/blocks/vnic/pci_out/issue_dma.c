@@ -70,6 +70,9 @@ __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
 __shared __gpr unsigned int data_dma_seq_safe;
 
+__shared __gpr unsigned int empty_cnt0;
+__shared __gpr unsigned int empty_cnt1;
+
 /*
  * issue_dma variables
  */
@@ -87,6 +90,7 @@ static SIGNAL fl_sig0,  fl_sig1,  fl_sig2,  fl_sig3;
 static SIGNAL_MASK fl_wait_msk = 0;
 
 SIGNAL get_order_sig, issue_order_sig;
+unsigned int next_ctx;
 
 __visible volatile __xread unsigned int nfd_out_data_compl_refl_in = 0;
 __visible volatile SIGNAL nfd_out_data_compl_refl_sig;
@@ -180,6 +184,8 @@ issue_dma_setup()
     data_wait_msk = __signals(&get_order_sig);
     fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                             &issue_order_sig);
+
+    next_ctx = reorder_get_next_ctx(NFD_OUT_ISSUE_START_CTX);
 }
 
 
@@ -277,9 +283,6 @@ _get_ctm_addr(__gpr struct nfp_pcie_dma_cmd *descr,
  * Handle one descriptor in the batch, issuing the DMAs that it requires,
  * and passing the CPP descriptor on to the "free_buf" block.
  * There following affect processing:
- *      "SOP": if a packet is not "SOP" DMA addresses are offset
- *      to complete the packet.
- *      "EOP": if a packet is "EOP" we can neglect some checks on DMA size.
  *      MU only packets (cpp.isl == 0): do not DMA from CTM
  *      Queue "down": pass on CPP descriptor only
  */
@@ -288,7 +291,7 @@ do {                                                                    \
     descr_tmp.rid = in_batch.pkt##_pkt##.rid;                           \
     descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;              \
                                                                         \
-    if (in_batch.pkt##_pkt##.cpp.sop) {                                 \
+    if (!in_batch.pkt##_pkt##.cpp.down) {                               \
         __critical_path();                                              \
         if (in_batch.pkt##_pkt##.cpp.isl != 0) {                        \
             unsigned int split_len, ctm_bytes;                          \
@@ -307,16 +310,7 @@ do {                                                                    \
                 descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len; \
                 descr_tmp.pcie_addr_lo += ctm_bytes;                    \
                                                                         \
-                if (in_batch.pkt##_pkt##.cpp.eop) {                     \
-                    /* This packet is both sop and eop, which means it */ \
-                    /* can be completed with one DMA. */                \
-                    /* XXX make app subtract the 1? */                  \
-                    descr_tmp.length = in_batch.pkt##_pkt##.data_len - 1; \
-                } else {                                                \
-                    /* DMA as much as possible in the first DMA, */     \
-                    /* it won't finish the packet. */                   \
-                    descr_tmp.length = PCIE_DMA_MAX_SZ - 1;             \
-                }                                                       \
+                descr_tmp.length = in_batch.pkt##_pkt##.data_len - 1;   \
                 descr_tmp.length -= ctm_bytes;                          \
                 pcie_dma_set_event(&descr_tmp,                          \
                                    NFD_OUT_DATA_IGN_EVENT_TYPE, 0);     \
@@ -357,24 +351,13 @@ do {                                                                    \
             }                                                           \
         } else {                                                        \
             /* We have an MU only packet */                             \
-            /* Issue one DMA for the first 4k of the packet */          \
             descr_tmp.cpp_addr_hi = in_batch.pkt##_pkt##.cpp.mu_addr>>21; \
             descr_tmp.cpp_addr_lo = in_batch.pkt##_pkt##.cpp.mu_addr<<11; \
             descr_tmp.cpp_addr_lo += in_batch.pkt##_pkt##.cpp.offset;   \
             descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;      \
             descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;                \
             descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len;    \
-                                                                        \
-            if (in_batch.pkt##_pkt##.cpp.eop) {                         \
-                /* This packet is both sop and eop, which means it */   \
-                /* can be completed with one DMA. */                    \
-                /* XXX make app subtract the 1? */                      \
-                descr_tmp.length = in_batch.pkt##_pkt##.data_len - 1;   \
-            } else {                                                    \
-                /* DMA as much as possible in the first DMA, */         \
-                /* it won't finish the packet. */                       \
-                descr_tmp.length = PCIE_DMA_MAX_SZ - 1;                 \
-            }                                                           \
+            descr_tmp.length = in_batch.pkt##_pkt##.data_len - 1;       \
             pcie_dma_set_event(&descr_tmp, _type, _src);                \
                                                                         \
             dma_out_main.pkt##_pkt = descr_tmp;                         \
@@ -382,67 +365,21 @@ do {                                                                    \
                            NFD_OUT_DATA_DMA_QUEUE, sig_done,            \
                            &data_sig##_pkt##);                          \
         }                                                               \
-    } else { /* !SOP */                                                 \
-        if (!in_batch.pkt##_pkt##.cpp.down) {                           \
-            unsigned int len_tmp = in_batch.pkt##_pkt##.data_len;       \
+    } else { /* Down */                                                 \
+        /* Pass message on to free buffer only */                       \
+        descr_tmp.cpp_addr_hi = 0;                                      \
+        descr_tmp.cpp_addr_lo = 0;                                      \
+        descr_tmp.pcie_addr_hi = 0;                                     \
+        descr_tmp.pcie_addr_lo = 0;                                     \
+        pcie_dma_set_event(&descr_tmp, _type, _src);                    \
+        descr_tmp.length = 0;                                           \
                                                                         \
-            if (len_tmp > (2 * PCIE_DMA_MAX_SZ)) {                      \
-                /* Issue reserve DMA for the final bytes of the packet  */ \
-                descr_tmp.cpp_addr_hi = in_batch.pkt##_pkt##.cpp.mu_addr>>21; \
-                descr_tmp.cpp_addr_lo = in_batch.pkt##_pkt##.cpp.mu_addr<<11; \
-                descr_tmp.cpp_addr_lo += in_batch.pkt##_pkt##.cpp.offset; \
-                descr_tmp.cpp_addr_lo += (2 * PCIE_DMA_MAX_SZ);         \
-                descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;  \
-                descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;            \
-                descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len; \
-                descr_tmp.pcie_addr_lo += (2 * PCIE_DMA_MAX_SZ);        \
-                                                                        \
-                descr_tmp.length = len_tmp - (2 * PCIE_DMA_MAX_SZ + 1); \
-                pcie_dma_set_event(&descr_tmp, NFD_OUT_DATA_IGN_EVENT_TYPE, \
-                                   0);                                  \
-                                                                        \
-                dma_out_res.pkt##_pkt = descr_tmp;                      \
-                pcie_dma_enq_no_sig(PCIE_ISL, &dma_out_res.pkt##_pkt##, \
-                                    NFD_OUT_DATA_DMA_QUEUE);            \
-                                                                        \
-                len_tmp = (2 * PCIE_DMA_MAX_SZ);                        \
-                                                                        \
-            }                                                           \
-                                                                        \
-            /* Issue main DMA for bytes 4097 to 8192 */                 \
-            descr_tmp.cpp_addr_hi = in_batch.pkt##_pkt##.cpp.mu_addr>>21; \
-            descr_tmp.cpp_addr_lo = in_batch.pkt##_pkt##.cpp.mu_addr<<11; \
-            descr_tmp.cpp_addr_lo += in_batch.pkt##_pkt##.cpp.offset;   \
-            descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;                   \
-            descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;      \
-            descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;                \
-            descr_tmp.pcie_addr_lo -= in_batch.pkt##_pkt##.meta_len;    \
-            descr_tmp.pcie_addr_lo += PCIE_DMA_MAX_SZ;                  \
-                                                                        \
-            descr_tmp.length = len_tmp - PCIE_DMA_MAX_SZ - 1;           \
-            pcie_dma_set_event(&descr_tmp, _type, _src);                \
-                                                                        \
-            dma_out_main.pkt##_pkt = descr_tmp;                         \
-            __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt##,         \
-                           NFD_OUT_DATA_DMA_QUEUE, sig_done,            \
-                           &data_sig##_pkt##);                          \
-                                                                        \
-        } else { /* Queue down */                                       \
-            /* Pass message on to free buffer only */                   \
-            descr_tmp.cpp_addr_hi = 0;                                  \
-            descr_tmp.cpp_addr_lo = 0;                                  \
-            descr_tmp.pcie_addr_hi = 0;                                 \
-            descr_tmp.pcie_addr_lo = 0;                                 \
-            pcie_dma_set_event(&descr_tmp, _type, _src);                \
-            descr_tmp.length = 0;                                       \
-                                                                        \
-            descr_tmp.dma_cfg_index = NFD_OUT_DATA_CFG_REG_SIG_ONLY;    \
-            dma_out_main.pkt##_pkt = descr_tmp;                         \
-            descr_tmp.dma_cfg_index = NFD_OUT_DATA_CFG_REG;             \
-            __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt,           \
-                           NFD_OUT_DATA_DMA_QUEUE,                      \
-                           sig_done, &data_sig##_pkt);                  \
-        }                                                               \
+        descr_tmp.dma_cfg_index = NFD_OUT_DATA_CFG_REG_SIG_ONLY;        \
+        dma_out_main.pkt##_pkt = descr_tmp;                             \
+        descr_tmp.dma_cfg_index = NFD_OUT_DATA_CFG_REG;                 \
+        __pcie_dma_enq(PCIE_ISL, &dma_out_main.pkt##_pkt,               \
+                       NFD_OUT_DATA_DMA_QUEUE,                          \
+                       sig_done, &data_sig##_pkt);                      \
     }                                                                   \
                                                                         \
     /* Pass CPP descriptor on to next block */                          \
@@ -473,6 +410,8 @@ _nn_get_msg(__lmem struct nfd_out_data_dma_info *msg)
     /* Stage batch may head of line block, while enqueuing a message batch,
      * so while dequeuing we must also head of line block. */
     while (nn_ring_empty()) {
+        empty_cnt1++;
+        local_csr_write(NFP_MECSR_MAILBOX_1, empty_cnt1);
         ctx_swap();
     }
 
@@ -521,16 +460,15 @@ issue_dma()
         case 4:
             __critical_path();
             _nn_get_msg(&in_batch.pkt0);
-            _nn_get_msg(&in_batch.pkt1);
-            _nn_get_msg(&in_batch.pkt2);
-            _nn_get_msg(&in_batch.pkt3);
-
-            reorder_done(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
-
             _FL_PROC(0);
+            _nn_get_msg(&in_batch.pkt1);
             _FL_PROC(1);
+            _nn_get_msg(&in_batch.pkt2);
             _FL_PROC(2);
+            _nn_get_msg(&in_batch.pkt3);
             _FL_PROC(3);
+
+            reorder_done_opt(&next_ctx, &get_order_sig);
 
             _swap_on_msk(&fl_wait_msk);
             __implicit_read(&fl_sig0);
@@ -542,7 +480,7 @@ issue_dma()
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                                     &issue_order_sig);
 
-            reorder_done(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
+            reorder_done_opt(&next_ctx, &issue_order_sig);
 
             data_dma_seq_issued++;
             cpp_desc_index = (data_dma_seq_issued &
@@ -555,16 +493,15 @@ issue_dma()
             break;
         case 3:
             _nn_get_msg(&in_batch.pkt0);
-            _nn_get_msg(&in_batch.pkt1);
-            _nn_get_msg(&in_batch.pkt2);
-
-            reorder_done(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
-
             _FL_PROC(0);
+            _nn_get_msg(&in_batch.pkt1);
             _FL_PROC(1);
+            _nn_get_msg(&in_batch.pkt2);
             _FL_PROC(2);
 
             _FL_CLR(3);
+
+            reorder_done_opt(&next_ctx, &get_order_sig);
 
             _swap_on_msk(&fl_wait_msk);
             __implicit_read(&fl_sig0);
@@ -576,7 +513,7 @@ issue_dma()
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                                     &issue_order_sig);
 
-            reorder_done(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
+            reorder_done_opt(&next_ctx, &issue_order_sig);
 
             data_dma_seq_issued++;
             cpp_desc_index = (data_dma_seq_issued &
@@ -590,15 +527,14 @@ issue_dma()
             break;
         case 2:
             _nn_get_msg(&in_batch.pkt0);
-            _nn_get_msg(&in_batch.pkt1);
-
-            reorder_done(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
-
             _FL_PROC(0);
+            _nn_get_msg(&in_batch.pkt1);
             _FL_PROC(1);
 
             _FL_CLR(2);
             _FL_CLR(3);
+
+            reorder_done_opt(&next_ctx, &get_order_sig);
 
             _swap_on_msk(&fl_wait_msk);
             __implicit_read(&fl_sig0);
@@ -610,7 +546,7 @@ issue_dma()
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                                     &issue_order_sig);
 
-            reorder_done(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
+            reorder_done_opt(&next_ctx, &issue_order_sig);
 
             data_dma_seq_issued++;
             cpp_desc_index = (data_dma_seq_issued &
@@ -624,14 +560,13 @@ issue_dma()
             break;
         case 1:
             _nn_get_msg(&in_batch.pkt0);
-
-            reorder_done(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
-
             _FL_PROC(0);
 
             _FL_CLR(1);
             _FL_CLR(2);
             _FL_CLR(3);
+
+            reorder_done_opt(&next_ctx, &get_order_sig);
 
             _swap_on_msk(&fl_wait_msk);
             __implicit_read(&fl_sig0);
@@ -643,7 +578,7 @@ issue_dma()
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
                                     &issue_order_sig);
 
-            reorder_done(NFD_OUT_ISSUE_START_CTX, &issue_order_sig);
+            reorder_done_opt(&next_ctx, &issue_order_sig);
 
             data_dma_seq_issued++;
             cpp_desc_index = (data_dma_seq_issued &
@@ -659,6 +594,11 @@ issue_dma()
             halt();
         }
     } else { /* nn_ring_empty() or insufficient resources */
+        if (nn_ring_empty()) {
+            empty_cnt0++;
+            local_csr_write(NFP_MECSR_MAILBOX_0, empty_cnt0);
+        }
+
         /* Check resources */
         _recompute_safe();
 

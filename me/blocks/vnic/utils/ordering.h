@@ -13,6 +13,11 @@ __intrinsic void reorder_start(unsigned int start_ctx, SIGNAL *sig);
 
 __intrinsic void reorder_done(unsigned int start_ctx, SIGNAL *sig);
 
+__intrinsic unsigned int reorder_get_next_ctx(unsigned int start_ctx);
+
+/* NB: "next_ctx" as obtained from "reorder_get_next_ctx" above */
+__intrinsic void reorder_done_opt(unsigned int *next_ctx, SIGNAL *sig);
+
 __intrinsic void reorder_self(SIGNAL *sig);
 
 __intrinsic void reorder_future_sig(SIGNAL *sig, unsigned int cycles);

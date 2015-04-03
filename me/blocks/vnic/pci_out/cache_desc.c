@@ -75,8 +75,7 @@ __shared __gpr struct qc_bitmask urgent_bmsk;
  */
 __shared __lmem struct nfd_out_queue_info queue_data[NFD_OUT_MAX_QUEUES];
 
-static __shared __lmem unsigned int
-    fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
+__shared __lmem unsigned int fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
 
 /* NFD credits are fixed at offset zero in CTM */
 NFD_ATOMICS_ALLOC(NFD_OUT_CREDITS_BASE);
@@ -435,6 +434,9 @@ _fetch_fl(__gpr unsigned int *queue)
         /* The cache is full, so the queue is not "urgent". */
         clear_queue(queue, &urgent_bmsk);
 
+        /* Swap to give other threads a chance to run */
+        ctx_swap();
+
         /* Indicate no work done on queue */
         ret = -1;
     }
@@ -486,6 +488,9 @@ _complete_fetch()
              * fill the LM pointer usage slots */
             queue_data[queue_c].fl_a += NFD_OUT_FL_BATCH_SZ;
         }
+    } else {
+        /* Swap to give other threads a chance to run */
+        ctx_swap();
     }
 }
 
@@ -522,34 +527,9 @@ cache_desc()
         NFD_OUT_FL_MAX_IN_FLIGHT) {
         __critical_path();
 
-        /* Check urgent queues */
+        /* Check active queues */
         do {
             count++;
-
-            /* Look for an urgent queue */
-            ret = select_queue(&queue, &urgent_bmsk);
-            if (ret) {
-                /* No urgent queues found */
-                break;
-            }
-
-            /* Try to work on that queue */
-            ret = _fetch_fl(&queue);
-            if (ret == 0) {
-                /* Work has been done on a queue */
-                break;
-            }
-        } while (count < NFD_OUT_MAX_RETRIES);
-
-        /* Check active queues */
-        while (count < NFD_OUT_MAX_RETRIES) {
-            count++;
-
-            /* Simultaneously test last active test and prior urgent tests */
-            if (ret == 0) {
-                /* Work has been done on a queue */
-                break;
-            }
 
             /* Look for an active queue */
             ret = select_queue(&queue, &active_bmsk);
@@ -560,7 +540,12 @@ cache_desc()
 
             /* Try to work on that queue */
             ret = _fetch_fl(&queue);
-        }
+            if (ret == 0) {
+                /* Work has been done on a queue */
+                break;
+            }
+
+        } while (count < NFD_OUT_MAX_RETRIES);
     }
 }
 

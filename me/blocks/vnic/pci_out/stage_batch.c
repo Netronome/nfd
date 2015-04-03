@@ -126,6 +126,17 @@ __shared __gpr unsigned int desc_batch_compl = 0;
 __shared __gpr unsigned int desc_dma_inc = 0;
 __shared __gpr unsigned int desc_dma_inc_safe = 0;
 
+__shared __gpr unsigned int full_cnt0 = 0;
+__shared __gpr unsigned int full_cnt1 = 0;
+
+__shared __gpr unsigned int send_desc_msg_addr;
+__shared __gpr unsigned int send_desc_msg_sz_msk = NFD_OUT_RING_SZ - 1;
+__shared __gpr unsigned int send_desc_cpp_msk = 0xfc000fff;
+__shared __gpr unsigned int queue_data_base;
+__shared __gpr unsigned int inc_sent_msg_addr;
+
+unsigned int next_ctx;
+
 
 /* XXX Move to some sort of CT reflect library */
 __intrinsic void
@@ -188,6 +199,9 @@ stage_batch_setup()
     /* Wait on get_sig and put_order_sig.  There is no previous
      * put that needs to complete, so it is removed at start. */
     stage_wait_msk = __signals(&get_sig, &put_order_sig);
+
+    /* Initialise the "next_ctx" message used for ordering signals. */
+    next_ctx = reorder_get_next_ctx(NFD_OUT_STAGE_START_CTX);
 }
 
 /**
@@ -199,7 +213,7 @@ stage_batch_setup()
  * line block if there is a packet to send on an "up" queue but no FL
  * entry for that packet.  "Down" queues do not head of line block.
  */
-void
+__forceinline void
 _fl_avail_check(__gpr unsigned int queue)
 {
     /* Only test for fl entries on fast path as it serves as a proxy
@@ -266,27 +280,37 @@ _nn_put_msg(struct nfd_out_data_dma_info *msg)
 #define _STAGE_BATCH_PROC(_pkt)                                         \
 do {                                                                    \
     queue = in_batch.pkt##_pkt##.rxd.queue;                             \
-    _fl_avail_check(queue);                                             \
-                                                                        \
-    /* XXX Check up is read after the potential ctx swap in _fl_avail_check */ \
-    up = queue_data[queue].up;                                          \
-    eop = in_batch.pkt##_pkt##.cpp.eop;                                 \
-    eop &= up;                                                          \
-                                                                        \
-    data_batch_tmp.fl_cache_index =                                     \
-        cache_desc_compute_fl_addr(&queue, queue_data[queue].fl_u);     \
-    queue_data[queue].fl_u += eop;                                      \
-    data_batch_tmp.meta_len = in_batch.pkt##_pkt##.rxd.meta_len;        \
-    data_batch_tmp.rid = queue_data[queue].requester_id;                \
-    data_batch_tmp.data_len = in_batch.pkt##_pkt##.rxd.data_len;        \
-                                                                        \
-    data_batch_tmp.cpp = in_batch.pkt##_pkt##.cpp;                      \
-    data_batch_tmp.cpp.sop &= up;                                       \
-    data_batch_tmp.cpp.down = ~up;                                      \
-    _nn_put_msg(&data_batch_tmp);                                       \
-                                                                        \
-    desc_batch_tmp.send_pkt##_pkt = eop;                                \
     desc_batch_tmp.queue_pkt##_pkt = queue;                             \
+    queue_ptr = &queue_data[queue];                                     \
+                                                                        \
+    up = queue_ptr->up;                                                 \
+    desc_batch_tmp.send_pkt##_pkt = up;                                 \
+                                                                        \
+    while (nn_ring_full()) {                                            \
+        full_cnt1++;                                                    \
+        local_csr_write(NFP_MECSR_MAILBOX_1, full_cnt1);                \
+        ctx_swap();                                                     \
+    }                                                                   \
+    data_batch_tmp.cpp = in_batch.pkt##_pkt##.cpp;                      \
+    data_batch_tmp.cpp.down = ~up;                                      \
+    nn_ring_put(data_batch_tmp.cpp.__raw[0]);                           \
+    nn_ring_put(data_batch_tmp.cpp.__raw[1]);                           \
+                                                                        \
+    while (nn_ring_full()) {                                            \
+        full_cnt1++;                                                    \
+        local_csr_write(NFP_MECSR_MAILBOX_1, full_cnt1);                \
+        ctx_swap();                                                     \
+    }                                                                   \
+    data_batch_tmp.__raw[2] = in_batch.pkt##_pkt##.rxd.__raw[0];        \
+    data_batch_tmp.rid = queue_data[queue].requester_id;                \
+    nn_ring_put(data_batch_tmp.__raw[2]);                               \
+                                                                        \
+    used_seq = queue_ptr->fl_u;                                         \
+    data_batch_tmp.fl_cache_index =                                     \
+        cache_desc_compute_fl_addr(&queue, used_seq);                   \
+    queue_ptr->fl_u += up;                                              \
+    nn_ring_put(data_batch_tmp.__raw[3]);                               \
+                                                                        \
 } while (0)
 
 
@@ -307,11 +331,12 @@ do {                                            \
  * a bypass pathway.
  * NB: This method has a path that does not swap.
  */
-void
+__forceinline void
 stage_batch()
 {
     __gpr unsigned int queue;
-    unsigned int eop, up;
+    unsigned int up, used_seq;
+    __shared __lmem struct nfd_out_queue_info *queue_ptr;
     struct nfd_out_data_batch_msg data_batch_msg = {0};
     struct nfd_out_desc_batch_msg desc_batch_tmp;
     struct nfd_out_data_dma_info data_batch_tmp;
@@ -320,10 +345,12 @@ stage_batch()
     if (signal_test(&may_poll)) {
         __critical_path();
 
-       /* Check ordering requirements */
-        reorder_test_swap(&get_order_sig);
+       /* Check ordering requirements
+        * Assume that we will need to wait */
+       /* reorder_test_swap(&get_order_sig); */
+        __wait_for_all(&get_order_sig);
 
-        reorder_done(NFD_OUT_STAGE_START_CTX, &get_order_sig);
+        reorder_done_opt(&next_ctx, &get_order_sig);
 
         __mem_ring_get_freely(in_ring_num, in_ring_addr, &in_batch,
                               sizeof in_batch, sizeof in_batch,
@@ -358,6 +385,11 @@ stage_batch()
         batch_safe = desc_batch_compl + NFD_OUT_DESC_BATCH_RING_BAT;
         stage_wait_msk = 0;
 
+        if (nn_ring_full()) {
+            full_cnt0++;
+            local_csr_write(NFP_MECSR_MAILBOX_0, full_cnt0);
+        }
+
         return;
     } else {
         /* Mark the do nothing path critical */
@@ -369,8 +401,11 @@ stage_batch()
 
     /*
      * Increment batch_issued upfront to avoid ambiguity about
-     * sequence number zero
+     * sequence number zero, but place the batch message at the
+     * pre-incremented index so that other blocks can increment their
+     * indices in the usage shadow of the desc batch LM pointer.
      */
+    desc_batch_index = batch_issued & (NFD_OUT_DESC_BATCH_RING_BAT - 1);
     batch_issued++;
 
     /* Setup batch messages */
@@ -388,69 +423,70 @@ stage_batch()
         _STAGE_BATCH_PROC(2);
         _STAGE_BATCH_PROC(3);
 
-    } else if (in_batch.pkt0.cpp.__raw[0] == 0) {
-        /* Handle an empty queue */
-
-        /* Delay this context from polling again */
-        reorder_future_sig(&may_poll, NFD_OUT_STAGE_WAIT_CYCLES);
-
-        /* Allow next CTX to process a batch */
-        reorder_done(NFD_OUT_STAGE_START_CTX, &put_order_sig);
-
-        /* We don't issue this batch after all. We haven't swapped, so
-         * can just decrement batch_issued again to correct it. */
-        batch_issued--;
-
-        /* Skip adding work to CLS and NN rings */
-        return;
-
-    } else if (in_batch.pkt1.cpp.__raw[0] == 0) {
-        /* Batch of 1 */
-        data_batch_msg.num = 1;
-        desc_batch_tmp.__raw = 1;
-        nn_ring_put(data_batch_msg.__raw);
-
-        _STAGE_BATCH_PROC(0);
-
-        _STAGE_BATCH_CLR(1);
-        _STAGE_BATCH_CLR(2);
-        _STAGE_BATCH_CLR(3);
-
-    } else if (in_batch.pkt2.cpp.__raw[0] == 0) {
-        /* Batch of 2 */
-        data_batch_msg.num = 2;
-        desc_batch_tmp.__raw = 2;
-        nn_ring_put(data_batch_msg.__raw);
-
-        _STAGE_BATCH_PROC(0);
-        _STAGE_BATCH_PROC(1);
-
-        _STAGE_BATCH_CLR(2);
-        _STAGE_BATCH_CLR(3);
-
     } else {
-        /* Batch of 3 */
-        data_batch_msg.num = 3;
-        desc_batch_tmp.__raw = 3;
-        nn_ring_put(data_batch_msg.__raw);
+        if (in_batch.pkt0.cpp.__raw[0] == 0) {
+            /* Handle an empty queue */
 
-        _STAGE_BATCH_PROC(0);
-        _STAGE_BATCH_PROC(1);
-        _STAGE_BATCH_PROC(2);
+            /* Delay this context from polling again */
+            reorder_future_sig(&may_poll, NFD_OUT_STAGE_WAIT_CYCLES);
 
-        _STAGE_BATCH_CLR(3);
+            /* Allow next CTX to process a batch */
+            reorder_done_opt(&next_ctx, &put_order_sig);
 
+            /* We don't issue this batch after all. We haven't swapped, so
+             * can just decrement batch_issued again to correct it. */
+            batch_issued--;
+
+            /* Skip adding work to CLS and NN rings */
+            return;
+
+        } else if (in_batch.pkt1.cpp.__raw[0] == 0) {
+            /* Batch of 1 */
+            data_batch_msg.num = 1;
+            desc_batch_tmp.__raw = 1;
+            nn_ring_put(data_batch_msg.__raw);
+
+            _STAGE_BATCH_PROC(0);
+
+            _STAGE_BATCH_CLR(1);
+            _STAGE_BATCH_CLR(2);
+            _STAGE_BATCH_CLR(3);
+
+        } else if (in_batch.pkt2.cpp.__raw[0] == 0) {
+            /* Batch of 2 */
+            data_batch_msg.num = 2;
+            desc_batch_tmp.__raw = 2;
+            nn_ring_put(data_batch_msg.__raw);
+
+            _STAGE_BATCH_PROC(0);
+            _STAGE_BATCH_PROC(1);
+
+            _STAGE_BATCH_CLR(2);
+            _STAGE_BATCH_CLR(3);
+
+        } else {
+            /* Batch of 3 */
+            data_batch_msg.num = 3;
+            desc_batch_tmp.__raw = 3;
+            nn_ring_put(data_batch_msg.__raw);
+
+            _STAGE_BATCH_PROC(0);
+            _STAGE_BATCH_PROC(1);
+            _STAGE_BATCH_PROC(2);
+
+            _STAGE_BATCH_CLR(3);
+
+        }
     }
 
     /* Enqueue desc batch message */
-    desc_batch_index = batch_issued & (NFD_OUT_DESC_BATCH_RING_BAT - 1);
     desc_batch_msg[desc_batch_index] = desc_batch_tmp;
 
     /* Allow this thread to poll again on its next turn */
     reorder_self(&may_poll);
 
     /* Allow next CTX to process a batch */
-    reorder_done(NFD_OUT_STAGE_START_CTX, &put_order_sig);
+    reorder_done_opt(&next_ctx, &put_order_sig);
 }
 
 
@@ -473,9 +509,37 @@ distr_seqn_setup_shared()
 /**
  * Check autopushes, compute sequence numbers, and reflect to issue_dma ME
  */
-void
+__forceinline void
 distr_seqn()
 {
+    /* Service data_dma_compl first in case issue_dma() is waiting */
+    if (signal_test(&data_dma_event_sig)) {
+        __implicit_read(&nfd_out_data_compl_refl_out);
+
+        dma_seqn_advance(&data_dma_event_xfer, &data_dma_compl);
+
+        /* Mirror to remote ME */
+        nfd_out_data_compl_refl_out = data_dma_compl;
+        reflect_data(NFD_OUT_DATA_DMA_ME,
+                     __xfer_reg_number(&nfd_out_data_compl_refl_in,
+                                       NFD_OUT_DATA_DMA_ME),
+                     __signal_number(&nfd_out_data_compl_refl_sig,
+                                     NFD_OUT_DATA_DMA_ME),
+                     &nfd_out_data_compl_refl_out,
+                     sizeof nfd_out_data_compl_refl_out);
+
+        event_cls_autopush_filter_reset(
+            NFD_OUT_DATA_EVENT_FILTER,
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+            NFD_OUT_DATA_EVENT_FILTER);
+        __implicit_write(&data_dma_event_sig);
+
+    } else {
+        /* Swap to give other threads a chance to run */
+        ctx_swap();
+    }
+
+    /* desc_dma_compl is only used locally, so less urgent */
     if (signal_test(&desc_dma_event_sig)) {
         dma_seqn_advance(&desc_dma_event_xfer, &desc_dma_compl);
 
@@ -500,28 +564,10 @@ distr_seqn()
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_OUT_DESC_EVENT_FILTER);
         __implicit_write(&desc_dma_event_sig);
-    }
 
-    if (signal_test(&data_dma_event_sig)) {
-        __implicit_read(&nfd_out_data_compl_refl_out);
-
-        dma_seqn_advance(&data_dma_event_xfer, &data_dma_compl);
-
-        /* Mirror to remote ME */
-        nfd_out_data_compl_refl_out = data_dma_compl;
-        reflect_data(NFD_OUT_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_out_data_compl_refl_in,
-                                       NFD_OUT_DATA_DMA_ME),
-                     __signal_number(&nfd_out_data_compl_refl_sig,
-                                     NFD_OUT_DATA_DMA_ME),
-                     &nfd_out_data_compl_refl_out,
-                     sizeof nfd_out_data_compl_refl_out);
-
-        event_cls_autopush_filter_reset(
-            NFD_OUT_DATA_EVENT_FILTER,
-            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            NFD_OUT_DATA_EVENT_FILTER);
-        __implicit_write(&data_dma_event_sig);
+    } else {
+        /* Swap to give other threads a chance to run */
+        ctx_swap();
     }
 }
 
@@ -550,6 +596,15 @@ send_desc_setup_shared()
     cfg.target_64   = 1;
     cfg.cpp_target  = 7;
     pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DESC_CFG_REG, cfg);
+
+    /* XXX tidy up */
+    /* XXX referencing queue_data_base is a hack to get NFCC to
+     * allocate it at address 0 in LM.  NFCC itself can add in
+     * a constant as the queue starting offset when accessing LM, but if we
+     * compute addresses manually we can't. */
+    queue_data_base = &queue_data[0];
+    send_desc_msg_addr = &desc_batch_msg[desc_batch_served];
+    inc_sent_msg_addr = &desc_batch_msg[desc_batch_compl];
 }
 
 
@@ -573,52 +628,60 @@ send_desc_setup()
     descr_tmp.dma_cfg_index = NFD_OUT_DESC_CFG_REG;
     descr_tmp.cpp_addr_hi =
         (((unsigned long long) NFD_EMEM_LINK(PCIE_ISL)) >> 32) & 0xFF;
+    pcie_dma_set_event(&descr_tmp, NFD_OUT_DESC_EVENT_TYPE, 0);
 
     send_desc_addr_lo = ((unsigned long long) NFD_OUT_SEND_ADDR(PCIE_ISL) &
                          0xffffffff);
 }
-
 
 /**
  * Setup the RX descriptor DMA from the PCI.OUT input ring
  * "send_desc_off" must be updated even if we don't actually DMA
  * the descriptor for a given packet.
  */
-#define SEND_DESC_PROC(_pkt)                                            \
-do {                                                                    \
-    if (msg.send_pkt##_pkt) {                                           \
-    __critical_path();                                                  \
-                                                                        \
-    /* Increment fl_cache_dma_seq_issued upfront */                     \
-    /* to avoid ambiguity about sequence number zero */                 \
-    desc_dma_issued++;                                                  \
-                                                                        \
-    queue = msg.queue_pkt##_pkt;                                        \
-    pcie_addr_off = (queue_data[queue].rx_w &                           \
-                     queue_data[queue].ring_sz_msk);                    \
-    pcie_addr_off = pcie_addr_off * sizeof(struct nfd_out_rx_desc);     \
-    queue_data[queue].rx_w++;                                           \
-    descr_tmp.pcie_addr_hi = queue_data[queue].ring_base_hi;            \
-    descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_lo +          \
-                              pcie_addr_off);                           \
-    descr_tmp.rid = queue_data[queue].requester_id;                     \
-                                                                        \
-    descr_tmp.cpp_addr_lo = send_desc_addr_lo | send_desc_off;          \
-    pcie_dma_set_event(&descr_tmp, NFD_OUT_DESC_EVENT_TYPE, desc_dma_issued); \
-                                                                        \
-    dma_out.pkt##_pkt = descr_tmp;                                      \
-    __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, NFD_OUT_DESC_DMA_QUEUE, \
-                   sig_done, &desc_sig##_pkt);                          \
-    } else {                                                            \
-        /* Don't wait on the DMA signal */                              \
-        desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);               \
-    }                                                                   \
-    /* Increment send_desc_off whether we send the descriptor or not. */ \
-    /* The descriptor still occupied a space in the input ring. */      \
-    send_desc_off += sizeof(struct nfd_out_input);                      \
-    send_desc_off &= (NFD_OUT_RING_SZ - 1);                             \
+#define SEND_DESC_PROC(_pkt)                                                \
+do {                                                                        \
+    if (msg & (1 << NFD_OUT_DESC_SEND_PKT##_pkt##_shf)) {                   \
+        __asm { alu[queue, NFD_OUT_DESC_QUEUE_msk, and, msg,                \
+                    >>NFD_OUT_DESC_QUEUE_PKT##_pkt##_shf] }                 \
+        __asm { alu[queue, --, b, queue, <<5] }                             \
+        __asm { local_csr_wr[(NFP_MECSR_ACTIVE_LM_ADDR_2 >> 2), queue] }    \
+        __asm { alu[desc_dma_issued, desc_dma_issued, +, 1] }               \
+        __asm { alu[send_desc_off, send_desc_off, and,                      \
+                    send_desc_msg_sz_msk] }                                 \
+        __asm { alu[dma_out + (16 * _pkt), send_desc_addr_lo, or,           \
+                    send_desc_off] }                                        \
+                                                                            \
+        /* PCIe addr lo */                                                  \
+        __asm { alu[pcie_addr_lo, --, b, *l$index2[2], <<3] }               \
+        __asm { alu[pcie_addr_lo, pcie_addr_lo, and, *l$index2[7], <<3] }   \
+        __asm { alu[*l$index2[7], *l$index2[7], +, 1] }                     \
+        __asm { alu[dma_out + (8 + 16 * _pkt), pcie_addr_lo, +,             \
+                    *l$index2[4]] }                                         \
+                                                                            \
+        /* PCIe addr hi */                                                  \
+        __asm { ld_field[descr_tmp + 12, 0001, *l$index2[3]] }              \
+        __asm { alu[dma_out + (12 + 16 * _pkt), descr_tmp + 12, or,         \
+                    *l$index2[3], >>(24-12)] }                              \
+                                                                            \
+        /* CPP addr hi */                                                   \
+        __asm { alu[descr_tmp + 4, descr_tmp + 4, and,                      \
+                    send_desc_cpp_msk] }                                    \
+        __asm { alu[dma_event, desc_dma_issued, and, send_desc_cpp_msk] }   \
+        /* __asm { br[send_done##_pkt##_num], defer[2] }    */              \
+        __asm { alu[dma_out + (4 + 16 * _pkt), descr_tmp + 4, or,           \
+                    dma_event, <<14] }                                      \
+                                                                            \
+        /* Issue DMA */                                                     \
+        __asm { pcie[write_pci, dma_out + (16 * _pkt), addr_hi, <<8, addr_lo, \
+                    4], sig_done[desc_sig##_pkt] }                          \
+                                                                            \
+    } else {                                                                \
+        desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);                   \
+    }                                                                       \
+    __asm { alu[send_desc_off, send_desc_off, +,                            \
+                sizeof(struct nfd_out_input)] }                             \
 } while (0)
-
 
 /**
  * Remove "desc_sigX" for the packet from the wait mask
@@ -628,19 +691,25 @@ do {                                                     \
     desc_dma_wait_msk &= ~__signals(&desc_sig##_pkt);    \
 } while (0)
 
-
 /**
  * Check for completed DMA batches and send the RX descriptors
  * "send_desc" has no ordering requirements and will always swap.
  */
-void
+__forceinline void
 send_desc()
 {
-    struct nfd_out_desc_batch_msg msg;
+    /* struct nfd_out_desc_batch_msg msg; */
+    unsigned int msg;
     unsigned int queue;
-    unsigned int pcie_addr_off;
+    unsigned int queue_base;
+    unsigned int pcie_addr_lo;
+    unsigned int dma_event;
     unsigned int desc_batch_index;
     int test_safe;
+    unsigned int addr_hi = PCIE_ISL << 30;
+    unsigned int addr_lo = NFD_OUT_DESC_DMA_QUEUE;
+
+    /* ctassert(&queue_data[0] == 0); */
 
     /* Wait for previous DMAs to be enqueued */
     __asm {
@@ -656,58 +725,55 @@ send_desc()
     /* XXX THSDK-1813 workaround */
     test_safe = desc_dma_safe - desc_dma_issued;
     if ((desc_batch_served != data_dma_compl) && (test_safe > 0)) {
-       __critical_path();
 
         desc_dma_wait_msk = __signals(&desc_sig0, &desc_sig1, &desc_sig2,
                                       &desc_sig3);
 
         /* We have a batch to process and resources to process it */
 
+        local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, send_desc_msg_addr);
         /*
          * Increment desc_batch_served upfront to avoid ambiguity about
          * sequence number zero
          */
         desc_batch_served++;
-
         desc_batch_index = (desc_batch_served &
                             (NFD_OUT_DESC_BATCH_RING_BAT - 1));
-        msg = desc_batch_msg[desc_batch_index];
+        send_desc_msg_addr = &desc_batch_msg[desc_batch_index];
 
-        switch (msg.num) {
-        case 4:
+        __asm alu[msg, --, B, *l$index3];
+
+        if ((msg & 4) == 0) {
+            if ((msg & NFD_OUT_DESC_NUM_msk) == 3) {
+                SEND_DESC_PROC(0);
+                SEND_DESC_PROC(1);
+                SEND_DESC_PROC(2);
+
+                SEND_DESC_CLR(3);
+
+            } else if ((msg & NFD_OUT_DESC_NUM_msk) == 2) {
+                SEND_DESC_PROC(0);
+                SEND_DESC_PROC(1);
+
+                SEND_DESC_CLR(2);
+                SEND_DESC_CLR(3);
+
+            } else {
+                SEND_DESC_PROC(0);
+
+                SEND_DESC_CLR(1);
+                SEND_DESC_CLR(2);
+                SEND_DESC_CLR(3);
+
+            }
+        } else {
+           /* Handle full batch */
             __critical_path();
-            /* Handle full batch */
 
             SEND_DESC_PROC(0);
             SEND_DESC_PROC(1);
             SEND_DESC_PROC(2);
             SEND_DESC_PROC(3);
-
-            break;
-
-        case 3:
-            SEND_DESC_PROC(0);
-            SEND_DESC_PROC(1);
-            SEND_DESC_PROC(2);
-
-            SEND_DESC_CLR(3);
-            break;
-
-        case 2:
-            SEND_DESC_PROC(0);
-            SEND_DESC_PROC(1);
-
-            SEND_DESC_CLR(2);
-            SEND_DESC_CLR(3);
-            break;
-
-        default:
-            SEND_DESC_PROC(0);
-
-            SEND_DESC_CLR(1);
-            SEND_DESC_CLR(2);
-            SEND_DESC_CLR(3);
-            break;
         }
     } else {
        /* There are no DMAs to be enqueued */
@@ -721,15 +787,18 @@ send_desc()
  */
 #define INC_SENT_PROC(_pkt)                                             \
 do {                                                                    \
-    if (msg.send_pkt##_pkt) {                                           \
+    if (msg & (1 << NFD_OUT_DESC_SEND_PKT##_pkt##_shf)) {               \
     __critical_path();                                                  \
                                                                         \
     /* Increment desc_dma_inc upfront */                                \
     /* to avoid ambiguity about sequence number zero */                 \
     desc_dma_inc++;                                                     \
                                                                         \
-    queue = msg.queue_pkt##_pkt;                                        \
-    _add_imm(NFD_OUT_CREDITS_BASE, queue, 1, NFD_OUT_ATOMICS_SENT);     \
+    addr = (NFD_OUT_DESC_QUEUE_msk &                                    \
+            (msg >> NFD_OUT_DESC_QUEUE_PKT##_pkt##_shf ));              \
+    addr = (addr * NFD_OUT_ATOMICS_SZ | NFD_OUT_ATOMICS_SENT |          \
+            NFD_OUT_CREDITS_BASE);                                      \
+    __asm { mem[incr, --, 0, addr] }                                    \
                                                                         \
     }                                                                   \
 } while (0)
@@ -744,29 +813,53 @@ do {                                                     \
 } while (0)
 
 
-void
+__forceinline void
 inc_sent()
 {
-    struct nfd_out_desc_batch_msg msg;
-    unsigned int queue, qc_queue;
+    unsigned int msg;
+    unsigned int addr;
     unsigned int desc_batch_index;
     int test_safe;
 
     test_safe = desc_dma_inc_safe - desc_dma_inc;
     if (test_safe > 0) {
-       __critical_path();
+
+        local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, inc_sent_msg_addr);
 
         /*
          * Increment desc_batch_served upfront to avoid ambiguity about
          * sequence number zero
          */
         desc_batch_compl++;
-
         desc_batch_index = desc_batch_compl & (NFD_OUT_DESC_BATCH_RING_BAT - 1);
-        msg = desc_batch_msg[desc_batch_index];
+        inc_sent_msg_addr = &desc_batch_msg[desc_batch_index];
 
-        switch (msg.num) {
-        case 4:
+        __asm alu[msg, --, B, *l$index3];
+
+        if ((msg & 4) == 0) {
+            if ((msg & NFD_OUT_DESC_NUM_msk) == 3) {
+                INC_SENT_PROC(0);
+                INC_SENT_PROC(1);
+                INC_SENT_PROC(2);
+
+                INC_SENT_CLR(3);
+
+            } else if ((msg & NFD_OUT_DESC_NUM_msk) == 2) {
+                INC_SENT_PROC(0);
+                INC_SENT_PROC(1);
+
+                INC_SENT_CLR(2);
+                INC_SENT_CLR(3);
+
+            } else {
+                INC_SENT_PROC(0);
+
+                INC_SENT_CLR(1);
+                INC_SENT_CLR(2);
+                INC_SENT_CLR(3);
+
+            }
+        } else {
             __critical_path();
             /* Handle full batch */
 
@@ -775,31 +868,6 @@ inc_sent()
             INC_SENT_PROC(2);
             INC_SENT_PROC(3);
 
-            break;
-
-        case 3:
-            INC_SENT_PROC(0);
-            INC_SENT_PROC(1);
-            INC_SENT_PROC(2);
-
-            INC_SENT_CLR(3);
-            break;
-
-        case 2:
-            INC_SENT_PROC(0);
-            INC_SENT_PROC(1);
-
-            INC_SENT_CLR(2);
-            INC_SENT_CLR(3);
-            break;
-
-        default:
-            INC_SENT_PROC(0);
-
-            INC_SENT_CLR(1);
-            INC_SENT_CLR(2);
-            INC_SENT_CLR(3);
-            break;
         }
     }
 }

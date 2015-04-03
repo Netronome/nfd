@@ -47,6 +47,7 @@ extern __shared __gpr unsigned int desc_dma_issued;
 extern __shared __gpr unsigned int desc_dma_compl;
 extern __shared __gpr unsigned int desc_dma_safe;
 
+extern __shared __gpr unsigned int desc_batch_compl;
 
 #define _ZERO_ARRAY     {0, 0, 0, 0, 0, 0, 0, 0}
 
@@ -123,6 +124,8 @@ cache_desc_status()
         status_stage.desc_dma_issued = desc_dma_issued;
         status_stage.desc_dma_compl = desc_dma_compl;
         status_stage.desc_dma_safe = desc_dma_safe;
+
+        status_stage.desc_batch_compl = desc_batch_compl;
 
         /*
          * Reset the alarm

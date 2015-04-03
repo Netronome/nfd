@@ -59,6 +59,36 @@ reorder_done(unsigned int start_ctx, SIGNAL *sig)
 }
 
 
+__intrinsic unsigned int
+reorder_get_next_ctx(unsigned int start_ctx)
+{
+    unsigned int val;
+
+    if (ctx() != 7) {
+        val = NFP_MECSR_SAME_ME_SIGNAL_NEXT_CTX;
+    } else {
+        val= NFP_MECSR_SAME_ME_SIGNAL_CTX(start_ctx);
+    }
+
+    return val;
+}
+
+
+__intrinsic void
+reorder_done_opt(unsigned int *next_ctx, SIGNAL *sig)
+{
+    unsigned int val;
+
+    val = *next_ctx | NFP_MECSR_SAME_ME_SIGNAL_SIG_NO(__signal_number(sig));
+    local_csr_write(NFP_MECSR_SAME_ME_SIGNAL, val);
+
+    /* Although another thread receives this particular signal, that thread
+     * should return the same signal later, so allowing the next context to go
+     * implicitly causes sig to become set in this context. */
+    __implicit_write(sig);
+}
+
+
 __intrinsic void
 reorder_self(SIGNAL *sig)
 {
@@ -90,8 +120,9 @@ reorder_future_sig(SIGNAL *sig, unsigned int cycles)
 __intrinsic void
 reorder_test_swap(SIGNAL *sig)
 {
-    if (!signal_test(sig)) {
-        __wait_for_all(sig);
+    if (signal_test(sig)) {
+        __critical_path();
+        return;
     }
-    __critical_path();
+    __wait_for_all(sig);
 }

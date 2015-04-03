@@ -241,15 +241,21 @@ issue_dma_setup()
     wait_msk = __signals(&tx_desc_sig, &dma_order_sig);
 }
 
+/* XXX temporarily enable _ISSUE_PROC_MU_CHK even without debug checks.
+ * This gives us extra protection of the CTM counters while PCI.OUT is not
+ * double checking credits. */
+#ifndef NFD_MU_PTR_DBG_MSK
+#define NFD_MU_PTR_DBG_MSK 0x1f000000
+#endif
 
-#ifdef NFD_VNIC_DBG_CHKS
+/* #ifdef NFD_VNIC_DBG_CHKS */
 #define _ISSUE_PROC_MU_CHK(_val)                                        \
     if ((_val & NFD_MU_PTR_DBG_MSK) == 0) {                             \
         halt();                                                         \
     }
-#else
-#define _ISSUE_PROC_MU_CHK(_val)
-#endif
+/* #else */
+/* #define _ISSUE_PROC_MU_CHK(_val) */
+/* #endif */
 
 
 #define _ISSUE_PROC_JUMBO(_pkt, _sig)                                   \

@@ -32,7 +32,7 @@ struct nfd_out_stage_batch_status {
     unsigned int desc_dma_issued;
     unsigned int desc_dma_compl;
     unsigned int desc_dma_safe;
-    unsigned int spare;
+    unsigned int desc_batch_compl;
 };
 
 
