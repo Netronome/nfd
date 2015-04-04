@@ -509,56 +509,78 @@ _complete_fetch()
 
 
 /**
- * Cache FL descriptors
- *
- * This method implements the overall caching strategy, calling
- * "_complete_fetch" and "_fetch_fl" for detailed implementation.
- *
- * The general strategy is to poll up to RX_MAX_RETRIES queues via
- * bitmasks to identify queues that may have pending FL entries.
- * Queues are selected from the "urgent" bitmask first, and then the
- * "active" bitmask.
- *
- * This method also updates the "active" bitmask, and checks for completed
- * fetches.
+ * Check the bitmask filters and process completed fetches
  */
-void
-cache_desc()
+__forceinline void
+cache_desc_complete_fetch()
 {
-    __gpr unsigned int queue;
-    unsigned int count = 0;
-    int ret = 0;
-
     /* Check bitmasks */
     check_bitmask_filters(&active_bmsk, &rx_ap_xfers, &rx_ap_s0, &rx_ap_s1,
               &rx_ap_s2, &rx_ap_s3, NFD_OUT_Q_EVENT_START);
 
     /* Process up to the latest fl_cache_dma_seq_compl */
     _complete_fetch();
+}
+
+
+/**
+ * Check the active bitmask for a queue to service, and
+ * attempt to work on that queue.  The "urgent" and "active"
+ * bitmasks are updated as processing progresses.
+ *
+ * This method may be called multiple separate times from the
+ * dispatch loop for finer balance of FL DMAs with other tasks.
+ */
+__forceinline void
+cache_desc_check_active()
+{
+    __gpr unsigned int queue;
+    int ret = 0;
 
     if ((fl_cache_dma_seq_issued - fl_cache_dma_seq_served) <
         NFD_OUT_FL_MAX_IN_FLIGHT) {
         __critical_path();
 
-        /* Check active queues */
-        do {
-            count++;
+        /* Look for an active queue */
+        ret = select_queue(&queue, &active_bmsk);
+        if (ret) {
+            /* No active queues found */
+            return;
+        }
 
-            /* Look for an active queue */
-            ret = select_queue(&queue, &active_bmsk);
-            if (ret) {
-                /* No active queues found */
-                break;
-            }
+        /* Try to work on that queue */
+        ret = _fetch_fl(&queue);
+    }
+}
 
-            /* Try to work on that queue */
-            ret = _fetch_fl(&queue);
-            if (ret == 0) {
-                /* Work has been done on a queue */
-                break;
-            }
 
-        } while (count < NFD_OUT_MAX_RETRIES);
+/**
+ * Check the urgent bitmask for a queue to service, and
+ * attempt to work on that queue.  The "urgent" and "active"
+ * bitmasks are updated as processing progresses.
+ *
+ * This method may be called multiple separate times from the
+ * dispatch loop for finer balance of FL DMAs with other tasks.
+ */
+__forceinline void
+cache_desc_check_urgent()
+{
+    __gpr unsigned int queue;
+    int ret = 0;
+
+    if ((fl_cache_dma_seq_issued - fl_cache_dma_seq_served) <
+        NFD_OUT_FL_MAX_IN_FLIGHT) {
+        __critical_path();
+
+        /* Look for an urgent queue */
+        ret = select_queue(&queue, &urgent_bmsk);
+        if (ret) {
+            /* No urgent queues found */
+            return;
+        }
+
+        /* Try to work on that queue */
+        ret = _fetch_fl(&queue);
     }
 }
 

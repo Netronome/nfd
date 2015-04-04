@@ -63,11 +63,16 @@ main(void)
     if (ctx() == 0) {
         /* CTX0 main loop */
         for (;;) {
-            cache_desc();
+            /* cache_desc(); */
+            cache_desc_complete_fetch(); /* Swaps once */
+
+            cache_desc_check_urgent(); /* Swaps at least once */
 
             cache_desc_status();
 
-            distr_seqn();
+            distr_seqn(); /* Swaps twice */
+
+            cache_desc_check_active(); /* Swaps at least once */
 
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */

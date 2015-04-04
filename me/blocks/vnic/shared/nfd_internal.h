@@ -81,7 +81,6 @@
 #define NFD_OUT_Q_EVENT_DATA            (3<<4)
 
 /* Additional check queue constants */
-#define NFD_OUT_MAX_RETRIES             2
 #define NFD_OUT_FL_BATCH_SZ             32   /* Match configured watermark! */
 
 
