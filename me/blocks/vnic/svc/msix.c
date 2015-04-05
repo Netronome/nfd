@@ -205,50 +205,6 @@ out:
     return ret;
 }
 
-/*
- * Calculate the base address of the Configuration BAR for a VF.
- *
- * XXX Shouldn't this be shared with some NFD code?
- */
-__intrinsic static __emem char*
-get_cfg_bar_vf_base(unsigned int pcie_nr, unsigned int vf_nr)
-{
-    __emem char* cfg_bar_vf_addr;
-
-    switch(pcie_nr - 4) {
-#ifdef NFD_PCIE0_EMEM
-    case 0:
-        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(0, vf_nr);
-        break;
-#endif
-
-#ifdef NFD_PCIE1_EMEM
-    case 1:
-        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(1, vf_nr);
-        break;
-#endif
-
-#ifdef NFD_PCIE2_EMEM
-    case 2:
-        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(2, vf_nr);
-        break;
-#endif
-
-#ifdef NFD_PCIE3_EMEM
-    case 3:
-        cfg_bar_vf_addr = NFD_CFG_BAR_ISL(3, vf_nr);
-        break;
-#endif
-
-    default:
-        /* This should not happen */
-        local_csr_write(NFP_MECSR_MAILBOX_2, 0xdead0000 | pcie_nr);
-        halt();
-    }
-
-    return cfg_bar_vf_addr;
-}
-
 /**
  * Send MSI-X interrupt for specified virtual function and optionally mask
  * @param pcie_nr     PCIe cluster number
@@ -282,7 +238,7 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
     unsigned int flags;
     unsigned int bar_addr;
 
-    __emem char* msix_table_addr;
+    __emem char *msix_table_addr;
     __xread uint32_t tmp[PCI_MSIX_TBL_ENTRY_SZ32];
 
     __xwrite uint32_t msix_data;
@@ -292,7 +248,8 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
 
     int ret = 1;
 
-    msix_table_addr = get_cfg_bar_vf_base(pcie_nr, vf_nr);
+    msix_table_addr =
+        (__emem char *)NFD_CFG_BAR(svc_cfg_bars[pcie_nr - 4], vf_nr);
     msix_table_addr += NFD_VF_MSIX_TABLE_OFF;
 
     /* Read the full table entry */

@@ -207,11 +207,26 @@
 #define NFP_NET_CFG_RXR_IRQ_MOD(_x)     (NFP_NET_CFG_RXR_BASE + 0x300 + (_x))
 
 /**
- * General device stats (0x0c00 - 0x0c90)
+ * Interrupt Control/Cause registers (0x0c00 - 0x0d00)
+ * These registers are only used when MSI-X auto-masking is not
+ * enabled (@NFP_NET_CFG_CTRL_MSIXAUTO not set).  The array is index
+ * by MSI-X entry and are 1B in size.  If an entry is zero, the
+ * corresponding entry is enabled.  If the FW generates an interrupt,
+ * it writes a cause into the corresponding field.  This also masks
+ * the MSI-X entry and the host driver must clear the register to
+ * re-enable the interrupt.
+ */
+#define NFP_NET_CFG_ICR_BASE            0x0c00
+#define NFP_NET_CFG_ICR(_x)             (NFP_NET_CFG_ICR_BASE + (_x))
+#define   NFP_NET_CFG_ICR_UNMASKED      0x0
+#define   NFP_NET_CFG_ICR_RXTX          0x1
+#define   NFP_NET_CFG_ICR_LSC           0x2
+
+/**
+ * General device stats (0x0d00 - 0x0d90)
  * all counters are 64bit.
  */
-#define NFP_NET_CFG_STATS_BASE          0x0c00
-
+#define NFP_NET_CFG_STATS_BASE          0x0d00
 #define NFP_NET_CFG_STATS_RX_DISCARDS   (NFP_NET_CFG_STATS_BASE + 0x00)
 #define NFP_NET_CFG_STATS_RX_ERRORS     (NFP_NET_CFG_STATS_BASE + 0x08)
 #define NFP_NET_CFG_STATS_RX_OCTETS     (NFP_NET_CFG_STATS_BASE + 0x10)

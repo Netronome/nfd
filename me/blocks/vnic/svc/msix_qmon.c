@@ -77,12 +77,6 @@
 #define MAX_QUEUE_NUM (NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1)
 #define MAX_NUM_PCI_ISLS 4
 
-/*
- * Return if a given queue belongs to the PF (or not).
- *
- * The first N queues are used by VFs and last ones are for the PF.
- */
-#define MSIX_Q_IS_PF(_q) ((_q) >= (NFD_MAX_VF_QUEUES * NFD_MAX_VFS) ? 1 : 0)
 
 /*
  * Create masks for PF and VF
@@ -91,14 +85,44 @@
 #define MSIX_PF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_PF_QUEUES)
 #define MSIX_VF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_VF_QUEUES)
 
+/*
+ * Functions to perform little endian reads and write from the MU.
+ * The host writes byte arrays in little endian format.  Rather than
+ * performing the conversion on the host, we just access them with LE
+ * commands.
+ * XXX Remove once we have equivalent functions in flowenv
+ */
+__intrinsic void
+alt_mem_read32_le(__xread void *data, __mem void *addr)
+{
+    unsigned int addr_hi, addr_lo;
+    SIGNAL sig;
+
+    addr_hi = ((unsigned long long int)addr >> 8) & 0xff000000;
+    addr_lo = (unsigned long long int)addr & 0xffffffff;
+
+    __asm mem[read32_le, *data, addr_hi, <<8, addr_lo, 1], ctx_swap[sig];
+}
+
+__intrinsic void
+alt_mem_write8_le(__xwrite void *data, __mem void *addr)
+{
+    unsigned int addr_hi, addr_lo;
+    SIGNAL sig;
+
+    addr_hi = ((unsigned long long int)addr >> 8) & 0xff000000;
+    addr_lo = (unsigned long long int)addr & 0xffffffff;
+
+    __asm mem[write8_le, *data, addr_hi, <<8, addr_lo, 1], ctx_swap[sig];
+}
 
 /*
- * Some functions below would like to use 64bit shift left, for which
- * the compiler calls generates code relying on the compiler runtime
- * function _shl_64().  Unfortunately, this functions does not seem to
- * get inlined and then cause a major headache when it comes to
- * register liveranges.  shl64() copy the runtime implementation,
- * which is marked as intrinsic so will get inlined.
+ * Some functions below use 64bit shift left (e.g. 1ull << qnum), for
+ * which the compiler calls generates code relying on the compiler
+ * runtime function _shl_64().  Unfortunately, this functions does not
+ * seem to get inlined and then causes a major headache when it comes
+ * to register liveranges.  shl64() is a copy the runtime
+ * implementation, which is marked as intrinsic so will get inlined.
  *
  * TODO: Re-retest once this code is properly integrated with the
  * compiler runtime.
@@ -205,7 +229,7 @@ msix_qmon_init(unsigned int pcie_isl)
  *
  * @pcie_isl        PCIe Island this function is handling
  * @vnic            vNIC inside the island this function is handling
- * @cfg_bar         points to the control bar for the vnic
+ * @cfg_bar         Points to the control bar for the vnic
  * @rx_rings        Boolean, if set, handle RX rings, else RX rings
  * @vf_rings        Bitmask of enabled tings for the VF/vNIC.
  *
@@ -224,14 +248,15 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
     unsigned int qnum;
     uint64_t rings;
     unsigned int ring;
+    unsigned int entry;
     __xread unsigned int entry_r, tmp_r;
     __xwrite unsigned int tmp_w;
     __cls uint8_t *cls_addr;
+    __mem char *entry_addr;
 
     uint64_t queues;
     uint64_t new_queues_en;
     uint64_t vf_queue_mask;
-
 
     /* Update the interrupt vector data, i.e. the MSI-X table entry
      * number, for all active rings. */
@@ -245,18 +270,23 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
 
         /* Get MSI-X entry number and stash it into local memory */
         if (rx_rings) {
-            mem_read8(&entry_r, cfg_bar + NS_VNIC_CFG_RXR_VEC(ring), 1);
+            entry_addr = cfg_bar + NS_VNIC_CFG_RXR_VEC(ring);
             cls_addr = msix_cls_rx_entries[pcie_isl];
-
         } else {
-            mem_read8(&entry_r, cfg_bar + NS_VNIC_CFG_TXR_VEC(ring), 1);
+            entry_addr = cfg_bar + NS_VNIC_CFG_TXR_VEC(ring);
             cls_addr = msix_cls_tx_entries[pcie_isl];
         }
+        alt_mem_read32_le(&entry_r, entry_addr);
+        entry = entry_r & 0xff;
         /* Write to CLS. We do this in BE format so it's easy to pick up */
         cls_addr += qnum;
         cls_read(&tmp_r, cls_addr, sizeof(tmp_r));
-        tmp_w = (tmp_r & 0x00ffffff) | (entry_r & 0xff) << 24;
+        tmp_w = (tmp_r & 0x00ffffff) | (entry << 24);
         cls_write(&tmp_w, cls_addr, sizeof(tmp_w));
+
+        /* Make sure the ICR is reset */
+        tmp_w = 0;
+        alt_mem_write8_le(&tmp_w, cfg_bar + NS_VNIC_CFG_ICR(entry));
     }
 
     /* Convert VF ring bitmask into Queue mask */
@@ -389,13 +419,15 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
  * memory variables are marked as shared and are arrays of arrays,
  * because otherwise something like uint32_t
  * msix_prev_rx_cnt[NS_VNIC_RXR_MAX] would get allocated for *every*
- * context,
+ * context.
+ *
+ * XXX Global __nnr variables explicitly initialised to zero due to THSDK-2070
  */
-__nnr static uint64_t msix_rx_enabled;
-__nnr static uint64_t msix_tx_enabled;
-__nnr static uint64_t msix_rx_pending;
-__nnr static uint64_t msix_tx_pending;
-__nnr static uint64_t msix_automask;
+__nnr static uint64_t msix_rx_enabled = 0;
+__nnr static uint64_t msix_tx_enabled = 0;
+__nnr static uint64_t msix_rx_pending = 0;
+__nnr static uint64_t msix_tx_pending = 0;
+__nnr static uint64_t msix_automask = 0;
 
 __shared __lmem uint8_t msix_rx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_RXR_MAX];
 __shared __lmem uint8_t msix_tx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_TXR_MAX];
@@ -518,13 +550,23 @@ msix_get_rx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
  * @rx_queue:  Boolean, set if this is for an RX queue, TX queue otherwise
  *
  * Returns 0 on success.  Otherwise the interrupt is masked in some way.
+ *
+ * If MSI-X auto-masking is enabled for the function, just go with
+ * that.  If MSI-X auto-masking is disabled, check the ICR for the
+ * entry in the function configuration BAR.  If not set, set it and
+ * attempt to generate a MSI-X.  If the ICR is already set, then the
+ * entry is already "masked".
  */
 __intrinsic static int
 msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue)
 {
     unsigned int automask;
     unsigned int entry;
-    int vf_num;
+    int fn;
+    uint64_t cfg_bar;
+    __xread uint32_t mask_r;
+    __xwrite uint32_t mask_w;
+
     int ret;
 
     if (rx_queue)
@@ -535,13 +577,31 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue)
     /* Should we automask this queue? */
     automask = msix_automask & shl64(1ull, qnum);
 
-    if (MSIX_Q_IS_PF(qnum)) {
-        ret = msix_pf_send(pcie_isl + 4, entry, automask);
-    } else {
-        vf_num = qnum / NFD_MAX_VF_QUEUES;
-        ret = msix_vf_send(pcie_isl + 4, vf_num, entry, automask);
+    /* Get the function (aka vnic) */
+    if (qnum < (NFD_MAX_VF_QUEUES * NFD_MAX_VFS))
+        fn = NFD_NATQ2VF(qnum);
+    else
+        fn = NFD_NATQ2PF(qnum);
+
+    /* If we don't use auto-masking, check (and update) the ICR */
+    if (!automask) {
+        cfg_bar = NFD_CFG_BAR(svc_cfg_bars[pcie_isl], fn);
+        cfg_bar += NS_VNIC_CFG_ICR(entry);
+        alt_mem_read32_le(&mask_r, (__mem void *)cfg_bar);
+        if (mask_r & 0x000000ff) {
+            ret = 1;
+            goto out;
+        }
+        mask_w = NS_VNIC_CFG_ICR_RXTX;
+        alt_mem_write8_le(&mask_w, (__mem void *)cfg_bar);
     }
 
+    if (fn >= NFD_MAX_VFS)
+        ret = msix_pf_send(pcie_isl + 4, entry, automask);
+    else
+        ret = msix_vf_send(pcie_isl + 4, fn, entry, automask);
+
+out:
     return ret;
 }
 
@@ -568,8 +628,9 @@ msix_qmon_loop(const unsigned int pcie_isl)
             msix_local_reconfig(pcie_isl);
 
         /*
-         * Check enabled RX queues.
-         * Try sending an MSI-X immediately if changed.
+         * Check enabled RX and TX queues.
+         * Read their respective counts and if they changed try to
+         * send an interrupt (RX) or mark them as pending (TX).
          */
         enabled = msix_rx_enabled;
         while (enabled) {
@@ -593,11 +654,6 @@ msix_qmon_loop(const unsigned int pcie_isl)
             }
         }
 
-        /*
-         * Check enabled TX queues.
-         * Mark queues with changed read pointer as pending. No need to send 
-         * immediately.
-         */
         enabled = msix_tx_enabled;
         while (enabled) {
             qnum = ffs64(enabled);
@@ -613,12 +669,12 @@ msix_qmon_loop(const unsigned int pcie_isl)
             }
         }
 
-
         /*
-         * Handle pending Interrupts. RX first, then TX.
-         * If a RX Q and a TX queue share the same MSI-X entry (very
+         * Handle pending Interrupts. RX first, then TX.  If a RX
+         * queue and a TX queue share the same MSI-X entry (very
          * likely) then remove them from the respective other pending
-         * mask.
+         * mask.  Also update the respective RX/TX count in case new
+         * packets were received/trasnmitted since we last checked.
          */
         pending = msix_rx_pending;
         while (pending) {
@@ -634,18 +690,17 @@ msix_qmon_loop(const unsigned int pcie_isl)
             ret = msix_send_q_irq(pcie_isl, qnum, 1);
             if (!ret) {
                 msix_rx_pending &= ~qmask;
-                if (msix_rx_entries[pcie_isl][qnum] == 
+                if (msix_rx_entries[pcie_isl][qnum] ==
                     msix_tx_entries[pcie_isl][qnum])
                     msix_tx_pending &= ~qmask;
             }
         }
 
-        pending = msix_tx_pending;
         while (pending) {
             qnum = ffs64(pending);
             qmask = shl64(1ull, qnum);
             pending &= ~qmask;
-            
+
             /* Update TX queue count in case it changed. */
             count = qc_read(pcie_isl, qnum << 1, QC_RPTR);
             count = NFP_QC_STS_LO_READPTR_of(count);
@@ -655,7 +710,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
             ret = msix_send_q_irq(pcie_isl, qnum, 0);
             if (!ret) {
                 msix_tx_pending &= ~qmask;
-                if (msix_tx_entries[pcie_isl][qnum] == 
+                if (msix_tx_entries[pcie_isl][qnum] ==
                     msix_rx_entries[pcie_isl][qnum])
                     msix_rx_pending &= ~qmask;
             }
