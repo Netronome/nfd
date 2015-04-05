@@ -1,7 +1,26 @@
+/*
+ * Copyright (C) 2015,  Netronome Systems, Inc.  All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * @file   msix_gen.c
+ * @brief  Monitor RX/TX queues and generate MSI-X on changes.
+ */
 #include <assert.h>
 #include <vnic/shared/nfcc_chipres.h>
 #include <nfp.h>
 
+#include <nfp/cls.h>
 #include <nfp/me.h>
 #include <nfp/mem_bulk.h>
 
@@ -18,18 +37,38 @@
 
 #include <ns_vnic_ctrl.h>
 
+#include "../msix_gen.h"
 #include "nfd_common.h"
 
 /*
  * TODO:
  * - TX interrupts
- * - Honour the automask config
- *   Have a 64bit bitmask (one bit per Q, bitmask shared between RX/TX). Set
- *   bit for all queues of VF/PF if automask is set
  * - interrupt moderation
  * - any other operation when link comes down?
  * - *maybe* read counters in bulk
  */
+
+
+/*
+ * This file implements the core of the logic for generating MSI-X for
+ * packet transmit and receive.  At the core a single context per PCIe
+ * Island is monitoring all of the active RX and TX queues for that
+ * Island.  If changes to a queue are noticed, a MSI-X is generated.
+ * This core logic also handles interrupt masking and the like and the
+ * main entry point is implemented in @msix_qmon_loop().
+ *
+ * Since functions (PFs and VFs) as well as individual rings in these
+ * functions can be configured dynamically at run-time, this file also
+ * contains the logic for handling re-configurations.
+ *
+ * A general comment on terminology.  Through-out (unless for
+ * identifiers from other files) we use the term "ring" when referring
+ * to a queue or ring inside a VF/PF and the term "queue" when
+ * referring to one of the 64 RX/TX queues available in total.  The
+ * core MSI-X logic is only dealing with "queues" and configuration
+ * logic translates from "rings" to queues.
+ */
+
 
 #define MAX_QUEUE_NUM (NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1)
 #define MAX_NUM_PCI_ISLS 4
@@ -48,58 +87,20 @@
 #define MSIX_PF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_PF_QUEUES)
 #define MSIX_VF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_VF_QUEUES)
 
-/*
- * Per PCIe Island state.
- *
- * We need to maintain quite a bit of state for generating MSI-X:
- * - @msix_rx_enabled: Bitmask of which RX queues are enabled
- * - @msix_tx_enabled: Bitmask of which TX queues are enabled
- * - @msix_rx_pending: Bitmask of which RX queues have pending interrupts
- * - @msix_tx_pending: Bitmask of which TX queues have pending interrupts
- * - @msix_automask:   Bitmask of which RX/TX queues should automask MSI-X
- *
- * - @msix_rx_entries: Indexed by RX Q, MSI-X table entry for this Q
- * - @msix_tx_entries: Indexed by TX Q, MSI-X table entry for this Q
- * - @prev_rx_cnt:     Indexed by RX Q, with the number of packets received
- * - @prev_tx_cnt:     Indexed by TX Q, with the number of packets transmitted
- *
- * We keep the first group state variables in GPRs.  The second group
- * is currently kept in local memory, but, depending on configuration,
- * may consume *all* of local memory.  We need to re-consider this
- * option, especially once we support interrupt moderation as the
- * configuration for that also needs to be somewhere.
- */
-__shared __gpr static uint64_t msix_rx_enabled[MAX_NUM_PCI_ISLS];
-__shared __gpr static uint64_t msix_tx_enabled[MAX_NUM_PCI_ISLS];
-__shared __gpr static uint64_t msix_rx_pending[MAX_NUM_PCI_ISLS];
-__shared __gpr static uint64_t msix_tx_pending[MAX_NUM_PCI_ISLS];
-__shared __gpr static uint64_t msix_automask[MAX_NUM_PCI_ISLS];
-
-__shared __lmem uint8_t msix_rx_entries[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
-__shared __lmem uint8_t msix_tx_entries[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
-__shared __lmem uint32_t msix_prev_rx_cnt[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
-__shared __lmem uint32_t msix_prev_tx_cnt[MAX_NUM_PCI_ISLS][MAX_QUEUE_NUM + 1];
-
-#ifdef NFD_SVC_MSIX_DEBUG
-#define NFD_MSIX_DBG(_x) _x
-__export __cls volatile uint64_t nfd_msix_rx_enabled[MAX_NUM_PCI_ISLS];
-__export __cls volatile uint64_t nfd_msix_rx_qmask[MAX_NUM_PCI_ISLS];
-__export __cls volatile uint64_t nfd_msix_rx_new[MAX_NUM_PCI_ISLS];
-__export __cls volatile uint64_t nfd_msix_tx_enabled[MAX_NUM_PCI_ISLS];
-__export __cls volatile uint64_t nfd_msix_tx_qmask[MAX_NUM_PCI_ISLS];
-__export __cls volatile uint64_t nfd_msix_tx_new[MAX_NUM_PCI_ISLS];
-__export __cls volatile uint64_t nfd_msix_automask[MAX_NUM_PCI_ISLS];
-#else
-#define NFD_MSIX_DBG(_x)
-#endif
 
 /*
- * XXX This comes from the compiler intrinsics.
- * XXX Fix this once flowenv has support for the new run-time library
+ * Some functions below would like to use 64bit shift left, for which
+ * the compiler calls generates code relying on the compiler runtime
+ * function _shl_64().  Unfortunately, this functions does not seem to
+ * get inlined and then cause a major headache when it comes to
+ * register liveranges.  shl64() copy the runtime implementation,
+ * which is marked as intrinsic so will get inlined.
+ *
+ * TODO: Re-retest once this code is properly integrated with the
+ * compiler runtime.
  */
-/* 64-bit shift left */
-long long
-_shl_64(long long x, unsigned int y)
+__intrinsic static long long
+shl64(long long x, unsigned int y)
 {
     long long result;
     int thirtytwo = 32;
@@ -110,7 +111,6 @@ _shl_64(long long x, unsigned int y)
 
     if (y >= thirtytwo)
         __asm {
-            // alu         [y, thirtytwo, -, y]
             alu         [result+4, y, AND, 0]
             alu_shf     [result, --, B, x+4, <<indirect]
         }
@@ -128,34 +128,76 @@ _shl_64(long long x, unsigned int y)
     return result;
 }
 
+/*
+ * Configuration changes:
+ *
+ * When new rings get enabled (e.g. PFs or VFs are spun up or down)
+ * context 0 in the service ME gets notified via suitable
+ * configuration messages.  The MSI-X queue monitoring contexts then
+ * needs to pick up the changes (like which queues are enabled, which
+ * MSI-X entries to use etc).
+ *
+ * This process is split between context 0 and the MSI-X queue
+ * monitoring contexts.  Context 0 is handling the conversion from
+ * rings to queues and then writes the new state (plus additional
+ * information to CLS, and signals the appropriate MSI-X queue
+ * monitoring context.  The qmon context then simply copies the state
+ * from CLS into its local state (some of which is held in local
+ * registers for efficient access.  One the qmon context has updated
+ * its locla state it signals back to context 0, which handles the
+ * remainder of the configuration chain.
+ *
+ * Splitting the re-config handling relives pressure on GPRs and
+ * allows the MSI-X queue monitoring contexts to maintain state in
+ * registers which can't be shared (such as Next Neighbour
+ * Registers). It also aids debugging as the state is externally
+ * visible in CLS.
+ *
+ * @msix_qmon_reconfig() contains the code executed by context 0,
+ * while @msix_local_reconfig() is the code executed by the MSI-X
+ * queue monitoring context.
+ *
+ * Shared state (in CLS):
+ * @msix_cls_rx_enabled      Bitmask of which RX queues are enabled
+ * @msix_cls_tx_enabled      Bitmask of which TX queues are enabled
+ * @msix_cls_rx_new_enabled  Bitmask of which new RX queues are being enabled
+ * @msix_cls_tx_new_enabled  Bitmask of which new TX queues are being enabled
+ * @msix_cls_automask        Bitmask of which queues should automask
+ *
+ * @msix_cls_rx_entries      Mapping of RX queue to MSI-X table entry
+ * @msix_cls_tx_entries      Mapping of TX queue to MSI-X table entry
+ */
+__shared __cls uint64_t msix_cls_rx_enabled[MAX_NUM_PCI_ISLS];
+__shared __cls uint64_t msix_cls_tx_enabled[MAX_NUM_PCI_ISLS];
+__shared __cls uint64_t msix_cls_rx_new_enabled[MAX_NUM_PCI_ISLS];
+__shared __cls uint64_t msix_cls_tx_new_enabled[MAX_NUM_PCI_ISLS];
+__shared __cls uint64_t msix_cls_automask[MAX_NUM_PCI_ISLS];
+
+__shared __cls uint8_t msix_cls_rx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_RXR_MAX];
+__shared __cls uint8_t msix_cls_tx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_TXR_MAX];
 
 /*
- * Initialise the state.
+ * Initialise the state (executed by context 0)
  *
  * Global variables are initialised to zero so init only the ones
- * which are not 0. This can also be done via array init.
+ * which are not 0. This could/should be done via array init.
  */
 void
 msix_qmon_init(unsigned int pcie_isl)
 {
-    int qnum;
+    int i;
+    __cls uint8_t *r = msix_cls_rx_entries[pcie_isl];
+    __cls uint8_t *t = msix_cls_tx_entries[pcie_isl];
+    __xwrite int tmp = 0xffffffff;
 
-    for (qnum = 0; qnum <= MAX_QUEUE_NUM; qnum++) {
-        msix_rx_entries[pcie_isl][qnum] = 0xff;
-        msix_tx_entries[pcie_isl][qnum] = 0xff;
+    for (i = 0; i < 64; i += 4) {
+        cls_write(&tmp, r + i, sizeof(tmp));
+        cls_write(&tmp, t + i, sizeof(tmp));
     }
 }
 
-/* ns_vnic_ctrl.h defined offsets as byte offsets.  We get them as
- * words in cfg_bar_data and define word indices for them here  */
-#define NS_VNIC_CFG_CTRL_IDX          (NS_VNIC_CFG_CTRL / 4)
-#define NS_VNIC_CFG_UPDATE_IDX        (NS_VNIC_CFG_UPDATE / 4)
-#define NS_VNIC_CFG_TXRS_ENABLE_IDX   (NS_VNIC_CFG_TXRS_ENABLE / 4)
-#define NS_VNIC_CFG_RXRS_ENABLE_IDX   (NS_VNIC_CFG_RXRS_ENABLE / 4)
-
-
 /*
- * Reconfigure RX and TX rings
+ * Reconfigure RX and TX rings (executed by context 0)
  *
  * @pcie_isl        PCIe Island this function is handling
  * @vnic            vNIC inside the island this function is handling
@@ -168,6 +210,8 @@ msix_qmon_init(unsigned int pcie_isl)
  * identical for RX and TX rings, only different data structures are
  * updated.  This is a bit ugly, but the other option would be
  * significant code duplication, which isn't pretty either.
+ *
+ * Note: Some of the code generates contains CLS reads/writes.
  */
 __intrinsic static void
 msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
@@ -176,99 +220,73 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
     unsigned int qnum;
     uint64_t rings;
     unsigned int ring;
-    unsigned int temp;
+    __xread unsigned int entry_r, tmp_r;
+    __xwrite unsigned int tmp_w;
+    __cls uint8_t *cls_addr;
 
     uint64_t queues;
     uint64_t new_queues_en;
     uint64_t vf_queue_mask;
 
-    __xread unsigned int ring_entries_r[16];
-    __lmem uint8_t ring_entries[64];
-
-    /* If there are rings enabled, read in the vectors for the rings */
-    if (vf_rings) {
-        mem_read64(ring_entries_r,
-                   cfg_bar + NS_VNIC_CFG_RXR_VEC(0), sizeof(ring_entries_r));
-        reg_cp(ring_entries, ring_entries_r, sizeof(ring_entries));
-    }
 
     /* Update the interrupt vector data, i.e. the MSI-X table entry
      * number, for all active rings. */
     rings = vf_rings;
     while (rings) {
         ring = ffs64(rings);
-        rings &= ~(1ull << ring);
+        rings &= rings - 1;
 
         /* Convert ring number to a queue number */
         qnum = ring + vnic * NFD_MAX_VF_QUEUES;
 
         /* Get MSI-X entry number and stash it into local memory */
-        temp = (ring & ~3) + (3 - (ring & 3));
+        if (rx_rings) {
+            mem_read8(&entry_r, cfg_bar + NS_VNIC_CFG_RXR_VEC(ring), 1);
+            cls_addr = msix_cls_rx_entries[pcie_isl];
 
-        if (rx_rings)
-            msix_rx_entries[pcie_isl][qnum] = ring_entries[temp];
-        else
-            msix_tx_entries[pcie_isl][qnum] = ring_entries[temp];
+        } else {
+            mem_read8(&entry_r, cfg_bar + NS_VNIC_CFG_TXR_VEC(ring), 1);
+            cls_addr = msix_cls_tx_entries[pcie_isl];
+        }
+        /* Write to CLS. We do this in BE format so it's easy to pick up */
+        cls_addr += qnum;
+        cls_read(&tmp_r, cls_addr, sizeof(tmp_r));
+        tmp_w = (tmp_r & 0x00ffffff) | (entry_r & 0xff) << 24;
+        cls_write(&tmp_w, cls_addr, sizeof(tmp_w));
     }
 
     /* Convert VF ring bitmask into Queue mask */
-    queues = vf_rings << (vnic * NFD_MAX_VF_QUEUES);
+    queues = shl64(vf_rings, vnic * NFD_MAX_VF_QUEUES);
 
     /* Work out which queues have been newly enabled and make sure
      * they don't have pending bits set. */
     if (rx_rings) {
-        new_queues_en =
-            (msix_rx_enabled[pcie_isl] | queues) ^ msix_rx_enabled[pcie_isl];
-        msix_rx_pending[pcie_isl] &= ~new_queues_en;
+        new_queues_en = (msix_cls_rx_enabled[pcie_isl] | queues) ^
+            msix_cls_rx_enabled[pcie_isl];
+        msix_cls_rx_new_enabled[pcie_isl] = new_queues_en;
     } else {
-        new_queues_en =
-            (msix_tx_enabled[pcie_isl] | queues) ^ msix_tx_enabled[pcie_isl];
-        msix_tx_pending[pcie_isl] &= ~new_queues_en;
+        new_queues_en = (msix_cls_tx_enabled[pcie_isl] | queues) ^
+            msix_cls_tx_enabled[pcie_isl];
+        msix_cls_tx_new_enabled[pcie_isl] = new_queues_en;
     }
 
-    /* Zero the local packet count for newly enabled queues */
-    while (new_queues_en) {
-        qnum = ffs64(new_queues_en);
-        new_queues_en &= ~(1ull << qnum);
-        if (rx_rings)
-            msix_prev_rx_cnt[pcie_isl][qnum] = 0;
-        else
-            msix_prev_tx_cnt[pcie_isl][qnum] = 0;
-    }
-
-    /* Update the enabled bit mask with queues for this VF.
-     *
-     * Note the update below should be executed atomically with
-     * respect to other contexts.  Strictly, it doesn't have to, but
-     * it's better. */
+    /* Update the enabled bit mask with queues for this VF. */
     if (vnic == NFD_MAX_VFS)
-        vf_queue_mask = MSIX_PF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
+        vf_queue_mask = shl64(MSIX_PF_RINGS_MASK, vnic * NFD_MAX_VF_QUEUES);
     else
-        vf_queue_mask = MSIX_VF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
+        vf_queue_mask = shl64(MSIX_VF_RINGS_MASK, vnic * NFD_MAX_VF_QUEUES);
 
     if (rx_rings) {
-        __no_swap_begin();
-        msix_rx_enabled[pcie_isl] &= ~vf_queue_mask;
-        msix_rx_enabled[pcie_isl] |= queues;
-        __no_swap_end();
+        msix_cls_rx_enabled[pcie_isl] &= ~vf_queue_mask;
+        msix_cls_rx_enabled[pcie_isl] |= queues;
     } else {
-        __no_swap_begin();
-        msix_tx_enabled[pcie_isl] &= ~vf_queue_mask;
-        msix_tx_enabled[pcie_isl] |= queues;
-        __no_swap_end();
+        msix_cls_tx_enabled[pcie_isl] &= ~vf_queue_mask;
+        msix_cls_tx_enabled[pcie_isl] |= queues;
     }
-
-    NFD_MSIX_DBG(nfd_msix_rx_qmask[pcie_isl] = vf_queue_mask);
-    NFD_MSIX_DBG(nfd_msix_rx_new[pcie_isl] = queues);
-    NFD_MSIX_DBG(nfd_msix_rx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl]);
-    NFD_MSIX_DBG(nfd_msix_tx_qmask[pcie_isl] = vf_queue_mask);
-    NFD_MSIX_DBG(nfd_msix_tx_new[pcie_isl] = queues);
-    NFD_MSIX_DBG(nfd_msix_tx_enabled[pcie_isl] = msix_rx_enabled[pcie_isl]);
 }
 
-
 /*
- * Handle reconfiguration changes of RX queues
+ * Handle reconfiguration changes of RX queues (executed by context 0)
  *
  * @pcie_isl        PCIe Island this function is handling
  * @vnic            vNIC inside the island this function is handling
@@ -276,21 +294,27 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
  * @cfg_bar_data[]  contains the first 6 words of the control bar.
  *
  * This function is called from context 0 of the service ME on
- * configuration. The MSI-X code runs on different contexts and this
- * function updates their data structures.
+ * configuration.  The MSI-X queue monitoring code runs on different
+ * contexts and this function updates the shared CLS data structures
+ * before signalling the MSI-X contexts.
+ *
+ * Note: Some of the code contains implicit CLS reads/writes.
  */
 __intrinsic void
-msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
-              __xread unsigned int cfg_bar_data[6])
+msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
+                   __mem char *cfg_bar, __xread unsigned int cfg_bar_data[6])
 {
     unsigned int control, update;
 
     uint64_t vf_tx_rings_new;
     uint64_t vf_rx_rings_new;
     uint64_t queues;
+    SIGNAL ack_sig;
 
-    control = cfg_bar_data[NS_VNIC_CFG_CTRL_IDX];
-    update = cfg_bar_data[NS_VNIC_CFG_UPDATE_IDX];
+    __assign_relative_register(&ack_sig, SVC_MSIX_GEN_SIG_NUM);
+
+    control = cfg_bar_data[NS_VNIC_CFG_CTRL >> 2];
+    update = cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2];
 
     /* If no MSI-X updates, return */
     if (!(update & NS_VNIC_CFG_UPDATE_MSIX))
@@ -299,8 +323,8 @@ msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
     /* Check if we are up and rings have changed */
     if ((control & NS_VNIC_CFG_CTRL_ENABLE) &&
         (update & NS_VNIC_CFG_UPDATE_RING)) {
-        vf_tx_rings_new = cfg_bar_data[NS_VNIC_CFG_TXRS_ENABLE_IDX];
-        vf_rx_rings_new = cfg_bar_data[NS_VNIC_CFG_RXRS_ENABLE_IDX];
+        vf_tx_rings_new = cfg_bar_data[NS_VNIC_CFG_TXRS_ENABLE >> 2];
+        vf_rx_rings_new = cfg_bar_data[NS_VNIC_CFG_RXRS_ENABLE >> 2];
 
     } else if ((update & NS_VNIC_CFG_UPDATE_GEN) &&
                (!(control & NS_VNIC_CFG_CTRL_ENABLE))) {
@@ -322,17 +346,123 @@ msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
      * number of RX and TX rings and simple set the auto-mask bits for
      * all queues of the VF/PF depending on the auto-mask bit in the
      * control word. */
-    queues = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
+    queues = shl64(vf_rx_rings_new, vnic * NFD_MAX_VF_QUEUES);
     if (control & NS_VNIC_CFG_CTRL_MSIXAUTO)
-        msix_automask[pcie_isl] |= queues;
+        msix_cls_automask[pcie_isl] |= queues;
     else
-        msix_automask[pcie_isl] &= ~queues;
-    NFD_MSIX_DBG(nfd_msix_automask[pcie_isl] = msix_automask[pcie_isl]);
+        msix_cls_automask[pcie_isl] &= ~queues;
 
     /* Reconfigure the RX/TX ring state */
     msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 1, vf_rx_rings_new);
     msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 0, vf_rx_rings_new);
+
+    signal_ctx(pcie_isl + 1, SVC_MSIX_GEN_SIG_NUM);
+    __implicit_write(&ack_sig);
+    wait_for_all(&ack_sig);
 }
+
+
+/*
+ * Code beyond this point is executed by the MSI-X queue monitoring contexts
+ */
+
+
+/*
+ * Per PCIe Island state:
+ * - @msix_rx_enabled: Bitmask of which RX queues are enabled
+ * - @msix_tx_enabled: Bitmask of which TX queues are enabled
+ * - @msix_rx_pending: Bitmask of which RX queues have pending interrupts
+ * - @msix_tx_pending: Bitmask of which TX queues have pending interrupts
+ * - @msix_automask:   Bitmask of which RX/TX queues should automask MSI-X
+ *
+ * - @msix_rx_entries: Indexed by RX Q, MSI-X table entry for this Q
+ * - @msix_tx_entries: Indexed by TX Q, MSI-X table entry for this Q
+ * - @prev_rx_cnt:     Indexed by RX Q, with the number of packets received
+ * - @prev_tx_cnt:     Indexed by TX Q, with the number of packets transmitted
+ *
+ * We keep the first group state variables in Next Neighbour
+ * Registers.  The second group is kept in local memory.  The local
+ * memory variables are marked as shared and are arrays of arrays,
+ * because otherwise something like uint32_t
+ * msix_prev_rx_cnt[NS_VNIC_RXR_MAX] would get allocated for *every*
+ * context,
+ */
+__nnr static uint64_t msix_rx_enabled;
+__nnr static uint64_t msix_tx_enabled;
+__nnr static uint64_t msix_rx_pending;
+__nnr static uint64_t msix_tx_pending;
+__nnr static uint64_t msix_automask;
+
+__shared __lmem uint8_t msix_rx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_RXR_MAX];
+__shared __lmem uint8_t msix_tx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_TXR_MAX];
+__shared __lmem uint32_t msix_prev_rx_cnt[MAX_NUM_PCI_ISLS][NS_VNIC_RXR_MAX];
+__shared __lmem uint32_t msix_prev_tx_cnt[MAX_NUM_PCI_ISLS][NS_VNIC_TXR_MAX];
+
+/*
+ * Local reconfig
+ *
+ * Copy state from CLS into local state.  For newly enabled queues
+ * reset some of the internal state.
+ *
+ * Note: Some of the code contains implicit CLS reads/writes.
+ */
+__intrinsic static void
+msix_local_reconfig(const unsigned int pcie_isl)
+{
+    uint64_t new_enabled;
+    __xread uint64_t tmp64;
+    int qnum;
+    __xread uint32_t entries[NS_VNIC_RXR_MAX / 4];
+
+    /*
+     * Handle newly enabled queues (RX first, then TX)
+     * - remove any pending bits.
+     * - zero the count to keep track if new packets have been RXed/TXed
+     *
+     * Note: We use 'tmp64 &= tmp64 - 1' instead of 'tmp64 &= ~(1ull
+     * << qnum)' to zero the first bit set because it removes
+     * dependency on the _shl_64() intrinsic.
+     */
+    cls_read(&tmp64, &msix_cls_rx_new_enabled[pcie_isl], sizeof(tmp64));
+    new_enabled = tmp64;
+    msix_rx_pending &= ~new_enabled;
+    while (new_enabled) {
+        qnum = ffs64(new_enabled);
+        new_enabled &= new_enabled - 1;
+        msix_prev_rx_cnt[pcie_isl][qnum] = 0;
+    }
+
+    cls_read(&tmp64, &msix_cls_tx_new_enabled[pcie_isl], sizeof(tmp64));
+    new_enabled = tmp64;
+    msix_tx_pending &= ~new_enabled;
+    while (new_enabled) {
+        qnum = ffs64(new_enabled);
+        new_enabled &= new_enabled - 1;
+        msix_prev_tx_cnt[pcie_isl][qnum] = 0;
+    }
+
+    /* Update automask */
+    cls_read(&tmp64, &msix_cls_automask[pcie_isl], sizeof(tmp64));
+    msix_automask = tmp64;
+
+    /* Copy entries */
+    cls_read(&entries, msix_cls_rx_entries[pcie_isl], sizeof(entries));
+    reg_cp(&msix_rx_entries[pcie_isl], entries, sizeof(entries));
+    cls_read(&entries, msix_cls_tx_entries[pcie_isl], sizeof(entries));
+    reg_cp(&msix_tx_entries[pcie_isl], entries, sizeof(entries));
+
+    /* Copy enable bits */
+    msix_rx_enabled = msix_cls_rx_enabled[pcie_isl];
+    msix_tx_enabled = msix_cls_tx_enabled[pcie_isl];
+
+    /* We are done. Signal context zero */
+    signal_ctx(0, SVC_MSIX_GEN_SIG_NUM);
+}
+
+
+/*
+ * Core MSI-X logic for generating interrupts for RX/TX queues
+ */
 
 
 /*
@@ -358,7 +488,7 @@ msix_reconfig(unsigned int pcie_isl, unsigned int vnic, __mem char *cfg_bar,
  * offset 0 in CTM of the relevant PCIe island.
  */
 __intrinsic static uint32_t
-msix_get_rx_queue_cnt(unsigned int pcie_nr, unsigned int queue)
+msix_get_rx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
 {
     unsigned int addr_hi;
     unsigned int addr_lo;
@@ -368,7 +498,7 @@ msix_get_rx_queue_cnt(unsigned int pcie_nr, unsigned int queue)
     /* Calculate the offset. */
     queue = NFD_NATQ2BMQ(queue);
 
-    addr_hi = (0x84 | pcie_nr) << 24;
+    addr_hi = (0x84 | (pcie_isl + 4)) << 24;
     addr_lo = queue * NFD_OUT_ATOMICS_SZ + NFD_OUT_ATOMICS_SENT;
 
     __asm mem[atomic_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rsig];
@@ -382,9 +512,11 @@ msix_get_rx_queue_cnt(unsigned int pcie_nr, unsigned int queue)
  * @pcie_isl:  PCIe Island number
  * @qnum:      Queue number
  * @rx_queue:  Boolean, set if this is for an RX queue, TX queue otherwise
+ *
+ * Returns 0 on success.  Otherwise the interrupt is masked in some way.
  */
-static int
-msix_send_q_irq(unsigned int pcie_isl, int qnum, int rx_queue)
+__intrinsic static int
+msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue)
 {
     unsigned int automask;
     unsigned int entry;
@@ -397,7 +529,7 @@ msix_send_q_irq(unsigned int pcie_isl, int qnum, int rx_queue)
         entry = msix_tx_entries[pcie_isl][qnum];
 
     /* Should we automask for this queue? */
-    automask = msix_automask[pcie_isl] & (1ull << qnum);
+    automask = msix_automask & shl64(1ull, qnum);
 
     if (MSIX_Q_IS_PF(qnum)) {
         ret = msix_pf_send(pcie_isl + 4, entry, automask);
@@ -410,42 +542,47 @@ msix_send_q_irq(unsigned int pcie_isl, int qnum, int rx_queue)
 }
 
 
+/*
+ * The main monitoring loop.
+ */
 void
-msix_qmon_loop(unsigned int pcie_isl)
+msix_qmon_loop(const unsigned int pcie_isl)
 {
     int qnum;
     uint32_t rx_cnt;
-    uint64_t pending;
-
+    uint64_t qmask;
+    uint64_t enabled, pending;
     int ret;
 
+    SIGNAL reconfig_sig;
+
+    __assign_relative_register(&reconfig_sig, SVC_MSIX_GEN_SIG_NUM);
 
     for (;;) {
 
+        if (signal_test(&reconfig_sig))
+            msix_local_reconfig(pcie_isl);
+
         /*
-         * Handle RX queues:
-         *
-         * We check for all active RX queues and if their packet count
-         * changed immediately try to send an MSI-X.
+         * Check enabled RX queues.
+         * Try sending an MSI-X immediately if changed.
          */
-        for (qnum = 0; qnum <= MAX_QUEUE_NUM; qnum++) {
-            /* Skip if no queues are enabled or a queue is not enabled */
-            if (!msix_rx_enabled[pcie_isl])
-                break;
-            if (!(msix_rx_enabled[pcie_isl] & (1ull << qnum)))
-                continue;
+        enabled = msix_rx_enabled;
+        while (enabled) {
+            qnum = ffs64(enabled);
+            qmask = shl64(1ull, qnum);
+            enabled &= ~qmask;
 
             /* Check if queue got new packets and try to send MSI-X if so */
-            rx_cnt = msix_get_rx_queue_cnt(pcie_isl + 4, qnum);
+            rx_cnt = msix_get_rx_queue_cnt(pcie_isl, qnum);
             if (rx_cnt != msix_prev_rx_cnt[pcie_isl][qnum]) {
                 ret = msix_send_q_irq(pcie_isl, qnum, 1);
 
-                /* If un-successful, mark queue in the pending mask,
-                 * else remove it from the pending mask. */
+                /* If un-successful, mark queue in the pending mask */
                 if (ret)
-                    msix_rx_pending[pcie_isl] |= (1ull << qnum);
+                    msix_rx_pending |= qmask;
                 else
-                    msix_rx_pending[pcie_isl] &= ~(1ull << qnum);
+                    msix_rx_pending &= ~qmask;
 
                 /* Update the count to the new value */
                 msix_prev_rx_cnt[pcie_isl][qnum] = rx_cnt;
@@ -453,25 +590,22 @@ msix_qmon_loop(unsigned int pcie_isl)
         }
 
         /*
-         * Handle Pending interrupts.
-         * RX first
+         * Handle Pending RX interrupts.
          */
-        pending = msix_rx_pending[pcie_isl];
+        pending = msix_rx_pending;
         while (pending) {
             qnum = ffs64(pending);
-            pending &= ~(1ull << qnum);
+            qmask = shl64(1ull, qnum);
+            pending &= ~qmask;
 
-            /* If the Queue got disabled in the meantime, skip it */
-            if (!(msix_rx_enabled[pcie_isl] & (1ull << qnum)))
-                continue;
-
-            /* MAYBE TODO: We could check here if the packet count has
-             * increased and update the local state  */
+            /* Update RX queue count in case it changed. */
+            rx_cnt = msix_get_rx_queue_cnt(pcie_isl, qnum);
+            msix_prev_rx_cnt[pcie_isl][qnum] = rx_cnt;
 
             /* Try to send MSI-X. If successful remove from pending */
             ret = msix_send_q_irq(pcie_isl, qnum, 1);
             if (!ret)
-                msix_rx_pending[pcie_isl] &= ~(1ull << qnum);
+                msix_rx_pending &= ~qmask;
         }
 
         /* In the loop above we perform sufficient IO for others to

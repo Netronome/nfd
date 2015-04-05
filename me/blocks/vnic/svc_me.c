@@ -1,10 +1,21 @@
 /*
- * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2015,  Netronome Systems, Inc.  All rights reserved.
  *
- * @file          blocks/vnic/svc_me.c
- * @brief         Service ME
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * @file   svc_me.c
+ * @brief  Main entry point for the service ME
  */
-
 #include <assert.h>
 #include <vnic/shared/nfcc_chipres.h>
 #include <nfp.h>
@@ -16,6 +27,15 @@
 
 #include "shared/nfd_cfg.h"
 #include "utils/msix_gen.h"
+
+
+/*
+ * The service ME performs a number of different functions.
+ * 
+ * Context  0:   Handling configuration messages
+ * Contexts 1-4: Monitor RX/TX queues and generate MSI-X (one per PCIe island)
+ */
+
 
 #ifdef NFD_PCIE0_EMEM
 __visible SIGNAL nfd_cfg_sig_svc_me0;
@@ -64,12 +84,7 @@ do {                                                                    \
                    NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),           \
                    sizeof cfg_bar_data##_isl);                          \
                                                                         \
-        local_csr_write(NFP_MECSR_MAILBOX_0, (0x0CF | (_isl << 8)));    \
-        local_csr_write(NFP_MECSR_MAILBOX_1, cfg_msg##_isl.vnic);       \
-        local_csr_write(NFP_MECSR_MAILBOX_2, cfg_bar_data##_isl[0]);    \
-        local_csr_write(NFP_MECSR_MAILBOX_3, cfg_bar_data##_isl[1]);    \
-                                                                        \
-        msix_reconfig(_isl, cfg_msg##_isl.vnic,                         \
+        msix_qmon_reconfig(_isl, cfg_msg##_isl.vnic,                    \
                       NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),        \
                       cfg_bar_data##_isl);                              \
                                                                         \
@@ -94,18 +109,22 @@ main(void)
         /* Initialisation */
 #ifdef NFD_PCIE0_EMEM
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me0, &cfg_msg0);
+        msix_qmon_init(0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me1, &cfg_msg1);
+        msix_qmon_init(1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me2, &cfg_msg2);
+        msix_qmon_init(2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me3, &cfg_msg3);
+        msix_qmon_init(3);
 #endif
 
 
@@ -132,31 +151,23 @@ main(void)
     }
 
 #ifdef NFD_PCIE0_EMEM
-    if (ctx() == 1) {
-        msix_qmon_init(0);
+    if (ctx() == 1)
         msix_qmon_loop(0);
-    }
 #endif
 
 #ifdef NFD_PCIE1_EMEM
-    if (ctx() == 2) {
-        msix_qmon_init(1);
+    if (ctx() == 2)
         msix_qmon_loop(1);
-    }
 #endif
 
 #ifdef NFD_PCIE2_EMEM
-    if (ctx() == 3) {
-        msix_qmon_init(2);
+    if (ctx() == 3)
         msix_qmon_loop(2);
-    }
 #endif
 
 #ifdef NFD_PCIE3_EMEM
-    if (ctx() == 4) {
-        msix_qmon_init(3);
+    if (ctx() == 4)
         msix_qmon_loop(3);
-    }
 #endif
 
     /* Catch and kill unused threads */

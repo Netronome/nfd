@@ -234,6 +234,7 @@ get_cfg_bar_vf_base(unsigned int pcie_nr, unsigned int vf_nr)
 
     default:
         /* This should not happen */
+        local_csr_write(NFP_MECSR_MAILBOX_2, 0xdead0000 | pcie_nr);
         halt();
     }
 
