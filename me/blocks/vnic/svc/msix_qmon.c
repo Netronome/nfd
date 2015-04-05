@@ -22,20 +22,22 @@
 #include <assert.h>
 #include <vnic/shared/nfcc_chipres.h>
 #include <nfp.h>
+#include <stdint.h>
+#include <types.h>
 
 #include <nfp/cls.h>
 #include <nfp/me.h>
 #include <nfp/mem_bulk.h>
+#include <nfp/mem_atomic.h>
+
+#include <std/reg_utils.h>
 
 #include <nfp6000/nfp_me.h>
-#include <stdint.h>
-#include <types.h>
 
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd_internal.h>
-#include <nfp/mem_atomic.h>
-#include <std/reg_utils.h>
+#include <vnic/utils/qcntl.h>
 
 #include <ns_vnic_ctrl.h>
 
@@ -45,7 +47,6 @@
 
 /*
  * TODO:
- * - TX interrupts
  * - interrupt moderation
  * - any other operation when link comes down?
  * - *maybe* read counters in bulk
@@ -531,7 +532,7 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue)
     else
         entry = msix_tx_entries[pcie_isl][qnum];
 
-    /* Should we automask for this queue? */
+    /* Should we automask this queue? */
     automask = msix_automask & shl64(1ull, qnum);
 
     if (MSIX_Q_IS_PF(qnum)) {
@@ -552,7 +553,7 @@ __forceinline void
 msix_qmon_loop(const unsigned int pcie_isl)
 {
     int qnum;
-    uint32_t rx_cnt;
+    uint32_t count;
     uint64_t qmask;
     uint64_t enabled, pending;
     int ret;
@@ -577,8 +578,8 @@ msix_qmon_loop(const unsigned int pcie_isl)
             enabled &= ~qmask;
 
             /* Check if queue got new packets and try to send MSI-X if so */
-            rx_cnt = msix_get_rx_queue_cnt(pcie_isl, qnum);
-            if (rx_cnt != msix_prev_rx_cnt[pcie_isl][qnum]) {
+            count = msix_get_rx_queue_cnt(pcie_isl, qnum);
+            if (count != msix_prev_rx_cnt[pcie_isl][qnum]) {
                 ret = msix_send_q_irq(pcie_isl, qnum, 1);
 
                 /* If un-successful, mark queue in the pending mask */
@@ -588,12 +589,36 @@ msix_qmon_loop(const unsigned int pcie_isl)
                     msix_rx_pending &= ~qmask;
 
                 /* Update the count to the new value */
-                msix_prev_rx_cnt[pcie_isl][qnum] = rx_cnt;
+                msix_prev_rx_cnt[pcie_isl][qnum] = count;
             }
         }
 
         /*
-         * Handle Pending RX interrupts.
+         * Check enabled TX queues.
+         * Mark queues with changed read pointer as pending. No need to send 
+         * immediately.
+         */
+        enabled = msix_tx_enabled;
+        while (enabled) {
+            qnum = ffs64(enabled);
+            qmask = shl64(1ull, qnum);
+            enabled &= ~qmask;
+
+            /* XXX assumes/hardcodes that TX queues are first...no macro */
+            count = qc_read(pcie_isl, qnum << 1, QC_RPTR);
+            count = NFP_QC_STS_LO_READPTR_of(count);
+            if (count != msix_prev_tx_cnt[pcie_isl][qnum]) {
+                msix_tx_pending |= qmask;
+                msix_prev_tx_cnt[pcie_isl][qnum] = count;
+            }
+        }
+
+
+        /*
+         * Handle pending Interrupts. RX first, then TX.
+         * If a RX Q and a TX queue share the same MSI-X entry (very
+         * likely) then remove them from the respective other pending
+         * mask.
          */
         pending = msix_rx_pending;
         while (pending) {
@@ -602,13 +627,38 @@ msix_qmon_loop(const unsigned int pcie_isl)
             pending &= ~qmask;
 
             /* Update RX queue count in case it changed. */
-            rx_cnt = msix_get_rx_queue_cnt(pcie_isl, qnum);
-            msix_prev_rx_cnt[pcie_isl][qnum] = rx_cnt;
+            count = msix_get_rx_queue_cnt(pcie_isl, qnum);
+            msix_prev_rx_cnt[pcie_isl][qnum] = count;
 
             /* Try to send MSI-X. If successful remove from pending */
             ret = msix_send_q_irq(pcie_isl, qnum, 1);
-            if (!ret)
+            if (!ret) {
                 msix_rx_pending &= ~qmask;
+                if (msix_rx_entries[pcie_isl][qnum] == 
+                    msix_tx_entries[pcie_isl][qnum])
+                    msix_tx_pending &= ~qmask;
+            }
+        }
+
+        pending = msix_tx_pending;
+        while (pending) {
+            qnum = ffs64(pending);
+            qmask = shl64(1ull, qnum);
+            pending &= ~qmask;
+            
+            /* Update TX queue count in case it changed. */
+            count = qc_read(pcie_isl, qnum << 1, QC_RPTR);
+            count = NFP_QC_STS_LO_READPTR_of(count);
+            msix_prev_tx_cnt[pcie_isl][qnum] = count;
+
+            /* Try to send MSI-X. If successful remove from pending */
+            ret = msix_send_q_irq(pcie_isl, qnum, 0);
+            if (!ret) {
+                msix_tx_pending &= ~qmask;
+                if (msix_tx_entries[pcie_isl][qnum] == 
+                    msix_rx_entries[pcie_isl][qnum])
+                    msix_rx_pending &= ~qmask;
+            }
         }
 
         /* In the loop above we perform sufficient IO for others to
