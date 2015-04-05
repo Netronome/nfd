@@ -13,9 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * @file   msix_gen.c
+ * @file   msix_qmon.c
  * @brief  Monitor RX/TX queues and generate MSI-X on changes.
  */
+#ifndef _BLOCKS__VNIC_SVC_MSIX_QMON_C_
+#define _BLOCKS__VNIC_SVC_MSIX_QMON_C_
+
 #include <assert.h>
 #include <vnic/shared/nfcc_chipres.h>
 #include <nfp.h>
@@ -31,14 +34,14 @@
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd_internal.h>
-#include <vnic/utils/msix.h>
 #include <nfp/mem_atomic.h>
 #include <std/reg_utils.h>
 
 #include <ns_vnic_ctrl.h>
 
-#include "../msix_gen.h"
 #include "nfd_common.h"
+
+#include "msix.c"
 
 /*
  * TODO:
@@ -311,7 +314,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
     uint64_t queues;
     SIGNAL ack_sig;
 
-    __assign_relative_register(&ack_sig, SVC_MSIX_GEN_SIG_NUM);
+    __assign_relative_register(&ack_sig, SVC_RECONFIG_SIG_NUM);
 
     control = cfg_bar_data[NS_VNIC_CFG_CTRL >> 2];
     update = cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2];
@@ -356,7 +359,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
     msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 1, vf_rx_rings_new);
     msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 0, vf_rx_rings_new);
 
-    signal_ctx(pcie_isl + 1, SVC_MSIX_GEN_SIG_NUM);
+    signal_ctx(pcie_isl + 1, SVC_RECONFIG_SIG_NUM);
     __implicit_write(&ack_sig);
     wait_for_all(&ack_sig);
 }
@@ -456,7 +459,7 @@ msix_local_reconfig(const unsigned int pcie_isl)
     msix_tx_enabled = msix_cls_tx_enabled[pcie_isl];
 
     /* We are done. Signal context zero */
-    signal_ctx(0, SVC_MSIX_GEN_SIG_NUM);
+    signal_ctx(0, SVC_RECONFIG_SIG_NUM);
 }
 
 
@@ -545,7 +548,7 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue)
 /*
  * The main monitoring loop.
  */
-void
+__forceinline void
 msix_qmon_loop(const unsigned int pcie_isl)
 {
     int qnum;
@@ -556,7 +559,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
 
     SIGNAL reconfig_sig;
 
-    __assign_relative_register(&reconfig_sig, SVC_MSIX_GEN_SIG_NUM);
+    __assign_relative_register(&reconfig_sig, SVC_RECONFIG_SIG_NUM);
 
     for (;;) {
 
@@ -613,3 +616,5 @@ msix_qmon_loop(const unsigned int pcie_isl)
         ctx_swap();
     }
 }
+
+#endif /* !_BLOCKS__VNIC_SVC_MSIX_QMON_C_ */

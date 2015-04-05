@@ -26,7 +26,10 @@
 #include <nfp6000/nfp_me.h>
 
 #include "shared/nfd_cfg.h"
-#include "utils/msix_gen.h"
+
+/* Signal used for reconfiguration synchronisation */
+#define SVC_RECONFIG_SIG_NUM    15
+#include "svc/msix_qmon.c"
 
 
 /*

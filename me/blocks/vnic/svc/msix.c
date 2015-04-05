@@ -17,6 +17,8 @@
  * @brief  MSI-X library
  */
 
+#ifndef _BLOCKS__VNIC_SVC_MSIX_C_
+#define _BLOCKS__VNIC_SVC_MSIX_C_
 
 /*
  * NOTE
@@ -85,7 +87,7 @@
 /*
  * Calculate the CPP2PCIe bar value (should be somewhere else)
  */
-__intrinsic unsigned int
+__intrinsic static unsigned int
 pcie_c2p_barcfg_addr(unsigned int addr_hi,
                      unsigned int addr_lo, unsigned int req_id)
 {
@@ -122,24 +124,30 @@ enum pcie_cpp2pci_bar {
 __gpr static unsigned int msix_cur_cpp2pci_addr = 0;
 
 
-/*
- * Send an MSI-X interrupt for a PF.
+/**
+ * Send MSI-X interrupt for a PF, and optionally mask the interrupt
  *
- * The PF MSI-X table is in SRAM in the PCIe Island and the hardware
- * support a mechanism for generating a MSI-X via a CSR write.  The
- * hardware currently does not handle pending MSI-X correctly, so we
- * check the MSI-X control word manually.
+ * Returns 0 on success and non-zero when the entry is masked.
  *
- * The steps are as follows:
- * - Check if the entry is masked
- * - If not, generate an interrupt (by writing to the appropriate CSR)
- * - If the caller asks us to mask, mask the entry.
+ * @param pcie_nr     PCIe cluster number
+ * @param entry_nr    MSI-X table entry number
+ * @param mask_en     Boolean, should interrupt be masked after sending.
+ * @return            0 on success, else the interrupt was masked.
+ *
+ * The PF MSI-X table is in SRAM in the PCIe Island and the hardware support a 
+ * mechanism for generating a MSI-X via a CSR write.  The hardware currently 
+ * does not handle pending MSI-X correctly, so we check the MSI-X control word 
+ * manually.
+ *
+ * The steps are as follows: - Check if the entry is masked - If not, generate 
+ * an interrupt (by writing to the appropriate CSR) - If the caller asks us to 
+ * mask, mask the entry.
  *
  * Note, there is a race potential race between reading the status and
- * generating the interrupt, but this race can only happen if the
- * driver masks the interrupt in between the ME reading the MSI-X
- * control word and attempting to send the interrupt.  Since the
- * driver is not masking the interrupt the race should not happen.
+ * generating the interrupt, but this race can only happen if the driver masks 
+ * the interrupt in between the ME reading the MSI-X control word and 
+ * attempting to send the interrupt.  Since the driver is not masking the 
+ * interrupt the race should not happen.
  */
 __intrinsic int
 msix_pf_send(unsigned int pcie_nr, unsigned int entry_nr, unsigned int mask_en)
@@ -241,8 +249,13 @@ get_cfg_bar_vf_base(unsigned int pcie_nr, unsigned int vf_nr)
     return cfg_bar_vf_addr;
 }
 
-/*
- * Send an MSI-X interrupt for a VF.
+/**
+ * Send MSI-X interrupt for specified virtual function and optionally mask
+ * @param pcie_nr     PCIe cluster number
+ * @param vf_nr       Virtual function number (0 to 15)
+ * @param entry_nr    MSI-X table entry number
+ * @param mask_en     Boolean, should interrupt be masked after sending.
+ * @return            0 on success, else the interrupt was masked.
  *
  * There is no hardware support for MSI-X in VFs so this is
  * implemented entirely in software.  The MSI-X table for each VF is
@@ -325,3 +338,5 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
 out:
     return ret;
 }
+
+#endif /* !_BLOCKS__VNIC_SVC_MSIX_C_ */
