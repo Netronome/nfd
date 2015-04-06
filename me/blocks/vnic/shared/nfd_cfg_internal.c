@@ -96,6 +96,17 @@ NFD_CFG_RINGS_INIT(2);
 NFD_CFG_RINGS_INIT(3);
 #endif
 
+#define NFD_CFG_PF_DECLARE_IND(_isl)                                \
+    NFD_CFG_BASE_DECLARE(_isl)                                      \
+    ASM(.declare_resource nfd_cfg_base##_isl##_res global           \
+        ((NFD_MAX_VFS + NFD_MAX_PFS) * NS_VNIC_CFG_BAR_SZ)          \
+        nfd_cfg_base##_isl)                                         \
+    ASM(.alloc_resource _pf##_isl##_net_bar0                        \
+        nfd_cfg_base##_isl##_res+(NFD_MAX_VFS * NS_VNIC_CFG_BAR_SZ) \
+        global NS_VNIC_CFG_BAR_SZ)
+
+#define NFD_CFG_PF_DECLARE(_isl) NFD_CFG_PF_DECLARE_IND(_isl)
+
 
 /* XXX temp defines that match the BSP pcie_monitor_api.h */
 #define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c
