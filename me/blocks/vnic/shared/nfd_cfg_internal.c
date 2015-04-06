@@ -166,6 +166,13 @@ NFD_CFG_RINGS_INIT(3);
 NFD_CFG_FLR_INIT(PCIE_ISL);
 #endif
 
+
+#define NFD_CFG_CLEAR_QC                                                \
+    __asm { .init_csr pcie:PcieInternalTargets.Queue[0:255].ConfigStatusLow \
+            0x80000000 const }                                          \
+    __asm { .init_csr pcie:PcieInternalTargets.Queue[0:255].ConfigStatusHigh \
+            0x4000000 const }                                           \
+
 /*
  * Compute constants to help map from the configuration bitmask
  * to configuration queues. We need to compute the spacing between
