@@ -2,7 +2,7 @@
 #define _BLOCKS__SHARED_NFD_CFG_PF_BARS_UC_
 
 #include "nfd_user_cfg.h"
-#include <ns_vnic_ctrl.h>
+#include <nfp_net_ctrl.h>
 
 #if NFD_MAX_PF_QUEUES != 0
 #define NFD_MAX_PFS 1

@@ -19,7 +19,7 @@
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 
-#include <ns_vnic_ctrl.h>
+#include <nfp_net_ctrl.h>
 
 
 #define NFP_PCIEX_ISL_BASE                                   0x04000000
@@ -73,7 +73,7 @@
 
 /* Defines to control how much data we should write with bulk methods */
 /* XXX confirm whether or not the FLR reset should write MSIX tables to zero.
- * XXX ns_vnic_ctrl.h doesn't seem to have suitable defines to use currently. */
+ * XXX nfp_net_ctrl.h doesn't seem to have suitable defines to use currently. */
 #define NFD_FLR_CLR_START   0x50
 #define NFD_FLR_CLR_SZ      (SZ_8K - 0x50)
 
@@ -94,14 +94,14 @@ nfd_flr_clr_bar(__emem char *addr)
     unsigned int copied_bytes;
 
     ctassert(__is_aligned(NFD_FLR_CLR_SZ, 8));
-    ctassert(sizeof zero > NS_VNIC_CFG_VERSION - NS_VNIC_CFG_TXRS_ENABLE);
+    ctassert(sizeof zero > NFP_NET_CFG_VERSION - NFP_NET_CFG_TXRS_ENABLE);
     ctassert(__is_log2(sizeof zero));
 
     reg_zero(zero, sizeof zero);
 
     /* Clear the data below the RO fields */
-    mem_write64(zero, addr + NS_VNIC_CFG_TXRS_ENABLE,
-                NS_VNIC_CFG_VERSION - NS_VNIC_CFG_TXRS_ENABLE);
+    mem_write64(zero, addr + NFP_NET_CFG_TXRS_ENABLE,
+                NFP_NET_CFG_VERSION - NFP_NET_CFG_TXRS_ENABLE);
 
     addr += NFD_FLR_CLR_START;
 
@@ -135,7 +135,7 @@ nfd_flr_write_pf_cap(__emem char *isl_base)
                                    NFD_OUT_Q_START + tx_q_off};
 
     mem_write64(&cfg,
-                NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NS_VNIC_CFG_VERSION,
+                NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 }
 
@@ -156,7 +156,7 @@ nfd_flr_write_vf_cap(__emem char *isl_base, unsigned int vf)
                                    NFD_CFG_MAX_MTU, tx_q_off,
                                    NFD_OUT_Q_START + tx_q_off};
 
-    mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NS_VNIC_CFG_VERSION,
+    mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 }
 
@@ -246,9 +246,9 @@ nfd_flr_read_sent(unsigned int pcie_isl, __xread unsigned int flr_sent[3])
  * @param isl_base      start address of the CFG BARs for the PCIe island
  * @param vnic          vNIC number on the PCIe island
  *
- * NS_VNIC_CFG_CTRL is cleared so that the vNIC will be disabled, and
- * NS_VNIC_CFG_UPDATE is set to "NS_VNIC_CFG_UPDATE_GEN |
- * NS_VNIC_CFG_UPDATE_RESET | NS_VNIC_CFG_UPDATE_MSIX".  This means that 
+ * NFP_NET_CFG_CTRL is cleared so that the vNIC will be disabled, and
+ * NFP_NET_CFG_UPDATE is set to "NFP_NET_CFG_UPDATE_GEN |
+ * NFP_NET_CFG_UPDATE_RESET | NFP_NET_CFG_UPDATE_MSIX".  This means that 
  * MEs processing the message can respond to it as an FLR if required, or 
  * simply behave as if the vNIC was being downed.
  *
@@ -260,8 +260,8 @@ nfd_flr_write_cfg_msg(__emem char *isl_base, unsigned int vnic)
 {
     __xwrite unsigned int cfg_bar_msg[2] = {0, 0};
 
-    cfg_bar_msg[1] = NS_VNIC_CFG_UPDATE_GEN | NS_VNIC_CFG_UPDATE_RESET | \
-	             NS_VNIC_CFG_UPDATE_MSIX;
+    cfg_bar_msg[1] = NFP_NET_CFG_UPDATE_GEN | NFP_NET_CFG_UPDATE_RESET | \
+	             NFP_NET_CFG_UPDATE_MSIX;
 
     mem_write64(cfg_bar_msg, NFD_CFG_BAR(isl_base, vnic),
                 sizeof cfg_bar_msg);

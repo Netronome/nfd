@@ -8,7 +8,7 @@
 #define _BLOCKS__SHARED_NFD_CFG_H_
 
 #include <nfp/mem_ring.h>
-#include <ns_vnic_ctrl.h>
+#include <nfp_net_ctrl.h>
 
 #include <vnic/shared/nfcc_chipres.h>
 #include <vnic/shared/nfd.h>
@@ -24,10 +24,10 @@
 /* XXX Set some "random" bits in the capabilities field
  * for testing purposes */
 #define NFD_CFG_CAP                                             \
-    (NS_VNIC_CFG_CTRL_ENABLE | NS_VNIC_CFG_CTRL_PROMISC |       \
-     NS_VNIC_CFG_CTRL_RXCSUM | NS_VNIC_CFG_CTRL_TXCSUM |        \
-     NS_VNIC_CFG_CTRL_RXVLAN | NS_VNIC_CFG_CTRL_TXVLAN |        \
-     NS_VNIC_CFG_CTRL_MSIXAUTO)
+    (NFP_NET_CFG_CTRL_ENABLE | NFP_NET_CFG_CTRL_PROMISC |       \
+     NFP_NET_CFG_CTRL_RXCSUM | NFP_NET_CFG_CTRL_TXCSUM |        \
+     NFP_NET_CFG_CTRL_RXVLAN | NFP_NET_CFG_CTRL_TXVLAN |        \
+     NFP_NET_CFG_CTRL_MSIXAUTO)
 #endif
 
 #ifndef NFD_CFG_MAX_MTU
@@ -110,12 +110,12 @@ NFD_CFG_RINGS_DECL(3);
 #if 1
 #define NFD_CFG_BASE_DECLARE(_isl)                                   \
     ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global          \
-        ((NFD_MAX_VFS + NFD_MAX_PFS) * NS_VNIC_CFG_BAR_SZ) SZ_2M)
+        ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ) SZ_2M)
 #else
 #define NFD_CFG_BASE_DECLARE(_isl)                                   \
     ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global          \
-        ((NFD_MAX_VFS + NFD_MAX_PFS) * NS_VNIC_CFG_BAR_SZ)           \
-        (NFD_MAX_VFS * NS_VNIC_CFG_BAR_SZ * (1 +  NFD_MAX_PFS)))
+        ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ)           \
+        (NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ * (1 +  NFD_MAX_PFS)))
 #endif
 
 
@@ -128,7 +128,7 @@ NFD_CFG_RINGS_DECL(3);
 
 /* XXX we can't use "|" here due to NFCC error, check and possibly JIRA. */
 #define NFD_CFG_BAR(_base, _vnic)               \
-    ((_base) + (_vnic * NS_VNIC_CFG_BAR_SZ))
+    ((_base) + (_vnic * NFP_NET_CFG_BAR_SZ))
 
 #define NFD_CFG_BAR_ISL(_isl, _vnic)            \
     NFD_CFG_BAR(NFD_CFG_BASE_LINK(_isl), _vnic)

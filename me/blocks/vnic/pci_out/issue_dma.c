@@ -24,7 +24,7 @@
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
 
-#include <ns_vnic_ctrl.h>
+#include <nfp_net_ctrl.h>
 
 
 /* Required user configuration */
@@ -297,7 +297,7 @@ do {                                                                    \
                         --, b, ctm_msg] }                               \
                                                                         \
             descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;      \
-            descr_tmp.pcie_addr_lo += NS_VNIC_RX_OFFSET;                \
+            descr_tmp.pcie_addr_lo += NFP_NET_RX_OFFSET;                \
             descr_tmp.pcie_addr_lo -= rx_desc##_pkt.meta_len;           \
                                                                         \
             descr_tmp.length = rx_desc##_pkt##.data_len - 1;            \
@@ -322,7 +322,7 @@ do {                                                                    \
                                                                         \
             data_len = rx_desc##_pkt##.data_len;                        \
             pcie_lo_start = fl_entries[_pkt].dma_addr_lo;               \
-            pcie_lo_start += NS_VNIC_RX_OFFSET;                         \
+            pcie_lo_start += NFP_NET_RX_OFFSET;                         \
             pcie_lo_start -= rx_desc##_pkt.meta_len;                    \
                                                                         \
             ctm_hi = msg.cpp.isl;                                       \

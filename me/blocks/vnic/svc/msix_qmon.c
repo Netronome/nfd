@@ -39,7 +39,7 @@
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/qcntl.h>
 
-#include <ns_vnic_ctrl.h>
+#include <nfp_net_ctrl.h>
 
 #include "nfd_common.h"
 
@@ -201,8 +201,8 @@ __shared __cls uint64_t msix_cls_rx_new_enabled[MAX_NUM_PCI_ISLS];
 __shared __cls uint64_t msix_cls_tx_new_enabled[MAX_NUM_PCI_ISLS];
 __shared __cls uint64_t msix_cls_automask[MAX_NUM_PCI_ISLS];
 
-__shared __cls uint8_t msix_cls_rx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_RXR_MAX];
-__shared __cls uint8_t msix_cls_tx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_TXR_MAX];
+__shared __cls uint8_t msix_cls_rx_entries[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
+__shared __cls uint8_t msix_cls_tx_entries[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX];
 
 /*
  * Initialise the state (executed by context 0)
@@ -270,10 +270,10 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
 
         /* Get MSI-X entry number and stash it into local memory */
         if (rx_rings) {
-            entry_addr = cfg_bar + NS_VNIC_CFG_RXR_VEC(ring);
+            entry_addr = cfg_bar + NFP_NET_CFG_RXR_VEC(ring);
             cls_addr = msix_cls_rx_entries[pcie_isl];
         } else {
-            entry_addr = cfg_bar + NS_VNIC_CFG_TXR_VEC(ring);
+            entry_addr = cfg_bar + NFP_NET_CFG_TXR_VEC(ring);
             cls_addr = msix_cls_tx_entries[pcie_isl];
         }
         alt_mem_read32_le(&entry_r, entry_addr);
@@ -286,7 +286,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
 
         /* Make sure the ICR is reset */
         tmp_w = 0;
-        alt_mem_write8_le(&tmp_w, cfg_bar + NS_VNIC_CFG_ICR(entry));
+        alt_mem_write8_le(&tmp_w, cfg_bar + NFP_NET_CFG_ICR(entry));
     }
 
     /* Convert VF ring bitmask into Queue mask */
@@ -347,21 +347,21 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
 
     __assign_relative_register(&ack_sig, SVC_RECONFIG_SIG_NUM);
 
-    control = cfg_bar_data[NS_VNIC_CFG_CTRL >> 2];
-    update = cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2];
+    control = cfg_bar_data[NFP_NET_CFG_CTRL >> 2];
+    update = cfg_bar_data[NFP_NET_CFG_UPDATE >> 2];
 
     /* If no MSI-X updates, return */
-    if (!(update & NS_VNIC_CFG_UPDATE_MSIX))
+    if (!(update & NFP_NET_CFG_UPDATE_MSIX))
         return;
 
     /* Check if we are up and rings have changed */
-    if ((control & NS_VNIC_CFG_CTRL_ENABLE) &&
-        (update & NS_VNIC_CFG_UPDATE_RING)) {
-        vf_tx_rings_new = cfg_bar_data[NS_VNIC_CFG_TXRS_ENABLE >> 2];
-        vf_rx_rings_new = cfg_bar_data[NS_VNIC_CFG_RXRS_ENABLE >> 2];
+    if ((control & NFP_NET_CFG_CTRL_ENABLE) &&
+        (update & NFP_NET_CFG_UPDATE_RING)) {
+        vf_tx_rings_new = cfg_bar_data[NFP_NET_CFG_TXRS_ENABLE >> 2];
+        vf_rx_rings_new = cfg_bar_data[NFP_NET_CFG_RXRS_ENABLE >> 2];
 
-    } else if ((update & NS_VNIC_CFG_UPDATE_GEN) &&
-               (!(control & NS_VNIC_CFG_CTRL_ENABLE))) {
+    } else if ((update & NFP_NET_CFG_UPDATE_GEN) &&
+               (!(control & NFP_NET_CFG_CTRL_ENABLE))) {
         /* The device got disabled */
         vf_tx_rings_new = 0;
         vf_rx_rings_new = 0;
@@ -381,7 +381,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
      * all queues of the VF/PF depending on the auto-mask bit in the
      * control word. */
     queues = shl64(vf_rx_rings_new, vnic * NFD_MAX_VF_QUEUES);
-    if (control & NS_VNIC_CFG_CTRL_MSIXAUTO)
+    if (control & NFP_NET_CFG_CTRL_MSIXAUTO)
         msix_cls_automask[pcie_isl] |= queues;
     else
         msix_cls_automask[pcie_isl] &= ~queues;
@@ -418,7 +418,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
  * Registers.  The second group is kept in local memory.  The local
  * memory variables are marked as shared and are arrays of arrays,
  * because otherwise something like uint32_t
- * msix_prev_rx_cnt[NS_VNIC_RXR_MAX] would get allocated for *every*
+ * msix_prev_rx_cnt[NFP_NET_RXR_MAX] would get allocated for *every*
  * context.
  *
  * XXX Global __nnr variables explicitly initialised to zero due to THSDK-2070
@@ -429,10 +429,10 @@ __nnr static uint64_t msix_rx_pending = 0;
 __nnr static uint64_t msix_tx_pending = 0;
 __nnr static uint64_t msix_automask = 0;
 
-__shared __lmem uint8_t msix_rx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_RXR_MAX];
-__shared __lmem uint8_t msix_tx_entries[MAX_NUM_PCI_ISLS][NS_VNIC_TXR_MAX];
-__shared __lmem uint32_t msix_prev_rx_cnt[MAX_NUM_PCI_ISLS][NS_VNIC_RXR_MAX];
-__shared __lmem uint32_t msix_prev_tx_cnt[MAX_NUM_PCI_ISLS][NS_VNIC_TXR_MAX];
+__shared __lmem uint8_t msix_rx_entries[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
+__shared __lmem uint8_t msix_tx_entries[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX];
+__shared __lmem uint32_t msix_prev_rx_cnt[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
+__shared __lmem uint32_t msix_prev_tx_cnt[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX];
 
 /*
  * Local reconfig
@@ -448,7 +448,7 @@ msix_local_reconfig(const unsigned int pcie_isl)
     uint64_t new_enabled;
     __xread uint64_t tmp64;
     int qnum;
-    __xread uint32_t entries[NS_VNIC_RXR_MAX / 4];
+    __xread uint32_t entries[NFP_NET_RXR_MAX / 4];
 
     /*
      * Handle newly enabled queues (RX first, then TX)
@@ -586,13 +586,13 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue)
     /* If we don't use auto-masking, check (and update) the ICR */
     if (!automask) {
         cfg_bar = NFD_CFG_BAR(svc_cfg_bars[pcie_isl], fn);
-        cfg_bar += NS_VNIC_CFG_ICR(entry);
+        cfg_bar += NFP_NET_CFG_ICR(entry);
         alt_mem_read32_le(&mask_r, (__mem void *)cfg_bar);
         if (mask_r & 0x000000ff) {
             ret = 1;
             goto out;
         }
-        mask_w = NS_VNIC_CFG_ICR_RXTX;
+        mask_w = NFP_NET_CFG_ICR_RXTX;
         alt_mem_write8_le(&mask_w, (__mem void *)cfg_bar);
     }
 

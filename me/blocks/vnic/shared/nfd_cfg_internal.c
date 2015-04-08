@@ -29,7 +29,7 @@
 
 #include <vnic/shared/nfd_flr.c>
 
-#include <ns_vnic_ctrl.h>
+#include <nfp_net_ctrl.h>
 
 
 #if NFD_MAX_VF_QUEUES != 0
@@ -103,11 +103,11 @@ NFD_CFG_RINGS_INIT(3);
 #define NFD_CFG_PF_DECLARE_IND(_isl)                                \
     NFD_CFG_BASE_DECLARE(_isl)                                      \
     ASM(.declare_resource nfd_cfg_base##_isl##_res global           \
-        ((NFD_MAX_VFS + NFD_MAX_PFS) * NS_VNIC_CFG_BAR_SZ)          \
+        ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ)          \
         nfd_cfg_base##_isl)                                         \
     ASM(.alloc_resource _pf##_isl##_net_bar0                        \
-        nfd_cfg_base##_isl##_res+(NFD_MAX_VFS * NS_VNIC_CFG_BAR_SZ) \
-        global NS_VNIC_CFG_BAR_SZ)
+        nfd_cfg_base##_isl##_res+(NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ) \
+        global NFP_NET_CFG_BAR_SZ)
 
 #define NFD_CFG_PF_DECLARE(_isl) NFD_CFG_PF_DECLARE_IND(_isl)
 
@@ -494,7 +494,7 @@ _nfd_cfg_write_vf_cap(unsigned int vnic)
                                    NFD_CFG_MAX_MTU, tx_q_off,
                                    NFD_OUT_Q_START + tx_q_off};
 
-    mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NS_VNIC_CFG_VERSION,
+    mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 }
 
@@ -510,7 +510,7 @@ _nfd_cfg_write_pf_cap()
 
     mem_write64(&cfg,
                 (NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
-                 NS_VNIC_CFG_VERSION),
+                 NFP_NET_CFG_VERSION),
                 sizeof cfg);
 }
 
@@ -833,7 +833,7 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
  *
  * This method checks the FLR state to determine whether there is an
  * FLR to respond to.  If there is, it populates the "cfg_msg", writes
- * NS_VNIC_CFG_UPDATE for that vNIC and sets the appropriate bit of
+ * NFP_NET_CFG_UPDATE for that vNIC and sets the appropriate bit of
  * "nfd_flr_sent".
  *
  * The method checks the PF, the lower 32 VFs, and the upper 32 VFs in that
@@ -980,17 +980,17 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
     if (comp == NFD_CFG_PCI_OUT) {
         /* Need RXRS_ENABLES, at 0x10 */
         mem_read64(cfg_bar_data,
-                   NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + NS_VNIC_CFG_CTRL,
+                   NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + NFP_NET_CFG_CTRL,
                    6 * sizeof(unsigned int));
     } else {
         /* Only need TXRS_ENABLES, at 0x08 */
         mem_read64(cfg_bar_data,
-                   NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + NS_VNIC_CFG_CTRL,
+                   NFD_CFG_BAR_ISL(PCIE_ISL, cfg_msg->vnic) + NFP_NET_CFG_CTRL,
                    4 * sizeof(unsigned int));
     }
 
     /* Check capabilities */
-    if (cfg_bar_data[NS_VNIC_CFG_CTRL] & ~NFD_CFG_CAP) {
+    if (cfg_bar_data[NFP_NET_CFG_CTRL] & ~NFD_CFG_CAP) {
         /* Mark an error and abort processing */
         cfg_msg->error = 1;
         return;
@@ -998,8 +998,8 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
 
     /* Check if change affects this component */
     /* Only interested in the change if it contains a ring update */
-    if (cfg_bar_data[NS_VNIC_CFG_UPDATE >> 2] &
-        (NS_VNIC_CFG_UPDATE_RING | NS_VNIC_CFG_UPDATE_GEN)) {
+    if (cfg_bar_data[NFP_NET_CFG_UPDATE >> 2] &
+        (NFP_NET_CFG_UPDATE_RING | NFP_NET_CFG_UPDATE_GEN)) {
         cfg_msg->interested = 1;
     }
 
@@ -1012,19 +1012,19 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
 
     /* Copy ring configs
      * If the vNIC is not up, set all ring enables to zero */
-    if (cfg_bar_data[NS_VNIC_CFG_CTRL] & NS_VNIC_CFG_CTRL_ENABLE) {
+    if (cfg_bar_data[NFP_NET_CFG_CTRL] & NFP_NET_CFG_CTRL_ENABLE) {
         unsigned int enables_ind, addr_off, sz_off;
 
         if (comp == NFD_CFG_PCI_OUT) {
-            enables_ind = NS_VNIC_CFG_RXRS_ENABLE >> 2;
-            addr_off =    NS_VNIC_CFG_RXR_ADDR(cfg_msg->queue);
-            sz_off =      NS_VNIC_CFG_RXR_SZ(cfg_msg->queue);
+            enables_ind = NFP_NET_CFG_RXRS_ENABLE >> 2;
+            addr_off =    NFP_NET_CFG_RXR_ADDR(cfg_msg->queue);
+            sz_off =      NFP_NET_CFG_RXR_SZ(cfg_msg->queue);
         } else if (comp == NFD_CFG_PCI_IN0) {
-            enables_ind = NS_VNIC_CFG_TXRS_ENABLE >> 2;
-            addr_off =    NS_VNIC_CFG_TXR_ADDR(cfg_msg->queue);
-            sz_off =      NS_VNIC_CFG_TXR_SZ(cfg_msg->queue);
+            enables_ind = NFP_NET_CFG_TXRS_ENABLE >> 2;
+            addr_off =    NFP_NET_CFG_TXR_ADDR(cfg_msg->queue);
+            sz_off =      NFP_NET_CFG_TXR_SZ(cfg_msg->queue);
         } else if (comp == NFD_CFG_PCI_IN1) {
-            enables_ind = NS_VNIC_CFG_TXRS_ENABLE >> 2;
+            enables_ind = NFP_NET_CFG_TXRS_ENABLE >> 2;
         } else {
             cterror("Invalid nfd_cfg_component value.");
         }
@@ -1105,11 +1105,11 @@ nfd_cfg_proc_msg(struct nfd_cfg_msg *cfg_msg, unsigned int *queue,
 
     /* Read values for next queue(s) */
     if (comp == NFD_CFG_PCI_OUT) {
-        next_addr_off = NS_VNIC_CFG_RXR_ADDR(cfg_msg->queue);
-        next_sz_off =   NS_VNIC_CFG_RXR_SZ(cfg_msg->queue);
+        next_addr_off = NFP_NET_CFG_RXR_ADDR(cfg_msg->queue);
+        next_sz_off =   NFP_NET_CFG_RXR_SZ(cfg_msg->queue);
     } else {
-        next_addr_off = NS_VNIC_CFG_TXR_ADDR(cfg_msg->queue);
-        next_sz_off =   NS_VNIC_CFG_TXR_SZ(cfg_msg->queue);
+        next_addr_off = NFP_NET_CFG_TXR_ADDR(cfg_msg->queue);
+        next_sz_off =   NFP_NET_CFG_TXR_SZ(cfg_msg->queue);
     }
 
     /* We only use the address if the ring is enabled.

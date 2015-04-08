@@ -15,7 +15,7 @@
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
 
-#include <ns_vnic_ctrl.h>
+#include <nfp_net_ctrl.h>
 
 
 __intrinsic void
@@ -70,13 +70,13 @@ nfd_cfg_app_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
     __dram char *addr = (__dram char *) isl_base;
 
     /* Compute the address of the update field */
-    addr += cfg_msg->vnic * NS_VNIC_CFG_BAR_SZ;
-    addr += NS_VNIC_CFG_UPDATE;
+    addr += cfg_msg->vnic * NFP_NET_CFG_BAR_SZ;
+    addr += NFP_NET_CFG_UPDATE;
 
     if (cfg_msg->error) {
-        result = NS_VNIC_CFG_UPDATE_ERR;
+        result = NFP_NET_CFG_UPDATE_ERR;
     } else {
-        /* XXX add NS_VNIC_CFG_UPDATE_SUCCESS value to ns_vnic_ctrl.h */
+        /* XXX add NFP_NET_CFG_UPDATE_SUCCESS value to nfp_net_ctrl.h */
         result = 0;
     }
 

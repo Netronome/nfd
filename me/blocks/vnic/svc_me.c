@@ -99,7 +99,7 @@ do {                                                                    \
 			   cfg_bar_data##_isl);				\
                                                                         \
         /* Handle FLRs */                                               \
-        if (cfg_bar_data##_isl[1] & NS_VNIC_CFG_UPDATE_RESET) {         \
+        if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_RESET) {         \
                                                                         \
             /* NB: This method writes ~8K of data */                    \
             nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic)); \
