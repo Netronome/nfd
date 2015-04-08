@@ -11,8 +11,8 @@
 #endif
 
 #define_eval NFD_TOTAL_VNICS (NFD_MAX_VFS + NFD_MAX_PFS)
-#define_eval NFD_CFG_BAR_SZ (NFD_TOTAL_VNICS * NS_VNIC_CFG_BAR_SZ)
-#define_eval NFD_CFG_BAR0_OFF (NFD_MAX_VFS * NS_VNIC_CFG_BAR_SZ)
+#define_eval NFD_CFG_BAR_SZ (NFD_TOTAL_VNICS * NFP_NET_CFG_BAR_SZ)
+#define_eval NFD_CFG_BAR0_OFF (NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ)
 
 
 #macro nfd_define_pf_bars(_isl)
@@ -22,7 +22,7 @@
     nfd_cfg_base/**/_isl
 .alloc_resource _pf/**/_isl/**/_net_bar0 \
     nfd_cfg_base/**/_isl/**/_res+NFD_CFG_BAR0_OFF global \
-    NS_VNIC_CFG_BAR_SZ
+    NFP_NET_CFG_BAR_SZ
 #endm
 
 
