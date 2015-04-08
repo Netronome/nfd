@@ -248,8 +248,8 @@ nfd_flr_read_sent(unsigned int pcie_isl, __xread unsigned int flr_sent[3])
  *
  * NFP_NET_CFG_CTRL is cleared so that the vNIC will be disabled, and
  * NFP_NET_CFG_UPDATE is set to "NFP_NET_CFG_UPDATE_GEN |
- * NFP_NET_CFG_UPDATE_RESET | NFP_NET_CFG_UPDATE_MSIX".  This means that 
- * MEs processing the message can respond to it as an FLR if required, or 
+ * NFP_NET_CFG_UPDATE_RESET | NFP_NET_CFG_UPDATE_MSIX".  This means that
+ * MEs processing the message can respond to it as an FLR if required, or
  * simply behave as if the vNIC was being downed.
  *
  * This method can be called for both the PF and the VFs, with suitable
@@ -260,8 +260,8 @@ nfd_flr_write_cfg_msg(__emem char *isl_base, unsigned int vnic)
 {
     __xwrite unsigned int cfg_bar_msg[2] = {0, 0};
 
-    cfg_bar_msg[1] = NFP_NET_CFG_UPDATE_GEN | NFP_NET_CFG_UPDATE_RESET | \
-	             NFP_NET_CFG_UPDATE_MSIX;
+    cfg_bar_msg[1] = (NFP_NET_CFG_UPDATE_GEN | NFP_NET_CFG_UPDATE_RESET |
+                      NFP_NET_CFG_UPDATE_MSIX);
 
     mem_write64(cfg_bar_msg, NFD_CFG_BAR(isl_base, vnic),
                 sizeof cfg_bar_msg);

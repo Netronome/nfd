@@ -40,7 +40,7 @@ __shared __lmem volatile uint64_t svc_cfg_bars[NFD_MAX_ISL];
 
 /*
  * The service ME performs a number of different functions.
- * 
+ *
  * Context  0:   Handling configuration messages
  * Contexts 1-4: Monitor RX/TX queues and generate MSI-X (one per PCIe island)
  */
@@ -93,10 +93,10 @@ do {                                                                    \
         mem_read64(cfg_bar_data##_isl,                                  \
                    NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),           \
                    sizeof cfg_bar_data##_isl);                          \
-	                                                                \
+                                                                        \
         msix_qmon_reconfig(_isl, cfg_msg##_isl.vnic,                    \
-			   NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),	\
-			   cfg_bar_data##_isl);				\
+                           NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),   \
+                           cfg_bar_data##_isl);                         \
                                                                         \
         /* Handle FLRs */                                               \
         if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_RESET) {         \
