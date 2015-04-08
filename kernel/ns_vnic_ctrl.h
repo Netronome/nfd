@@ -115,7 +115,7 @@
 #define NS_VNIC_CFG_MACADDR             0x0024
 
 /**
- * Read-only words (0x0030 - 0x0058):
+ * Read-only words (0x0030 - 0x0050):
  * @NS_VNIC_CFG_VERSION:     Firmware version number
  * @NS_VNIC_CFG_STS:         Status
  * @NS_VNIC_CFG_CAP:         Capabilities (same bits as @NS_VNIC_CFG_CTRL)
@@ -124,7 +124,6 @@
  * @NS_VNIC_MAX_MTU:         Maximum support MTU
  * @NS_VNIC_CFG_START_TXQ:   Start Queue Control Queue to use for TX (PF only)
  * @NS_VNIC_CFG_START_RXQ:   Start Queue Control Queue to use for RX (PF only)
- * @NS_VNIC_CFG_SPARE_ADDR:  DMA address for ME code to use (e.g. YDS-155 fix)
  *
  * TODO:
  * - define more STS bits
@@ -139,6 +138,11 @@
 /* Next two words are being used by VFs for solving THB350 issue */
 #define NS_VNIC_CFG_START_TXQ           0x0048
 #define NS_VNIC_CFG_START_RXQ           0x004c
+
+/**
+ * NFP-3200 workaround (0x0050 - 0x0058)
+ * @NS_VNIC_CFG_SPARE_ADDR:  DMA address for ME code to use (e.g. YDS-155 fix)
+ */
 #define NS_VNIC_CFG_SPARE_ADDR          0x0050
 
 /**
