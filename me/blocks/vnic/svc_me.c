@@ -26,7 +26,7 @@
 #include <nfp6000/nfp_me.h>
 
 #include "shared/nfd_cfg.h"
-
+#include <vnic/shared/nfd_flr.c>
 
 /* A global array with base addresses for the configuration
  * bars. Marked as volatile so the compiler doesn't optimise them
@@ -44,7 +44,6 @@ __shared __lmem volatile uint64_t svc_cfg_bars[NFD_MAX_ISL];
  * Context  0:   Handling configuration messages
  * Contexts 1-4: Monitor RX/TX queues and generate MSI-X (one per PCIe island)
  */
-
 
 #ifdef NFD_PCIE0_EMEM
 __visible SIGNAL nfd_cfg_sig_svc_me0;
@@ -82,6 +81,8 @@ struct nfd_cfg_msg cfg_msg3;
 NFD_CFG_BASE_DECLARE(3);
 #endif
 
+NFD_FLR_DECLARE;
+
 
 #define CHECK_CFG_MSG(_isl)                                             \
 do {                                                                    \
@@ -92,10 +93,30 @@ do {                                                                    \
         mem_read64(cfg_bar_data##_isl,                                  \
                    NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),           \
                    sizeof cfg_bar_data##_isl);                          \
-                                                                        \
+	                                                                \
         msix_qmon_reconfig(_isl, cfg_msg##_isl.vnic,                    \
-                      NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),        \
-                      cfg_bar_data##_isl);                              \
+			   NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),	\
+			   cfg_bar_data##_isl);				\
+                                                                        \
+        /* Handle FLRs */                                               \
+        if (cfg_bar_data##_isl[1] & NS_VNIC_CFG_UPDATE_RESET) {         \
+                                                                        \
+            /* NB: This method writes ~8K of data */                    \
+            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic)); \
+                                                                        \
+            if (cfg_msg##_isl.vnic == NFD_MAX_VFS) {                    \
+                /* We have a PF FLR */                                  \
+                nfd_flr_write_pf_cap(NFD_CFG_BASE_LINK(_isl));          \
+                nfd_flr_ack_pf(_isl);                                   \
+                                                                        \
+            } else {                                                    \
+                /* We have a VF FLR */                                  \
+                nfd_flr_write_vf_cap(NFD_CFG_BASE_LINK(_isl),           \
+                                     cfg_msg##_isl.vnic);               \
+                nfd_flr_ack_vf(_isl, cfg_msg##_isl.vnic);               \
+                                                                        \
+            }                                                           \
+        }                                                               \
                                                                         \
         /* Complete the message */                                      \
         cfg_msg##_isl.msg_valid = 0;                                    \

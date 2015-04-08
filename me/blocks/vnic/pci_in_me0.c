@@ -115,14 +115,19 @@ main(void)
             if (!cfg_msg.msg_valid) {
                 int curr_vnic;
 
-                curr_vnic = nfd_cfg_next_vnic();
+                curr_vnic = nfd_cfg_next_flr((void *) &cfg_msg);
 
-                if (curr_vnic >= 0) {
-                    cfg_msg.__raw = 0;
-                    cfg_msg.vnic = curr_vnic;
-                    cfg_msg.msg_valid = 1;
+                if (curr_vnic < 0) {
+                    /* No FLRs to process, look for a host message. */
+                    curr_vnic = nfd_cfg_next_vnic();
 
-                    nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_IN0);
+                    if (curr_vnic >= 0) {
+                        cfg_msg.__raw = 0;
+                        cfg_msg.vnic = curr_vnic;
+                        cfg_msg.msg_valid = 1;
+
+                        nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_IN0);
+                    }
                 }
             } else {
                 service_qc_vnic_setup(&cfg_msg);

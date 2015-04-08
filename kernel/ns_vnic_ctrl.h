@@ -105,6 +105,7 @@
 #define   NS_VNIC_CFG_UPDATE_RXRPRIO      (0x1 <<  4) /* RX Ring prio change */
 #define   NS_VNIC_CFG_UPDATE_MSIX         (0x1 <<  5) /* MSI-X change */
 #define   NS_VNIC_CFG_UPDATE_L2SWITCH     (0x1 <<  6) /* Switch changes */
+#define   NS_VNIC_CFG_UPDATE_RESET	  (0x1 <<  7) /* Update due to FLR */
 #define   NS_VNIC_CFG_UPDATE_ERR          (0x1 << 31) /* A error occurred */
 #define NS_VNIC_CFG_TXRS_ENABLE         0x0008
 #define NS_VNIC_CFG_RXRS_ENABLE         0x0010

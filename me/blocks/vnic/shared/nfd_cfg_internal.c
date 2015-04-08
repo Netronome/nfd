@@ -10,8 +10,10 @@
 
 
 #include <nfp/me.h>
+#include <nfp/mem_atomic.h>
 #include <nfp/mem_bulk.h>
 #include <nfp/mem_ring.h>
+#include <nfp/xpb.h>
 #include <std/event.h>
 
 #include <nfp6000/nfp_cls.h>
@@ -24,6 +26,8 @@
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
+
+#include <vnic/shared/nfd_flr.c>
 
 #include <ns_vnic_ctrl.h>
 
@@ -108,16 +112,17 @@ NFD_CFG_RINGS_INIT(3);
 #define NFD_CFG_PF_DECLARE(_isl) NFD_CFG_PF_DECLARE_IND(_isl)
 
 
-/* XXX temp defines that match the BSP pcie_monitor_api.h */
-#define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c
-#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL        16
-#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE                15
-#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE                   14
-#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS            13
-#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0           0x00100080
-#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1           0x00100084
-#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc
-#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_MASK             0x3f
+/* /\* XXX temp defines that loosely match the BSP pcie_monitor_api.h *\/ */
+/* #define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c */
+/* #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk    0x3f */
+/* #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf    16 */
+/* #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_shf            15 */
+/* #define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE_shf               14 */
+/* #define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf        13 */
+/* #define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0           0x00100080 */
+/* #define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1           0x00100084 */
+/* #define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc */
+/* #define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk         0x3f */
 
 
 
@@ -166,6 +171,7 @@ NFD_CFG_RINGS_INIT(3);
 NFD_CFG_FLR_INIT(PCIE_ISL);
 #endif
 
+NFD_FLR_DECLARE;
 
 #define NFD_CFG_CLEAR_QC                                                \
     __asm { .init_csr pcie:PcieInternalTargets.Queue[0:255].ConfigStatusLow \
@@ -211,6 +217,10 @@ static __gpr unsigned int cfg_vnic_queue_test_cnt = 0;
 
 static SIGNAL flr_ap_sig;
 static __xread unsigned int flr_ap_xfer;
+static unsigned int flr_in_prog_vf[2] = {0, 0};
+
+#define FLR_IN_PROG_BUSY_shf 31
+static unsigned int flr_in_prog_status = 0;
 
 
 #ifdef NFD_CFG_SIG_NEXT_ME
@@ -597,13 +607,19 @@ nfd_cfg_check_cfg_ap()
 
 
 /**
- * Look for and handle FLR events
- * XXX Just acknowledge for now...
+ * Update the FLR state in this ME
+ *
+ * The PF and VF FLR state are checked separately, using "nfd_flr_sent" to
+ * determine whether we are already processing an FLR for the vNIC.  PCIe state
+ * changes are associated with FLRs (both on start and completion), so we also
+ * monitor and acknowledge PCIe state changes.  This ensures that we will be
+ * aware of VF FLRs that occur, even if we are already processing an FLR.
  */
 void
 nfd_cfg_check_flr_ap()
 {
     if (signal_test(&flr_ap_sig)) {
+        __xread unsigned int flr_sent[3];
         unsigned int flr_status;
         int vf;
 
@@ -612,37 +628,41 @@ nfd_cfg_check_flr_ap()
 
         local_csr_write(NFP_MECSR_MAILBOX_1, flr_status);
 
-        /* XXX This doesn't seem to completely recover the PF */
-        if (flr_status & (1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS)) {
-            xpb_write(NFP_PCIEX_COMPCFG_CNTRLR3,
-                      1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE);
+
+        /* Read which VF/PF sent messages are still pending */
+        nfd_flr_read_sent(PCIE_ISL, flr_sent);
+
+        /* Handle the PF */
+        if (flr_status & (1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf)) {
+            if (~flr_sent[NFD_FLR_PF_ind] &
+                (1 << NFD_FLR_PF_shf)) {
+                flr_in_prog_status |= (1 << NFD_FLR_PF_ind);
+                flr_in_prog_status |= (1 << FLR_IN_PROG_BUSY_shf);
+            }
         }
 
         /* Handle VFs 0 to 31 */
-        flr_status = xpb_read(NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0);
-        local_csr_write(NFP_MECSR_MAILBOX_2, flr_status);
-        while ((vf = _ffs(flr_status)) >= 0) {
-            flr_status &= ~(1 << vf);
-            xpb_write(NFP_PCIEX_COMPCFG_CNTRLR3,
-                      ((vf << NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL) |
-                       (1 << NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE)));
+        flr_in_prog_vf[NFD_FLR_VF_LO_ind] =
+            (xpb_read(NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0) &
+             ~flr_sent[NFD_FLR_VF_LO_ind]);
+        if (flr_in_prog_vf[NFD_FLR_VF_LO_ind] != 0) {
+            flr_in_prog_status |= (1 << NFD_FLR_VF_LO_ind);
+            flr_in_prog_status |= (1 << FLR_IN_PROG_BUSY_shf);
         }
 
         /* Handle VFs 32 to 63 */
-        flr_status = xpb_read(NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1);
-        local_csr_write(NFP_MECSR_MAILBOX_3, flr_status);
-        while ((vf = _ffs(flr_status)) >= 0) {
-            flr_status &= ~(1 << vf);
-            xpb_write(NFP_PCIEX_COMPCFG_CNTRLR3,
-                      (((vf + 32) <<
-                        NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL) |
-                       (1 << NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE)));
+        flr_in_prog_vf[NFD_FLR_VF_HI_ind] =
+            (xpb_read(NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1) &
+             ~flr_sent[NFD_FLR_VF_HI_ind]);
+        if (flr_in_prog_vf[NFD_FLR_VF_HI_ind] != 0) {
+            flr_in_prog_status |= (1 << NFD_FLR_VF_HI_ind);
+            flr_in_prog_status |= (1 << FLR_IN_PROG_BUSY_shf);
         }
 
         /* Acknowledge PCIe state changes */
         flr_status = xpb_read(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT);
-        if (flr_status & NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_MASK) {
-            flr_status &= NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_MASK;
+        if (flr_status & NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk) {
+            flr_status &= NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk;
             xpb_write(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT, flr_status);
         }
 
@@ -804,6 +824,135 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
 
     send_interthread_sig(next_me, 0,
                          __signal_number(cfg_sig_remote, next_me));
+}
+
+
+/**
+ * Select the next FLR to respond to
+ * @param cfg_msg       message to populate with FLR information
+ *
+ * This method checks the FLR state to determine whether there is an
+ * FLR to respond to.  If there is, it populates the "cfg_msg", writes
+ * NS_VNIC_CFG_UPDATE for that vNIC and sets the appropriate bit of
+ * "nfd_flr_sent".
+ *
+ * The method checks the PF, the lower 32 VFs, and the upper 32 VFs in that
+ * order.  If a vNIC is not in use, then it simply acknowledges the FLR
+ * immediately.
+ */
+__intrinsic int
+nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
+{
+    if (bit_test(flr_in_prog_status, FLR_IN_PROG_BUSY_shf)) {
+        if (bit_test(flr_in_prog_status, NFD_FLR_PF_ind)) {
+            /* The PF gets priority */
+
+            flr_in_prog_status &= ~(1 << NFD_FLR_PF_ind);
+
+#if NFD_MAX_PF_QUEUES != 0
+            /* Setup the parse_msg info */
+            cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
+            cfg_msg->vnic = NFD_MAX_VFS;
+            cfg_msg->interested = 1;
+            cfg_msg->msg_valid = 1;
+
+            cfg_ring_enables[0] = 0;
+            cfg_ring_enables[1] = 0;
+
+            /* Rewrite the CFG BAR for other components */
+            nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), NFD_MAX_VFS);
+
+            /* Set FLR sent atomic */
+            nfd_flr_set_sent_pf(PCIE_ISL);
+
+#else
+            /* We're not using the PF, just ACK. */
+            nfd_flr_ack_pf(PCIE_ISL);
+#endif
+
+        } else if (bit_test(flr_in_prog_status, NFD_FLR_VF_LO_ind)) {
+            int vf;
+
+            vf = _ffs(flr_in_prog_vf[NFD_FLR_VF_LO_ind]);
+
+            if (vf >= 0) {
+                flr_in_prog_vf[NFD_FLR_VF_LO_ind] &= ~(1 << vf);
+
+            } else {
+                flr_in_prog_status &= ~(1 << NFD_FLR_VF_LO_ind);
+                return -1;
+            }
+
+            if (vf < NFD_MAX_VFS) {
+                /* Setup the parse_msg info */
+                cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;
+                cfg_msg->vnic = vf;
+                cfg_msg->interested = 1;
+                cfg_msg->msg_valid = 1;
+
+                cfg_ring_enables[0] = 0;
+                cfg_ring_enables[1] = 0;
+
+                /* Rewrite the CFG BAR for other components */
+                nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vf);
+
+                /* Set FLR sent atomic */
+                nfd_flr_set_sent_vf(PCIE_ISL, vf);
+
+            } else {
+
+                /* We aren't using this VF, simply acknowledge the FLR. */
+                nfd_flr_ack_vf(PCIE_ISL, vf);
+            }
+
+        } else if (bit_test(flr_in_prog_status, NFD_FLR_VF_HI_ind)) {
+            int vf;
+
+            vf = _ffs(flr_in_prog_vf[NFD_FLR_VF_HI_ind]);
+
+            if (vf >= 0) {
+                flr_in_prog_vf[NFD_FLR_VF_HI_ind] &= ~(1 << vf);
+
+            } else {
+                flr_in_prog_status &= ~(1 << NFD_FLR_VF_HI_ind);
+                return -1;
+            }
+
+            vf |= 32;
+
+            if (vf < NFD_MAX_VFS) {
+                /* Setup the parse_msg info */
+                cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;
+                cfg_msg->vnic = vf;
+                cfg_msg->interested = 1;
+                cfg_msg->msg_valid = 1;
+
+                cfg_ring_enables[0] = 0;
+                cfg_ring_enables[1] = 0;
+
+                /* Rewrite the CFG BAR for other components */
+                nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vf);
+
+                /* Set FLR sent atomic */
+                nfd_flr_set_sent_vf(PCIE_ISL, vf);
+
+            } else {
+                /* We aren't using this VF, simply acknowledge the FLR. */
+                nfd_flr_ack_vf(PCIE_ISL, vf);
+            }
+
+        } else {
+            /* FLR_IN_PROG_BUSY_shf is set but we aren't actually busy
+             * processing an FLR.  */
+            flr_in_prog_status = 0;
+            return -1;
+        }
+
+    } else {
+        return -1;
+    }
+
+    return 0;
 }
 
 
