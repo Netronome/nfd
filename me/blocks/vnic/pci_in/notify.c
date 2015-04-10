@@ -265,7 +265,7 @@ notify()
 
         __asm {
             ctx_arb[--], defer[1];
-            local_csr_wr[NFP_MECSR_ACTIVE_CTX_WAKEUP_EVENTS>>2, wait_msk];
+            local_csr_wr[local_csr_active_ctx_wakeup_events, wait_msk];
         }
 
         wait_msk = __signals(&wq_sig0, &wq_sig1, &wq_sig2, &wq_sig3,

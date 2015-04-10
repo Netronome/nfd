@@ -130,7 +130,7 @@ _swap_on_msk(SIGNAL_MASK *wait_msk)
 {
     __asm {
         ctx_arb[--], defer[1];
-        local_csr_wr[NFP_MECSR_ACTIVE_CTX_WAKEUP_EVENTS>>2, *wait_msk];
+        local_csr_wr[local_csr_active_ctx_wakeup_events, *wait_msk];
     }
 }
 
@@ -591,7 +591,7 @@ do {                                                                    \
     /* head of line block. */                                           \
     while (nn_ring_empty()) {                                           \
         empty_cnt1++;                                                   \
-        local_csr_write(NFP_MECSR_MAILBOX_1, empty_cnt1);               \
+        local_csr_write(local_csr_mailbox_1, empty_cnt1);               \
         ctx_swap();                                                     \
     }                                                                   \
                                                                         \
@@ -648,7 +648,7 @@ issue_dma()
                      (NFD_OUT_CPP_BATCH_RING_BAT - 1));
         data_dma_seq_started++;
         cpp_index = (unsigned int) &cpp_desc_ring[cpp_index];
-        local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_2, cpp_index);
+        local_csr_write(local_csr_active_lm_addr_2, cpp_index);
 
         data_wait_msk = __signals(&data_sig0, &data_sig1, &data_sig2,
                                   &data_sig3, &get_order_sig);
@@ -777,7 +777,7 @@ issue_dma()
     } else { /* nn_ring_empty() or insufficient resources */
         if (nn_ring_empty()) {
             empty_cnt0++;
-            local_csr_write(NFP_MECSR_MAILBOX_0, empty_cnt0);
+            local_csr_write(local_csr_mailbox_0, empty_cnt0);
         }
 
         /* Check resources */
@@ -881,7 +881,7 @@ free_buf()
         cpp_index = data_dma_seq_served & (NFD_OUT_CPP_BATCH_RING_BAT - 1);
         data_dma_seq_served++;
         cpp_index = (unsigned int) &cpp_desc_ring[cpp_index];
-        local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, cpp_index);
+        local_csr_write(local_csr_active_lm_addr_3, cpp_index);
 
         _FREE_BUF(0);
         _FREE_BUF(1);

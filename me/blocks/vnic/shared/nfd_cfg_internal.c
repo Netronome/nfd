@@ -623,10 +623,10 @@ nfd_cfg_check_flr_ap()
         unsigned int flr_status;
         int vf;
 
-        local_csr_write(NFP_MECSR_MAILBOX_0, flr_ap_xfer);
+        local_csr_write(local_csr_mailbox_0, flr_ap_xfer);
         flr_status = xpb_read(NFP_PCIEX_COMPCFG_CNTRLR3);
 
-        local_csr_write(NFP_MECSR_MAILBOX_1, flr_status);
+        local_csr_write(local_csr_mailbox_1, flr_status);
 
 
         /* Read which VF/PF sent messages are still pending */

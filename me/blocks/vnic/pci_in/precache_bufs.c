@@ -66,7 +66,7 @@ _precache_buf_bytes_used()
 {
     unsigned int ret;
 
-    ret = local_csr_read(NFP_MECSR_ACTIVE_LM_ADDR_3);
+    ret = local_csr_read(local_csr_active_lm_addr_3);
     ret = (sizeof(unsigned int) * NFD_IN_BUF_STORE_SZ) - (ret - buf_store_start);
     return ret;
 }
@@ -115,15 +115,15 @@ precache_bufs_setup()
     struct nfp_mecsr_ctx_enables cfg;
 
     /* XXX Replace with _init_csr command, once query resolved */
-    cfg.__raw = local_csr_read(NFP_MECSR_CTX_ENABLES);
+    cfg.__raw = local_csr_read(local_csr_ctx_enables);
     cfg.lm_addr_3_glob = 1;
-    local_csr_write(NFP_MECSR_CTX_ENABLES, cfg.__raw);
+    local_csr_write(local_csr_ctx_enables, cfg.__raw);
 
     blm_queue_addr = ((unsigned long long) NFD_IN_BLM_RADDR >> 8) & 0xff000000;
     blm_queue_num = NFD_BLM_Q_LINK(NFD_IN_BLM_POOL);
 
     buf_store_start = (unsigned int) &buf_store;
-    local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, buf_store_start);
+    local_csr_write(local_csr_active_lm_addr_3, buf_store_start);
 
     /* Write a magic value to buf_store[0]. This should never be
      * used and will help to identify buf_store underflows */
@@ -148,7 +148,7 @@ precache_bufs()
 
         /* Prepare T-INDEX early so usage shadow is filled easily */
         bufs_rd_off = MECSR_XFER_INDEX(__xfer_reg_number(bufs_rd));
-        local_csr_write(NFP_MECSR_T_INDEX, bufs_rd_off);
+        local_csr_write(local_csr_t_index, bufs_rd_off);
         state.pending_fetch = 0;
 
         if (!signal_test(&precache_sig.odd)) {
@@ -194,7 +194,7 @@ precache_bufs_avail()
 {
     unsigned int ret;
 
-    ret = local_csr_read(NFP_MECSR_ACTIVE_LM_ADDR_3);
+    ret = local_csr_read(local_csr_active_lm_addr_3);
     ret = ret - buf_store_start;
     ret = ret / sizeof(unsigned int);
     return ret;

@@ -159,7 +159,7 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 
     indirect.__raw = 0;
     indirect.signal_num = sig_no;
-    local_csr_write(NFP_MECSR_CMD_INDIRECT_REF_0, indirect.__raw);
+    local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
 
     /* Currently just support reflect_write_sig_remote */
     __asm {
@@ -335,14 +335,14 @@ do {                                                                    \
                                                                         \
     sb_full1##_pkt##_num:                                               \
         __asm { alu[full_cnt1, full_cnt1, +, 1] }                       \
-        __asm { local_csr_wr[NFP_MECSR_MAILBOX_1 >> 2, full_cnt1] }     \
+        __asm { local_csr_wr[local_csr_mailbox_1, full_cnt1] }     \
         __asm { ctx_arb[voluntary] }                                    \
         __asm { br_inp_state[nn_full, sb_full1##_pkt##_num] }           \
         __asm { br[sb_cont1##_pkt##_num] }                              \
                                                                         \
     sb_full2##_pkt##_num:                                               \
         __asm { alu[full_cnt1, full_cnt1, +, 1] }                       \
-        __asm { local_csr_wr[NFP_MECSR_MAILBOX_1 >> 2, full_cnt1] }     \
+        __asm { local_csr_wr[local_csr_mailbox_1, full_cnt1] }     \
         __asm { ctx_arb[voluntary] }                                    \
         __asm { br_inp_state[nn_full, sb_full2##_pkt##_num] }           \
         __asm { br[sb_cont2##_pkt##_num] }                              \
@@ -412,7 +412,7 @@ stage_batch()
      * so the method will complete shortly */
     __asm {
         ctx_arb[--], defer[1];
-        local_csr_wr[NFP_MECSR_ACTIVE_CTX_WAKEUP_EVENTS>>2, stage_wait_msk];
+        local_csr_wr[local_csr_active_ctx_wakeup_events, stage_wait_msk];
     }
 
     __implicit_read(&get_sig);
@@ -428,7 +428,7 @@ stage_batch()
 
         if (nn_ring_full()) {
             full_cnt0++;
-            local_csr_write(NFP_MECSR_MAILBOX_0, full_cnt0);
+            local_csr_write(local_csr_mailbox_0, full_cnt0);
         }
 
         return;
@@ -681,7 +681,7 @@ do {                                                                    \
         __asm { alu[queue, NFD_OUT_DESC_QUEUE_msk, and, msg,            \
                     >>NFD_OUT_DESC_QUEUE_PKT##_pkt##_shf] }             \
         __asm { alu[queue, --, b, queue, <<NFD_OUT_QUEUE_INFO_SZ_lg2] } \
-        __asm { local_csr_wr[(NFP_MECSR_ACTIVE_LM_ADDR_2 >> 2), queue] } \
+        __asm { local_csr_wr[(local_csr_active_lm_addr_2), queue] } \
         __asm { alu[desc_dma_issued, desc_dma_issued, +, 1] }           \
         __asm { alu[send_desc_off, send_desc_off, and,                  \
                     send_desc_msg_sz_msk] }                             \
@@ -757,7 +757,7 @@ send_desc()
     /* Wait for previous DMAs to be enqueued */
     __asm {
         ctx_arb[--], defer[1];
-        local_csr_wr[NFP_MECSR_ACTIVE_CTX_WAKEUP_EVENTS>>2, desc_dma_wait_msk];
+        local_csr_wr[local_csr_active_ctx_wakeup_events, desc_dma_wait_msk];
     }
 
     __implicit_read(&desc_sig0);
@@ -774,7 +774,7 @@ send_desc()
 
         /* We have a batch to process and resources to process it */
 
-        local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, send_desc_msg_addr);
+        local_csr_write(local_csr_active_lm_addr_3, send_desc_msg_addr);
         /*
          * Increment desc_batch_served upfront to avoid ambiguity about
          * sequence number zero
@@ -867,7 +867,7 @@ inc_sent()
     test_safe = desc_dma_inc_safe - desc_dma_inc;
     if (test_safe > 0) {
 
-        local_csr_write(NFP_MECSR_ACTIVE_LM_ADDR_3, inc_sent_msg_addr);
+        local_csr_write(local_csr_active_lm_addr_3, inc_sent_msg_addr);
 
         /*
          * Increment desc_batch_served upfront to avoid ambiguity about

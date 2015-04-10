@@ -80,7 +80,7 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 
     indirect.__raw = 0;
     indirect.signal_num = sig_no;
-    local_csr_write(NFP_MECSR_CMD_INDIRECT_REF_0, indirect.__raw);
+    local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
 
     /* Currently just support reflect_write_sig_remote */
     __asm {

@@ -23,7 +23,7 @@ reorder_start(unsigned int start_ctx, SIGNAL *sig)
 
     val= (NFP_MECSR_SAME_ME_SIGNAL_SIG_NO(__signal_number(sig)) |
           NFP_MECSR_SAME_ME_SIGNAL_CTX(start_ctx));
-    local_csr_write(NFP_MECSR_SAME_ME_SIGNAL, val);
+    local_csr_write(local_csr_same_me_signal, val);
 
     /* This method is only called from one CTX, which might not even
      * participate in the ordering, so we do not issue an
@@ -50,7 +50,7 @@ reorder_done(unsigned int start_ctx, SIGNAL *sig)
               NFP_MECSR_SAME_ME_SIGNAL_CTX(start_ctx));
     }
 
-    local_csr_write(NFP_MECSR_SAME_ME_SIGNAL, val);
+    local_csr_write(local_csr_same_me_signal, val);
 
     /* Although another thread receives this particular signal, that thread
      * should return the same signal later, so allowing the next context to go
@@ -80,7 +80,7 @@ reorder_done_opt(unsigned int *next_ctx, SIGNAL *sig)
     unsigned int val;
 
     val = *next_ctx | NFP_MECSR_SAME_ME_SIGNAL_SIG_NO(__signal_number(sig));
-    local_csr_write(NFP_MECSR_SAME_ME_SIGNAL, val);
+    local_csr_write(local_csr_same_me_signal, val);
 
     /* Although another thread receives this particular signal, that thread
      * should return the same signal later, so allowing the next context to go
@@ -98,7 +98,7 @@ reorder_self(SIGNAL *sig)
     val = (NFP_MECSR_SAME_ME_SIGNAL_SIG_NO(__signal_number(sig)) |
            NFP_MECSR_SAME_ME_SIGNAL_CTX(ctx));
 
-    local_csr_write(NFP_MECSR_SAME_ME_SIGNAL, val);
+    local_csr_write(local_csr_same_me_signal, val);
     __implicit_write(sig);
 }
 
@@ -109,10 +109,10 @@ reorder_future_sig(SIGNAL *sig, unsigned int cycles)
     unsigned sig_num, tslo;
 
     sig_num = __signal_number(sig);
-    tslo = local_csr_read(NFP_MECSR_TIMESTAMP_LOW);
+    tslo = local_csr_read(local_csr_timestamp_low);
     tslo += cycles >> 4;
-    local_csr_write(NFP_MECSR_ACTIVE_CTX_FUTURE_COUNT, tslo);
-    local_csr_write(NFP_MECSR_ACTIVE_FUTURE_COUNT_SIGNAL, sig_num);
+    local_csr_write(local_csr_active_ctx_future_count, tslo);
+    local_csr_write(local_csr_active_future_count_signal, sig_num);
     __implicit_write(sig);
 }
 

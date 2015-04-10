@@ -61,9 +61,9 @@ void main(void)
         reorder_start(_START_CTX, &get_order_sig);
         reorder_start(_START_CTX, &wait_order_sig);
 
-        local_csr_write(NFP_MECSR_MAILBOX_0, 0);
-        local_csr_write(NFP_MECSR_MAILBOX_1, 0);
-        local_csr_write(NFP_MECSR_MAILBOX_2, 0);
+        local_csr_write(local_csr_mailbox_0, 0);
+        local_csr_write(local_csr_mailbox_1, 0);
+        local_csr_write(local_csr_mailbox_2, 0);
     }
 
 
@@ -76,7 +76,7 @@ void main(void)
         reorder_done(_START_CTX, &wait_order_sig);
 
         nrecv++;
-        local_csr_write(NFP_MECSR_MAILBOX_0, nrecv);
+        local_csr_write(local_csr_mailbox_0, nrecv);
 
         nfd_out_fill_desc(&nfd_out_desc, pi, 0, 0, PKT_NBI_OFFSET, 0);
         nfd_out_dummy_vlan(&nfd_out_desc, 0x1234, 0xd);
@@ -96,7 +96,7 @@ void main(void)
             nfail++;
         }
 
-        local_csr_write(NFP_MECSR_MAILBOX_1, nsent);
-        local_csr_write(NFP_MECSR_MAILBOX_2, nfail);
+        local_csr_write(local_csr_mailbox_1, nsent);
+        local_csr_write(local_csr_mailbox_2, nfail);
     }
 }
