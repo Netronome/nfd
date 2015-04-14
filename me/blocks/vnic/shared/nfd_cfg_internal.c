@@ -989,13 +989,6 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
                    4 * sizeof(unsigned int));
     }
 
-    /* Check capabilities */
-    if (cfg_bar_data[NFP_NET_CFG_CTRL] & ~NFD_CFG_CAP) {
-        /* Mark an error and abort processing */
-        cfg_msg->error = 1;
-        return;
-    }
-
     /* Check if change affects this component */
     /* Only interested in the change if it contains a ring update */
     if (cfg_bar_data[NFP_NET_CFG_UPDATE >> 2] &

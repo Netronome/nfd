@@ -20,16 +20,6 @@
  * Set to official version number before release */
 #define NFD_CFG_VERSION 0x1248
 
-#ifndef NFD_CFG_CAP
-/* XXX Set some "random" bits in the capabilities field
- * for testing purposes */
-#define NFD_CFG_CAP                                             \
-    (NFP_NET_CFG_CTRL_ENABLE | NFP_NET_CFG_CTRL_PROMISC |       \
-     NFP_NET_CFG_CTRL_RXCSUM | NFP_NET_CFG_CTRL_TXCSUM |        \
-     NFP_NET_CFG_CTRL_RXVLAN | NFP_NET_CFG_CTRL_TXVLAN |        \
-     NFP_NET_CFG_CTRL_MSIXAUTO)
-#endif
-
 #ifndef NFD_CFG_MAX_MTU
 #define NFD_CFG_MAX_MTU         1500
 #endif
