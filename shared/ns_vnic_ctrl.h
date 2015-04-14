@@ -1,1 +1,0 @@
-../kernel/ns_vnic_ctrl.h
