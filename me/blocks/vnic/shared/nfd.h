@@ -17,24 +17,42 @@
 
 
 /* Helper macros */
+
+/* Expand a constant PCIe number (0..3) to an EMEM island (emem0..emem2),
+ * using the customer defined mapping provided by the NFD_PCIEX_EMEM defines.
+ */
 #define NFD_EMEM_IND1(_emem) _emem
 #define NFD_EMEM_IND0(_isl) NFD_EMEM_IND1(NFD_PCIE##_isl##_EMEM)
 #define NFD_EMEM(_isl) NFD_EMEM_IND0(_isl)
 
+/* Get a load time constant EMEM address for a specific
+ * (constant) PCIe island */
 #define NFD_EMEM_LINK_IND2(_emem) __LoadTimeConstant("__addr_" #_emem)
 #define NFD_EMEM_LINK_IND1(_emem) NFD_EMEM_LINK_IND2(_emem)
 #define NFD_EMEM_LINK_IND0(_isl) NFD_EMEM_LINK_IND1(NFD_EMEM(_isl))
 #define NFD_EMEM_LINK(_isl) NFD_EMEM_LINK_IND0(_isl)
 
+/* Expand an EMEM island to a load time constant.  This macro is used
+ * specifically for the NFD_IN_WQ_SHARED define. */
 #define NFD_EMEM_SHARED_IND(_emem) __LoadTimeConstant("__addr_" #_emem)
 #define NFD_EMEM_SHARED(_emem) NFD_EMEM_SHARED_IND(_emem)
 
 
+/* Access the generic resource ring number for the input and output rings
+ * "_isl" is a constant island number, "_comp" is either "nfd_out" or
+ * "nfd_in", and "_num" is the ring number.  For "nfd_out", "_num"
+ * must be zero.  For "nfd_in", "_num" may be [0 .. (NFD_IN_NUM_WQS-1)]. */
 #define NFD_RING_LINK_IND(_isl, _comp, _num) \
     _link_sym(_comp##_ring_num##_isl##_num)
 #define NFD_RING_LINK(_isl, _comp, _num) NFD_RING_LINK_IND(_isl, _comp, _num)
 
 
+/* The "init_done" atomic is a bitmask where each ME within the PCIe islands
+ * is given one bit.  When each ME completes it initialisation, it sets
+ * its bit.  NFD users can inspect the "init_done" atomic to determine
+ * whether NFD has finished its initialisation. */
+
+/* Declare memory for "init_done" atomic. */
 /* XXX Remove NFD_INIT_DONE_DECLARE or leave?
  * NB size 8 is minimum that NFCC and NFAS can share */
 #define NFD_INIT_DONE_DECLARE_IND1(_emem)                               \
@@ -45,13 +63,13 @@
 #define NFD_INIT_DONE_DECLARE_IND0(_emem) NFD_INIT_DONE_DECLARE_IND1(_emem)
 #define NFD_INIT_DONE_DECLARE NFD_INIT_DONE_DECLARE_IND0(NFD_CFG_RING_EMEM)
 
-
+/* Abstract away details of the island:ME to bit mapping. */
 #define NFD_INIT_DONE_SET_IND0(_isl, _me)         \
     mem_bitset_imm(1<<(_isl * NFD_MAX_ISL + _me), \
                    (__dram void *) _link_sym(nfd_init_done))
 #define NFD_INIT_DONE_SET(_isl, _me) NFD_INIT_DONE_SET_IND0(_isl, _me)
 
-
+/* Stringify an EMEM name for use in _nfp_has_island() tests. */
 #define NFD_EMEM_CHK_IND(_emem) #_emem
 #define NFD_EMEM_CHK(_emem) NFD_EMEM_CHK_IND(_emem)
 
@@ -69,6 +87,7 @@
 #endif
 
 
+/* Require that at least some queues are used by NFD. */
 #if ((NFD_MAX_VF_QUEUES * NFD_MAX_VFS) + NFD_MAX_PF_QUEUES) == 0)
 #error "PF and VF options imply that no queues are in use"
 #endif
@@ -82,13 +101,16 @@
 #endif
 
 
+/* Ensure that the user provides NFD_CFG_VF_CAP if they
+ * want to use VFs. */
 #if NFD_MAX_VF_QUEUES != 0
 #ifndef NFD_CFG_VF_CAP
 #error NFD_CFG_VF_CAP must be defined
 #endif
 #endif
 
-
+/* Ensure that the user provides NFD_CFG_PF_CAP if they
+ * want to use PFs. */
 #if NFD_MAX_PF_QUEUES != 0
 #ifndef NFD_CFG_PF_CAP
 #error NFD_CFG_PF_CAP must be defined
@@ -96,6 +118,7 @@
 #endif
 
 
+/* Check that the user points NFD to usable EMUs for each EMU specified */
 #ifdef NFD_IN_WQ_SHARED
     #if !_nfp_has_island(NFD_EMEM_CHK(NFD_IN_WQ_SHARED))
         #error "NFD_IN_WQ_SHARED specifies an unavailable EMU"
