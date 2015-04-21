@@ -63,9 +63,10 @@
 #define NFD_INIT_DONE_DECLARE_IND0(_emem) NFD_INIT_DONE_DECLARE_IND1(_emem)
 #define NFD_INIT_DONE_DECLARE NFD_INIT_DONE_DECLARE_IND0(NFD_CFG_RING_EMEM)
 
-/* Abstract away details of the island:ME to bit mapping. */
-#define NFD_INIT_DONE_SET_IND0(_isl, _me)         \
-    mem_bitset_imm(1<<(_isl * NFD_MAX_ISL + _me), \
+/* Abstract away details of the island:ME to bit mapping.
+ * PCIe islands have 4 MEs. */
+#define NFD_INIT_DONE_SET_IND0(_isl, _me)                       \
+    mem_bitset_imm(1<<(_isl * 4 + _me),                         \
                    (__dram void *) _link_sym(nfd_init_done))
 #define NFD_INIT_DONE_SET(_isl, _me) NFD_INIT_DONE_SET_IND0(_isl, _me)
 
