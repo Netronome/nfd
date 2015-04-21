@@ -218,8 +218,8 @@ cache_desc_setup_shared()
     descr_tmp.trans_class = 0;
     descr_tmp.cpp_token = 0;
     descr_tmp.dma_cfg_index = NFD_OUT_FL_CFG_REG;
-    descr_tmp.cpp_addr_hi = (((unsigned long long) fl_cache_mem >> 8) &
-                             0xff000000);
+    /* cpp_addr_hi = 0 will target local CTM, as desired. */
+    descr_tmp.cpp_addr_hi = 0;
 
     /* Initialise addresses of the FL cache and credits */
     fl_cache_mem_addr_lo = ((unsigned long long) fl_cache_mem & 0xffffffff);
