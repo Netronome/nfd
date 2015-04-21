@@ -44,7 +44,10 @@ extern __shared __gpr unsigned int data_dma_seq_compl;
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
 static SIGNAL msg_sig, qc_sig;
+static SIGNAL get_order_sig;    /* Signal for reordering before issuing get */
+static SIGNAL msg_order_sig;    /* Signal for reordering on message return */
 static SIGNAL_MASK wait_msk;
+static unsigned int next_ctx;
 
 __xwrite struct _pkt_desc_batch batch_out;
 __xwrite unsigned int qc_xfer;
@@ -175,6 +178,10 @@ notify_setup_shared()
     wq_num_base = NFD_RING_LINK(PCIE_ISL, nfd_in, 0);
     wq_raddr = (unsigned long long) NFD_EMEM_LINK(PCIE_ISL) >> 8;
 #endif
+
+    /* Kick off ordering */
+    reorder_start(NFD_IN_NOTIFY_START_CTX, &msg_order_sig);
+    reorder_start(NFD_IN_NOTIFY_START_CTX, &get_order_sig);
 }
 
 
@@ -185,7 +192,8 @@ void
 notify_setup()
 {
     if (ctx() != 0) {
-        wait_msk = __signals(&msg_sig);
+        wait_msk = __signals(&msg_sig, &msg_order_sig);
+        next_ctx = reorder_get_next_ctx(NFD_OUT_ISSUE_START_CTX);
     }
 }
 
@@ -230,6 +238,10 @@ do {                                                                    \
  * queueus.  An output message is only sent for the final message for a packet
  * (EOP bit set).  A count of the total number of descriptors in the batch is
  * added by the "issue_dma" block.
+ *
+ * We reorder before getting a batch of "issue_dma" messages and then ensure
+ * batches are processed in order.  If there is no batch of messages to fetch,
+ * we must still participate in the "msg_order_sig" ordering.
  */
 __forceinline void
 notify()
@@ -245,6 +257,11 @@ notify()
     __xread struct _issued_pkt_batch batch_in;
     struct _pkt_desc_batch batch_tmp;
     struct nfd_in_pkt_desc pkt_desc_tmp;
+
+
+    /* Reorder before potentially issuing a ring get */
+    wait_for_all(&get_order_sig);
+    reorder_done_opt(&next_ctx, &get_order_sig);
 
 
     /* Is there a batch to process
@@ -269,13 +286,16 @@ notify()
         }
 
         wait_msk = __signals(&wq_sig0, &wq_sig1, &wq_sig2, &wq_sig3,
-                             &qc_sig, &msg_sig);
+                             &qc_sig, &msg_sig, &msg_order_sig);
         __implicit_read(&wq_sig0);
         __implicit_read(&wq_sig1);
         __implicit_read(&wq_sig2);
         __implicit_read(&wq_sig3);
         __implicit_read(&qc_sig);
         __implicit_read(&msg_sig);
+        __implicit_read(&msg_order_sig);
+
+        reorder_done_opt(&next_ctx, &msg_order_sig);
 
         /* Batches have a least one packet, but n_batch may still be
          * zero, meaning that the queue is down.  In this case, EOP for
@@ -309,7 +329,9 @@ notify()
         __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
                         sig_done, &qc_sig);
     } else {
-        ctx_swap();
+        /* Participate in msg ordering */
+        wait_for_all(&msg_order_sig);
+        reorder_done_opt(&next_ctx, &msg_order_sig);
         return;
     }
 }
