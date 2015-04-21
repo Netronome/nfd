@@ -132,22 +132,25 @@ shl64(long long x, unsigned int y)
 {
     long long result;
     int thirtytwo = 32;
+    unsigned int y_cp;
     int y1;
 
-    /* truncate shift count to 6 bits */
-    y &= 63;
+    /* truncate shift count to 6 bits
+     * copy into a local variable in the process
+     * in case y is a compile time constant */
+    y_cp = y & 63;
 
-    if (y >= thirtytwo)
+    if (y_cp >= thirtytwo)
         __asm {
-            alu         [result+4, y, AND, 0]
+            alu         [result+4, y_cp, AND, 0]
             alu_shf     [result, --, B, x+4, <<indirect]
         }
-    else if (y != 0)
+    else if (y_cp != 0)
         __asm {
-            alu         [y1, thirtytwo, -, y]
+            alu         [y1, thirtytwo, -, y_cp]
             alu         [--, y1, OR, 0]
             dbl_shf     [result, x, x+4, >>indirect]
-            alu         [--, y, OR, 0]
+            alu         [--, y_cp, OR, 0]
             alu_shf     [result+4, --, B, x+4, <<indirect]
         }
     else
@@ -578,10 +581,7 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue)
     automask = msix_automask & shl64(1ull, qnum);
 
     /* Get the function (aka vnic) */
-    if (qnum < (NFD_MAX_VF_QUEUES * NFD_MAX_VFS))
-        fn = NFD_NATQ2VF(qnum);
-    else
-        fn = NFD_NATQ2PF(qnum);
+    NFD_NATQ2VNIC(fn, qnum);
 
     /* If we don't use auto-masking, check (and update) the ICR */
     if (!automask) {

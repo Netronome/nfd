@@ -62,12 +62,9 @@ select_queue(__gpr unsigned int *queue, __shared __gpr struct qc_bitmask *bmsk)
     bmsk_cp = bmsk->proc;
     queue_cp = *queue;
 
-    __intrinsic_begin();
     __asm ffs[queue_cp, bmsk_cp];
-
     __asm alu[--, queue_cp, OR, 0];
     __asm alu[bmsk_cp, bmsk_cp, and~, 1, <<indirect];
-    __intrinsic_end();
 
     bmsk->proc = bmsk_cp;
     *queue = queue_cp | (bmsk->curr << 5);

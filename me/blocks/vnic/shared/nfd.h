@@ -56,6 +56,46 @@
 #define NFD_EMEM_CHK(_emem) NFD_EMEM_CHK_IND(_emem)
 
 /* User define consistency checks */
+#ifndef NFD_MAX_VF_QUEUES
+#error "NFD_MAX_VF_QUEUES is not defined but is required"
+#endif
+
+#ifndef NFD_MAX_PF_QUEUES
+#error "NFD_MAX_PF_QUEUES is not defined but is required"
+#endif
+
+#ifndef NFD_MAX_VFS
+#error "NFD_MAX_VFS is not defined but is required"
+#endif
+
+
+#if ((NFD_MAX_VF_QUEUES * NFD_MAX_VFS) + NFD_MAX_PF_QUEUES) == 0)
+#error "PF and VF options imply that no queues are in use"
+#endif
+
+
+/* NFD_MAX_VFS is used to determine PF vNIC number, so must
+ * always be consistent with VFs in use.  The ambiguous case
+ * where N VFs with 0 queues are requested is illegal. */
+#if ((NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0))
+#error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
+#endif
+
+
+#if NFD_MAX_VF_QUEUES != 0
+#ifndef NFD_CFG_VF_CAP
+#error NFD_CFG_VF_CAP must be defined
+#endif
+#endif
+
+
+#if NFD_MAX_PF_QUEUES != 0
+#ifndef NFD_CFG_PF_CAP
+#error NFD_CFG_PF_CAP must be defined
+#endif
+#endif
+
+
 #ifdef NFD_IN_WQ_SHARED
     #if !_nfp_has_island(NFD_EMEM_CHK(NFD_IN_WQ_SHARED))
         #error "NFD_IN_WQ_SHARED specifies an unavailable EMU"

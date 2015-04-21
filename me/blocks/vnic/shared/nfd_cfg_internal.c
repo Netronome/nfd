@@ -32,20 +32,6 @@
 #include <nfp_net_ctrl.h>
 
 
-#if NFD_MAX_VF_QUEUES != 0
-#ifndef NFD_CFG_VF_CAP
-#error NFD_CFG_VF_CAP must be defined
-#endif
-#endif
-
-
-#if NFD_MAX_PF_QUEUES != 0
-#ifndef NFD_CFG_PF_CAP
-#error NFD_CFG_PF_CAP must be defined
-#endif
-#endif
-
-
 #define NFD_CFG_DECLARE(_sig, _next_sig)  \
     __visible SIGNAL _sig;                \
     __remote SIGNAL _next_sig;
@@ -100,6 +86,7 @@ NFD_CFG_RINGS_INIT(2);
 NFD_CFG_RINGS_INIT(3);
 #endif
 
+#if NFD_MAX_PF_QUEUES != 0
 #define NFD_CFG_PF_DECLARE_IND(_isl)                                \
     NFD_CFG_BASE_DECLARE(_isl)                                      \
     ASM(.declare_resource nfd_cfg_base##_isl##_res global           \
@@ -108,6 +95,9 @@ NFD_CFG_RINGS_INIT(3);
     ASM(.alloc_resource _pf##_isl##_net_bar0                        \
         nfd_cfg_base##_isl##_res+(NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ) \
         global NFP_NET_CFG_BAR_SZ)
+#else
+#define NFD_CFG_PF_DECLARE_IND(_isl)
+#endif
 
 #define NFD_CFG_PF_DECLARE(_isl) NFD_CFG_PF_DECLARE_IND(_isl)
 
@@ -449,8 +439,14 @@ _nfd_cfg_queue_setup()
     nfd_cfg_queue.event_type = PCIE_QC_EVENT_NOT_EMPTY;
     nfd_cfg_queue.ptr        = 0;
 
+#if NFD_MAX_VF_QUEUES != 0
+    /* Init the VF config queues and possibly end with PF queue */
     init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
                    2 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS + NFD_MAX_PFS);
+#else
+    /* Just the PF to init */
+    qc_init_queue(PCIE_ISL, NFD_CFG_QUEUE, &nfd_cfg_queue);
+#endif
 
     /* Setup the config event filter and autopush */
     __implicit_write(&cfg_ap_sig);
@@ -488,6 +484,7 @@ _nfd_cfg_queue_setup()
 void
 _nfd_cfg_write_vf_cap(unsigned int vnic)
 {
+#if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
     unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * vnic * 2);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_VF_CAP,
                                    NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
@@ -496,12 +493,14 @@ _nfd_cfg_write_vf_cap(unsigned int vnic)
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
+#endif
 }
 
 
 void
 _nfd_cfg_write_pf_cap()
 {
+#if (NFD_MAX_PF_QUEUES != 0)
     unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS * 2);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_PF_CAP,
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
@@ -512,6 +511,7 @@ _nfd_cfg_write_pf_cap()
                 (NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
                  NFP_NET_CFG_VERSION),
                 sizeof cfg);
+#endif
 }
 
 
@@ -537,7 +537,7 @@ nfd_cfg_setup()
      * NFD_MAX_PF_QUEUES to mem.
      * XXX Could be .init'ed?
      */
-#if NFD_MAX_VF_QUEUES != 0
+#if NFD_MAX_VFS != 0
     for (vnic = 0; vnic < NFD_MAX_VFS; vnic++) {
         _nfd_cfg_write_vf_cap(vnic);
     }

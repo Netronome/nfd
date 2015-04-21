@@ -128,6 +128,7 @@ nfd_flr_clr_bar(__emem char *addr)
 void
 nfd_flr_write_pf_cap(__emem char *isl_base)
 {
+#if (NFD_MAX_PF_QUEUES != 0)
     unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS * 2);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_PF_CAP,
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
@@ -137,6 +138,7 @@ nfd_flr_write_pf_cap(__emem char *isl_base)
     mem_write64(&cfg,
                 NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
+#endif
 }
 
 
@@ -150,6 +152,7 @@ nfd_flr_write_pf_cap(__emem char *isl_base)
 void
 nfd_flr_write_vf_cap(__emem char *isl_base, unsigned int vf)
 {
+#if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
     unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * vf * 2);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_VF_CAP,
                                    NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
@@ -158,6 +161,7 @@ nfd_flr_write_vf_cap(__emem char *isl_base, unsigned int vf)
 
     mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
+#endif
 }
 
 
