@@ -81,7 +81,8 @@
 /*
  * Create masks for PF and VF
  */
-#define MSIX_RINGS_MASK(num_rings)  ((1 << (num_rings)) - 1)
+#define MSIX_RINGS_MASK(num_rings)  ((num_rings) == 64 ? 0xffffffffffffffff : \
+                                     (1ull << (num_rings)) - 1)
 #define MSIX_PF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_PF_QUEUES)
 #define MSIX_VF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_VF_QUEUES)
 
@@ -287,8 +288,9 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
         tmp_w = (tmp_r & 0x00ffffff) | (entry << 24);
         cls_write(&tmp_w, cls_addr, sizeof(tmp_w));
 
-        /* Make sure the ICR is reset */
-        tmp_w = 0;
+        /* Make sure the ICR is set. The driver is supposed to unmask
+         * once it is done with the initialisation. */
+        tmp_w = NFP_NET_CFG_ICR_RXTX;
         alt_mem_write8_le(&tmp_w, cfg_bar + NFP_NET_CFG_ICR(entry));
     }
 
