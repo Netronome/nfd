@@ -57,6 +57,13 @@ do {                                                                    \
 
 #endif /* NFD_IN_WQ_SHARED */
 
+__intrinsic uint64_t
+swapw64(uint64_t val)
+{
+    uint32_t tmp;
+    tmp = val >> 32;
+    return (val << 32) + tmp;
+}
 
 __shared __lmem struct nfd_ring_info nfd_in_ring_info[NFD_MAX_ISL];
 __shared __lmem struct pkt_cntr_addr nfd_in_cntrs_base[NFD_MAX_ISL];
@@ -142,12 +149,13 @@ __nfd_in_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
     pkt_cntr_read_and_clr(nfd_in_cntrs_base[pcie_isl], bmsk_queue, 0,
                           &pkt_count, &byte_count);
 
-    xfer_update[0] = byte_count;
-    xfer_update[1] = pkt_count;
-
-    __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(PCIE_ISL, 0) +
-                NFP_NET_CFG_RXR_STATS(bmsk_queue)),
-                sizeof xfer_update, sizeof xfer_update, sync, sig);
+    if (pkt_count != 0) {
+        xfer_update[0] = swapw64(pkt_count);
+        xfer_update[1] = swapw64(byte_count);
+        __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(0/*PCIE_ISL*/, 1) +
+                    NFP_NET_CFG_RXR_STATS(bmsk_queue)),
+                    sizeof xfer_update, sizeof xfer_update, sync, sig);
+    }
 }
 
 __intrinsic void

@@ -21,6 +21,7 @@
 #include <vnic/utils/qc.h>
 #include <vnic/shared/nfd_cfg.h>
 
+extern __intrinsic uint64_t swapw64(uint64_t val);
 
 #ifdef NFD_PCIE0_EMEM
     PKTS_CNTRS_DECLARE(nfd_out_cntrs0, NFD_OUT_MAX_QUEUES, __imem_n(0));
@@ -155,12 +156,13 @@ __nfd_out_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
     pkt_cntr_read_and_clr(nfd_out_cntrs_base[pcie_isl], bmsk_queue, 0,
                           &pkt_count, &byte_count);
 
-    xfer_update[0] = byte_count;
-    xfer_update[1] = pkt_count;
-
-    __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(PCIE_ISL, 0) +
-                NFP_NET_CFG_TXR_STATS(bmsk_queue)),
-                sizeof xfer_update, sizeof xfer_update, sync, sig);
+    if (pkt_count != 0) {
+        xfer_update[0] = swapw64(pkt_count);
+        xfer_update[1] = swapw64(byte_count);
+        __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(0/*PCIE_ISL*/, 1) +
+                    NFP_NET_CFG_TXR_STATS(bmsk_queue)),
+                    sizeof xfer_update, sizeof xfer_update, sync, sig);
+    }
 }
 
 
