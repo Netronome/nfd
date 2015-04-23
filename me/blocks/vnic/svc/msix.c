@@ -47,6 +47,11 @@
 #include <nfp/pcie.h>
 #include <vnic/shared/nfd_cfg.h>
 
+
+/* Imports this variable in the event this file is compiled separate from
+ * svc_me.c */
+__shared __lmem volatile uint64_t svc_cfg_bars[NFD_MAX_ISL];
+
 /*
  * MSI-X definitions:
  * @PCI_MSIX_TBL_ENTRY_SZ          Size in Bytes for a MSI-X table entry
