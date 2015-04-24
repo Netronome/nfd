@@ -697,6 +697,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
             }
         }
 
+        pending = msix_tx_pending;
         while (pending) {
             qnum = ffs64(pending);
             qmask = shl64(1ull, qnum);
