@@ -6,7 +6,7 @@
 
 #define EMEM_QUEUE_ALLOC(_name_, _scope_, _resourcepool_) \
     ASM(.declare_resource _resourcepool_ global 1024)     \
-    AMS(.alloc_resource _name_ _resourcepool_ _scope_ 1)
+    ASM(.alloc_resource _name_ _resourcepool_ _scope_ 1)
 
 #if _nfp_has_island("emem0")
     #define emem0_queues_DECL                              \
