@@ -117,48 +117,6 @@ alt_mem_write8_le(__xwrite void *data, __mem void *addr)
     __asm mem[write8_le, *data, addr_hi, <<8, addr_lo, 1], ctx_swap[sig];
 }
 
-/*
- * Some functions below use 64bit shift left (e.g. 1ull << qnum), for
- * which the compiler calls generates code relying on the compiler
- * runtime function _shl_64().  Unfortunately, this functions does not
- * seem to get inlined and then causes a major headache when it comes
- * to register liveranges.  shl64() is a copy the runtime
- * implementation, which is marked as intrinsic so will get inlined.
- *
- * TODO: Re-retest once this code is properly integrated with the
- * compiler runtime.
- */
-__intrinsic static long long
-shl64(long long x, unsigned int y)
-{
-    long long result;
-    int thirtytwo = 32;
-    unsigned int y_cp;
-    int y1;
-
-    /* truncate shift count to 6 bits
-     * copy into a local variable in the process
-     * in case y is a compile time constant */
-    y_cp = y & 63;
-
-    if (y_cp >= thirtytwo)
-        __asm {
-            alu         [result+4, y_cp, AND, 0]
-            alu_shf     [result, --, B, x+4, <<indirect]
-        }
-    else if (y_cp != 0)
-        __asm {
-            alu         [y1, thirtytwo, -, y_cp]
-            alu         [--, y1, OR, 0]
-            dbl_shf     [result, x, x+4, >>indirect]
-            alu         [--, y_cp, OR, 0]
-            alu_shf     [result+4, --, B, x+4, <<indirect]
-        }
-    else
-        result = x;
-
-    return result;
-}
 
 /*
  * Configuration changes:
@@ -294,7 +252,8 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
     }
 
     /* Convert VF ring bitmask into Queue mask */
-    queues = shl64(vf_rings, vnic * NFD_MAX_VF_QUEUES);
+    queues = vf_rings << (vnic * NFD_MAX_VF_QUEUES);
+
 
     /* Work out which queues have been newly enabled and make sure
      * they don't have pending bits set. */
@@ -310,9 +269,9 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
 
     /* Update the enabled bit mask with queues for this VF. */
     if (vnic == NFD_MAX_VFS)
-        vf_queue_mask = shl64(MSIX_PF_RINGS_MASK, vnic * NFD_MAX_VF_QUEUES);
+        vf_queue_mask = MSIX_PF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
     else
-        vf_queue_mask = shl64(MSIX_VF_RINGS_MASK, vnic * NFD_MAX_VF_QUEUES);
+        vf_queue_mask = MSIX_VF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
 
     if (rx_rings) {
         msix_cls_rx_enabled[pcie_isl] &= ~vf_queue_mask;
@@ -384,7 +343,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
      * number of RX and TX rings and simple set the auto-mask bits for
      * all queues of the VF/PF depending on the auto-mask bit in the
      * control word. */
-    queues = shl64(vf_rx_rings_new, vnic * NFD_MAX_VF_QUEUES);
+    queues = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
     if (control & NFP_NET_CFG_CTRL_MSIXAUTO)
         msix_cls_automask[pcie_isl] |= queues;
     else
@@ -579,7 +538,7 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue)
         entry = msix_tx_entries[pcie_isl][qnum];
 
     /* Should we automask this queue? */
-    automask = msix_automask & shl64(1ull, qnum);
+    automask = msix_automask & (1ull << qnum);
 
     /* Get the function (aka vnic) */
     NFD_NATQ2VNIC(fn, qnum);
@@ -636,7 +595,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
         enabled = msix_rx_enabled;
         while (enabled) {
             qnum = ffs64(enabled);
-            qmask = shl64(1ull, qnum);
+            qmask = 1ull << qnum;
             enabled &= ~qmask;
 
             /* Check if queue got new packets and try to send MSI-X if so */
@@ -658,7 +617,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
         enabled = msix_tx_enabled;
         while (enabled) {
             qnum = ffs64(enabled);
-            qmask = shl64(1ull, qnum);
+            qmask = 1ull << qnum;
             enabled &= ~qmask;
 
             /* XXX assumes/hardcodes that TX queues are first...no macro */
@@ -680,7 +639,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
         pending = msix_rx_pending;
         while (pending) {
             qnum = ffs64(pending);
-            qmask = shl64(1ull, qnum);
+            qmask = 1ull << qnum;
             pending &= ~qmask;
 
             /* Update RX queue count in case it changed. */
@@ -700,7 +659,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
         pending = msix_tx_pending;
         while (pending) {
             qnum = ffs64(pending);
-            qmask = shl64(1ull, qnum);
+            qmask = 1ull << qnum;
             pending &= ~qmask;
 
             /* Update TX queue count in case it changed. */
