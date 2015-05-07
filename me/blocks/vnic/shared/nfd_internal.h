@@ -51,7 +51,8 @@
 
 /* DMA defines */
 #define NFD_IN_GATHER_MAX_IN_FLIGHT 32
-#define NFD_IN_DATA_MAX_IN_FLIGHT   128
+/* NB: PCI.IN may also have up to 16 extra jumbo frame DMAs in flight */
+#define NFD_IN_DATA_MAX_IN_FLIGHT   112
 #define NFD_IN_GATHER_DMA_QUEUE     NFP_PCIE_DMA_FROMPCI_HI
 #define NFD_IN_DATA_DMA_QUEUE       NFP_PCIE_DMA_FROMPCI_LO
 #define NFD_IN_DATA_DMA_TOKEN       2
