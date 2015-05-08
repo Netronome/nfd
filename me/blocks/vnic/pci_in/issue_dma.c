@@ -30,6 +30,15 @@
 #include <vnic/utils/qc.h>
 
 
+/* Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
+ * swap token complete correctly for DMAs that aren't 4B multiples in size. */
+#if __REVISION_MIN >= __REVISION_B0
+    ASM(.init_csr                                                           \
+        pcie:PcieInternalTargets.DMAController.DMADbgReg0.DmaByteMaskSwapEna \
+        1 const);
+#endif
+
+
 struct _tx_desc_batch {
     struct nfd_in_tx_desc pkt0;
     struct nfd_in_tx_desc pkt1;
@@ -279,15 +288,30 @@ do {                                                                    \
 } while (0)
 
 
+#if __REVISION_MIN < __REVISION_B0
+    /* THS-54 workaround, round DMA up to next 4B multiple size.
+     * This workaround is incompatible with gather support. */
+#if ((NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_GATHER) || \
+     (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_GATHER))
+#error "NFP_NET_CFG_CTRL_GATHER not supported for A0 chips"
+#endif
+
+#define _ISSUE_PROC_A0_SUPPORT(_len)                                 \
+    _len = (_len + NFD_IN_DATA_ROUND - 1) & ~(NFD_IN_DATA_ROUND -1); \
+
+#else
+#define _ISSUE_PROC_A0_SUPPORT(_len)
+#endif
+
+
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     unsigned int dma_len;                                               \
     __gpr unsigned int buf_addr;                                        \
     __gpr unsigned int curr_buf;                                        \
                                                                         \
-    /* THS-54 workaround, round DMA up to next 4B multiple size */      \
-    dma_len = ((tx_desc.pkt##_pkt##.dma_len + NFD_IN_DATA_ROUND - 1) &  \
-               ~(NFD_IN_DATA_ROUND -1));                                \
+    dma_len = tx_desc.pkt##_pkt##.dma_len;                              \
+    _ISSUE_PROC_A0_SUPPORT(dma_len);                                    \
                                                                         \
     if (tx_desc.pkt##_pkt##.eop && !queue_data[queue].cont) {           \
         /* Fast path, use buf_store data */                             \
