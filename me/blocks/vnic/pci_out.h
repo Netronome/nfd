@@ -168,13 +168,13 @@ __intrinsic unsigned int nfd_out_get_credit(unsigned int pcie_isl,
 /**
  * Packets and Bytes count for PCI.OUT queues.
  * @param pcie_isl      PCIe island to access
- * @param bmsk_queue    Tx queue number
+ * @param bmsk_queue    Rx queue number
  * @param byte_count    The bytes count to add
  * @param sync          type of synchronization
  * @param sig           signal to report completion
  *
  * This function uses the stats engine pkt and byte counters
- * to log the packet and bytes count per Tx queue.
+ * to log the packet and bytes count per Rx queue.
  * The values are accumulated in the nfd_out_cntrsX memory and needs
  * to be pushed to the CFG BAR using the "__nfd_out_push_pkt_cnt" function.
  */
@@ -186,11 +186,11 @@ __intrinsic void __nfd_out_cnt_pkt(unsigned int pcie_isl,
 /**
  * Push Packets and Bytes count for PCI.OUT queue into the CFG BAR.
  * @param pcie_isl      PCIe island to access
- * @param bmsk_queue    Tx queue number
+ * @param bmsk_queue    Rx queue number
  * @param sync          type of synchronization
  * @param sig           signal to report completion
  *
- * This function updates the per Tx Q packets and bytes counter
+ * This function updates the per Rx Q packets and bytes counter
  * in the CFG BAR. It reads and clears the packets and bytes
  * count from the relevant nfd_in_cntrsX memory and updates the
  * CFG BAR counters using the read values.
