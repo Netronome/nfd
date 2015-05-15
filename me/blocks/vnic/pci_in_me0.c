@@ -25,7 +25,6 @@
 #include <std/event.h>                  /* TEMP */
 
 NFD_CFG_DECLARE(nfd_cfg_sig_pci_in0, nfd_cfg_sig_pci_in1);
-NFD_CFG_CLEAR_QC;
 NFD_INIT_DONE_DECLARE;
 
 NFD_CFG_PF_DECLARE(PCIE_ISL);
