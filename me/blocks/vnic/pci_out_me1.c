@@ -12,6 +12,7 @@
 
 #include <vnic/pci_out/issue_dma.c>
 #include <vnic/pci_out/issue_dma_status.c>
+#include <vnic/shared/nfd_cfg_internal.c>
 
 NFD_INIT_DONE_DECLARE;
 
@@ -21,6 +22,8 @@ main(void)
     /* Perform per ME initialisation  */
     if (ctx() == 0) {
         ctassert((NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES) <= 64);
+
+        nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
         issue_dma_setup_shared();
         issue_dma_status_setup();

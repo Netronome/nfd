@@ -45,6 +45,8 @@ main(void)
     if (ctx() == 0) {
         ctassert((NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES) <= 64);
 
+        nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
+
         /* Initialisation that does not swap */
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_in0, &cfg_msg);
         gather_setup_shared();
