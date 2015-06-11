@@ -167,7 +167,8 @@ init_bitmask_filters(__xread struct qc_xfers *xfers,
 {
     __cls struct event_cls_filter *event_filter;
     struct nfp_em_filter_status status;
-    unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0xFE1, 0xF);
+    /* WIP 64VFs allow CFG queue events in mask */
+    unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0xFE0, 0xF);
     unsigned int event_match;
     unsigned int meid = __MEID;
     unsigned int ctx = ctx();
@@ -212,6 +213,10 @@ do {                                                                \
         new_queues = bf_compress(xfers->x##num, 0);                 \
         bmsk->##entry |= new_queues << shf;                         \
                                                                     \
+        /* TEMP extract a bitmask of config "queues"  */            \
+        new_queues = bf_compress(xfers->x##num, 1);                 \
+        cfg_bmsk->##entry |= new_queues << shf;                     \
+                                                                    \
         __implicit_write(s##num);                                   \
         __implicit_write(&(xfers->x##num), sizeof(unsigned int));   \
         event_cls_autopush_filter_reset(                            \
@@ -223,6 +228,7 @@ do {                                                                \
 
 __intrinsic void
 check_bitmask_filters(__shared __gpr struct qc_bitmask *bmsk,
+                      __shared __gpr struct qc_bitmask *cfg_bmsk,
                       __xread struct qc_xfers *xfers,
                       volatile SIGNAL *s0, volatile SIGNAL *s1,
                       volatile SIGNAL *s2, volatile SIGNAL *s3,

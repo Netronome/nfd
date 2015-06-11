@@ -45,6 +45,8 @@ static SIGNAL rx_ap_s3;
 __shared __gpr struct qc_bitmask pci_out_active_bmsk;
 __remote volatile SIGNAL nfd_out_cache_bmsk_sig;
 
+__shared __gpr struct qc_bitmask cfg_queue_bmsk;
+
 NFD_OUT_ACTIVE_BMSK_DECLARE;
 
 __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
@@ -74,6 +76,8 @@ service_qc_setup ()
     /* Zero bitmasks */
     init_bitmasks(&active_bmsk);
     init_bitmasks(&pending_bmsk);
+
+    init_bitmasks(&cfg_queue_bmsk);
 
     /* Configure nfd_in autopush filters */
     init_bitmask_filters(&tx_ap_xfers, &tx_ap_s0, &tx_ap_s1,
@@ -187,14 +191,15 @@ service_qc()
     struct check_queues_consts c;
 
     /* Check nfd_in bitmasks */
-    check_bitmask_filters(&active_bmsk, &tx_ap_xfers, &tx_ap_s0, &tx_ap_s1,
-              &tx_ap_s2, &tx_ap_s3, NFD_IN_Q_EVENT_START);
+    check_bitmask_filters(&active_bmsk, &cfg_queue_bmsk, &tx_ap_xfers,
+                          &tx_ap_s0, &tx_ap_s1, &tx_ap_s2, &tx_ap_s3,
+                          NFD_IN_Q_EVENT_START);
 
     /* Check nfd_out bitmasks */
     pci_out_active_bmsk.bmsk_lo = 0;
     pci_out_active_bmsk.bmsk_hi = 0;
-    check_bitmask_filters(&pci_out_active_bmsk, &rx_ap_xfers, &rx_ap_s0,
-                          &rx_ap_s1, &rx_ap_s2, &rx_ap_s3,
+    check_bitmask_filters(&pci_out_active_bmsk, &cfg_queue_bmsk, &rx_ap_xfers,
+                          &rx_ap_s0, &rx_ap_s1, &rx_ap_s2, &rx_ap_s3,
                           NFD_OUT_Q_EVENT_START);
 
     if (pci_out_active_bmsk.bmsk_lo | pci_out_active_bmsk.bmsk_hi) {

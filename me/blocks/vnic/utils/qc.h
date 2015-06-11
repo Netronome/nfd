@@ -180,6 +180,7 @@ __intrinsic void init_bitmasks(__gpr struct qc_bitmask *bmsk);
  * bmsk[1] contains (16, 48, 17, 49, 18, 50, ..., 30, 62, 31, 63)
  */
 __intrinsic void check_bitmask_filters(__shared __gpr struct qc_bitmask *bmsk,
+                                       __shared __gpr struct qc_bitmask *cfg_bmsk,
                                        __xread struct qc_xfers *xfers,
                                        volatile SIGNAL *s0, volatile SIGNAL *s1,
                                        volatile SIGNAL *s2, volatile SIGNAL *s3,
