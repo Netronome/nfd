@@ -225,13 +225,6 @@ struct nfd_in_issued_desc {
 };
 
 
-struct nfd_in_me1_state {
-    unsigned int pending_fetch:1;
-    unsigned int recompute_seq_safe:1;
-    unsigned int spare:30;
-};
-
-
 /* nfd_out internal structures */
 struct nfd_out_queue_info {
     unsigned int fl_w;

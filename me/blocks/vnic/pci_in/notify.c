@@ -10,6 +10,7 @@
 
 #include <nfp/me.h>
 
+#include <nfp6000/nfp_cls.h>
 #include <nfp6000/nfp_me.h>
 
 #include <nfp/mem_ring.h>
@@ -39,8 +40,17 @@ struct _pkt_desc_batch {
     struct nfd_in_pkt_desc pkt3;
 };
 
-extern __shared __gpr unsigned int data_dma_seq_served;
-extern __shared __gpr unsigned int data_dma_seq_compl;
+__shared __gpr unsigned int data_dma_seq_served = 0;
+__shared __gpr unsigned int data_dma_seq_compl = 0;
+static __gpr unsigned int data_dma_seq_sent = 0;
+
+/* Signals and transfer registers for sequence number reflects */
+__visible volatile __xread unsigned int nfd_in_data_compl_refl_in;
+__visible volatile SIGNAL nfd_in_data_compl_refl_sig;
+__remote volatile __xread unsigned int nfd_in_data_served_refl_in;
+__remote volatile SIGNAL nfd_in_data_served_refl_sig;
+static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
+
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
 static SIGNAL msg_sig, qc_sig;
@@ -163,6 +173,11 @@ do {                                                                    \
 } while (0)
 
 #endif
+
+
+/*
+ * reflect_data() available from gather.c, imported before this file.
+ */
 
 
 /**
@@ -333,5 +348,45 @@ notify()
         wait_for_all(&msg_order_sig);
         reorder_done_opt(&next_ctx, &msg_order_sig);
         return;
+    }
+}
+
+
+/**
+ * Check autopush for seq_compl and reflect seq_served to issue_dma ME
+ *
+ * "data_dma_seq_compl" tracks the completed gather DMAs.  It is needed by
+ * notify to determine when to service the "nfd_in_issued_ring".  The
+ * issue_dma ME needs the sequence number more urgently (for in flight
+ * DMA tracking) so it constructs the sequence number and reflects the
+ * value to this ME.  It must be copied to shared GPRs for worker threads.
+ *
+ * "data_dma_seq_served" is state owned by this ME.  The issue_dma ME
+ * needs the value to determine how many batches can be added to the
+ * "nfd_in_issued_ring", so the current value is reflected to that
+ * ME.  "data_dma_seq_sent" is used to track which sequence number
+ * has been reflected, so that it is not resent.
+ */
+__intrinsic void
+distr_notify()
+{
+    if (signal_test(&nfd_in_data_compl_refl_sig)) {
+        data_dma_seq_compl = nfd_in_data_compl_refl_in;
+    }
+
+    /* XXX possibly throttle these reflects further */
+    if (data_dma_seq_served != data_dma_seq_sent) {
+        __implicit_read(&nfd_in_data_served_refl_out);
+
+        data_dma_seq_sent = data_dma_seq_served;
+
+        nfd_in_data_served_refl_out = data_dma_seq_sent;
+        reflect_data(NFD_IN_DATA_DMA_ME,
+                     __xfer_reg_number(&nfd_in_data_served_refl_in,
+                                       NFD_IN_DATA_DMA_ME),
+                     __signal_number(&nfd_in_data_served_refl_sig,
+                                     NFD_IN_DATA_DMA_ME),
+                     &nfd_in_data_served_refl_out,
+                     sizeof nfd_in_data_served_refl_out);
     }
 }

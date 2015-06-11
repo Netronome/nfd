@@ -9,11 +9,15 @@
 #include <nfp.h>
 
 #include <nfp/pcie.h>
+#include <std/event.h>
 
+#include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
 
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd_internal.h>
+#include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/nn_ring.h>
 #include <vnic/utils/qc.h>
 
@@ -29,7 +33,15 @@ extern __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
 static __shared __gpr unsigned int desc_ring_base;
 
 __shared __gpr unsigned int dma_seq_issued = 0;
-extern __shared __gpr unsigned int gather_dma_seq_compl;
+__shared __gpr unsigned int gather_dma_seq_compl = 0;
+
+/* Signals and transfer registers for managing
+ * gather_dma_seq_compl updates*/
+static volatile __xread unsigned int nfd_in_gather_event_xfer;
+static volatile SIGNAL nfd_in_gather_event_sig;
+static __xwrite unsigned int nfd_in_gather_compl_refl_out = 0;
+__remote volatile __xread unsigned int nfd_in_gather_compl_refl_in;
+__remote volatile SIGNAL nfd_in_gather_compl_refl_sig;
 
 #define DESC_RING_SZ (NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ *       \
                       sizeof(struct nfd_in_tx_desc))
@@ -37,6 +49,39 @@ __export __shared __cls __align(DESC_RING_SZ) struct nfd_in_tx_desc
     desc_ring[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
 
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
+
+
+/* XXX Move to some sort of CT reflect library */
+__intrinsic void
+reflect_data(unsigned int dst_me, unsigned int dst_xfer,
+             unsigned int sig_no, volatile __xwrite void *src_xfer,
+             size_t size)
+{
+    #define OV_SIG_NUM 13
+
+    unsigned int addr;
+    unsigned int count = (size >> 2);
+    struct nfp_mecsr_cmd_indirect_ref_0 indirect;
+
+    /* ctassert(__is_write_reg(src_xfer)); */ /* TEMP, avoid volatile warnings */
+    ctassert(__is_ct_const(size));
+
+    /* Generic address computation.
+     * Could be expensive if dst_me, or dst_xfer
+     * not compile time constants */
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
+
+    indirect.__raw = 0;
+    indirect.signal_num = sig_no;
+    local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
+
+    /* Currently just support reflect_write_sig_remote */
+    __asm {
+        alu[--, --, b, 1, <<OV_SIG_NUM];
+        ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
+           __ct_const_val(count)], indirect_ref;
+    };
+}
 
 
 /**
@@ -69,6 +114,58 @@ gather_setup_shared()
     cfg.target_64   = 0;
     cfg.cpp_target  = 15;
     pcie_dma_cfg_set_one(PCIE_ISL, NFD_IN_GATHER_CFG_REG, cfg);
+}
+
+
+/**
+ * Perform once off, CTX0-only initialisation of sequence number autopushes
+ */
+void
+distr_gather_setup_shared()
+{
+    dma_seqn_ap_setup(NFD_IN_GATHER_EVENT_FILTER, NFD_IN_GATHER_EVENT_FILTER,
+                      NFD_IN_GATHER_EVENT_TYPE, &nfd_in_gather_event_xfer,
+                      &nfd_in_gather_event_sig);
+}
+
+
+/**
+ * Check autopush, compute gather_dma_seq_compl, and reflect to issue_dma ME
+ *
+ * "gather_dma_seq_compl" tracks the completed gather DMAs.  Events containing
+ * the low 12 bits of a sequence number are received when DMAs complete,
+ * and these are used to advance the full 32 bit sequence number.  The
+ * PCI.IN issue_dma code also needs this sequence number to determine
+ * when to process gather batches, so it is reflected to that ME.
+ */
+__intrinsic void
+distr_gather()
+{
+    if (signal_test(&nfd_in_gather_event_sig)) {
+        __implicit_read(&nfd_in_gather_compl_refl_out);
+
+        dma_seqn_advance(&nfd_in_gather_event_xfer, &gather_dma_seq_compl);
+
+        /* Mirror to remote ME */
+        nfd_in_gather_compl_refl_out = gather_dma_seq_compl;
+        reflect_data(NFD_IN_DATA_DMA_ME,
+                     __xfer_reg_number(&nfd_in_gather_compl_refl_in,
+                                       NFD_IN_DATA_DMA_ME),
+                     __signal_number(&nfd_in_gather_compl_refl_sig,
+                                     NFD_IN_DATA_DMA_ME),
+                     &nfd_in_gather_compl_refl_out,
+                     sizeof nfd_in_gather_compl_refl_out);
+
+        __implicit_write(&nfd_in_gather_event_sig);
+        event_cls_autopush_filter_reset(
+            NFD_IN_GATHER_EVENT_FILTER,
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+            NFD_IN_GATHER_EVENT_FILTER);
+
+    } else {
+        /* Swap to give other threads a chance to run */
+        ctx_swap();
+    }
 }
 
 

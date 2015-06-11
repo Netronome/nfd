@@ -11,11 +11,14 @@
 
 #include <nfp/me.h>
 #include <nfp/mem_ring.h>
+#include <std/event.h>
 #include <std/reg_utils.h>
 
+#include <nfp6000/nfp_cls.h>
 #include <nfp6000/nfp_me.h>
 
 #include <vnic/shared/nfd_internal.h>
+#include <vnic/utils/dma_seqn.h>
 
 
 /* Configure *l$index3 to be a global pointer, and
@@ -23,21 +26,73 @@
 #define NFD_IN_BUF_STORE_PTR *l$index3
 _init_csr("mecsr:CtxEnables.LMAddr3Global 1");
 
+
+struct precache_bufs_state {
+    unsigned int pending_fetch:1;       /* A  buffers "get" has been issued */
+    unsigned int recompute_seq_safe:1;  /* The safe seqn must be recomputed */
+    unsigned int spare:30;
+};
+
+
 NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
-static struct nfd_in_me1_state state = {0, 0, 0};
+static struct precache_bufs_state state = {0, 0, 0};
 static SIGNAL_PAIR precache_sig;
 
 static __xread unsigned int bufs_rd[NFD_IN_BUF_RECACHE_WM];
 static unsigned int blm_queue_addr;
 static unsigned int blm_queue_num;
 
-extern __shared __gpr unsigned int data_dma_seq_compl;
-extern __shared __gpr unsigned int data_dma_seq_served;
 extern __shared __gpr unsigned int data_dma_seq_issued;
+__shared __gpr unsigned int data_dma_seq_compl = 0;
+__shared __gpr unsigned int data_dma_seq_served = 0;
 __shared __gpr unsigned int data_dma_seq_safe = 0;
+
+/* Signals and transfer registers for receiving DMA events */
+static volatile __xread unsigned int nfd_in_data_event_xfer;
+static volatile SIGNAL nfd_in_data_event_sig;
+
+/* Signals and transfer registers for sequence number reflects */
+static __xwrite unsigned int nfd_in_data_compl_refl_out = 0;
+__remote volatile __xread unsigned int nfd_in_data_compl_refl_in;
+__remote volatile SIGNAL nfd_in_data_compl_refl_sig;
+__visible volatile __xread unsigned int nfd_in_data_served_refl_in;
+__visible volatile SIGNAL nfd_in_data_served_refl_sig;
+
+
+/* XXX Move to some sort of CT reflect library */
+__intrinsic void
+reflect_data(unsigned int dst_me, unsigned int dst_xfer,
+             unsigned int sig_no, volatile __xwrite void *src_xfer,
+             size_t size)
+{
+    #define OV_SIG_NUM 13
+
+    unsigned int addr;
+    unsigned int count = (size >> 2);
+    struct nfp_mecsr_cmd_indirect_ref_0 indirect;
+
+    /* ctassert(__is_write_reg(src_xfer)); */ /* TEMP, avoid volatile warnings */
+    ctassert(__is_ct_const(size));
+
+    /* Generic address computation.
+     * Could be expensive if dst_me, or dst_xfer
+     * not compile time constants */
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
+
+    indirect.__raw = 0;
+    indirect.signal_num = sig_no;
+    local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
+
+    /* Currently just support reflect_write_sig_remote */
+    __asm {
+        alu[--, --, b, 1, <<OV_SIG_NUM];
+        ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
+           __ct_const_val(count)], indirect_ref;
+    };
+}
 
 
 /*
@@ -189,7 +244,7 @@ precache_bufs_use()
 /**
  * Check the number of buffers available in the cache.
  */
-__inline unsigned int
+__intrinsic unsigned int
 precache_bufs_avail()
 {
     unsigned int ret;
@@ -210,7 +265,7 @@ precache_bufs_avail()
  * filled.  This makes the DMA batches count slightly pessimistic if a few
  * batches are not full.
  */
-__inline void
+__intrinsic void
 precache_bufs_compute_seq_safe()
 {
     unsigned int min_bat, buf_bat, dma_bat, ring_bat;
@@ -235,4 +290,82 @@ precache_bufs_compute_seq_safe()
 
     /* min_bat batches after data_dma_seq_issued are safe */
     data_dma_seq_safe = data_dma_seq_issued + min_bat;
+}
+
+
+/**
+ * Perform once off, CTX0-only initialisation of sequence number autopushes
+ */
+void
+distr_precache_bufs_setup_shared()
+{
+    dma_seqn_ap_setup(NFD_IN_DATA_EVENT_FILTER, NFD_IN_DATA_EVENT_FILTER,
+                      NFD_IN_DATA_EVENT_TYPE, &nfd_in_data_event_xfer,
+                      &nfd_in_data_event_sig);
+}
+
+
+/**
+ * Compute, reflect, and receive sequence nos shared by issue and notify
+ *
+ * data_dma_seq_served tracks which batch notify has finished servicing.
+ * It is needed by issue_dma to know how many batches can be placed on
+ * the ring between the two MEs.
+ *
+ * data_dma_seq_compl tracks the completed data DMAs.  Events containing
+ * the low 12 bits of a sequence number are received when DMAs complete,
+ * and these are used to advance the full 32 bit sequence number.  The
+ * notify code also needs this sequence number to determine when to process
+ * issue_dma batches, so it is reflected to that ME.
+ *
+ * precache_bufs owns and updates data_dma_seq_safe, which requires these
+ * sequence numbers, so the distribution code lives in precache_bufs.c.
+ * If either sequence number has been advanced,
+ * "precache_bufs_compute_seq_safe()" must be called.  "data_dma_seq_compl"
+ * tracks in flight DMAs and is the priority, so it causes the safe sequence
+ * to be updated immediately (before swapping).  If just "data_dma_seq_served"
+ * has advanced, then the safe sequence will only be updated after the swap,
+ * or on demand from the worker threads.
+ */
+__intrinsic void
+distr_precache_bufs()
+{
+    if (signal_test(&nfd_in_data_served_refl_sig)) {
+        data_dma_seq_served = nfd_in_data_served_refl_in;
+
+        state.recompute_seq_safe = 1;
+    }
+
+    if (signal_test(&nfd_in_data_event_sig)) {
+        __implicit_read(&nfd_in_data_compl_refl_out);
+
+        dma_seqn_advance(&nfd_in_data_event_xfer, &data_dma_seq_compl);
+        precache_bufs_compute_seq_safe();
+        state.recompute_seq_safe = 0;
+
+        /* Mirror to remote ME */
+        nfd_in_data_compl_refl_out = data_dma_seq_compl;
+        reflect_data(NFD_IN_NOTIFY_ME,
+                     __xfer_reg_number(&nfd_in_data_compl_refl_in,
+                                       NFD_IN_NOTIFY_ME),
+                     __signal_number(&nfd_in_data_compl_refl_sig,
+                                     NFD_IN_NOTIFY_ME),
+                     &nfd_in_data_compl_refl_out,
+                     sizeof nfd_in_data_compl_refl_out);
+
+        __implicit_write(&nfd_in_data_event_sig);
+        event_cls_autopush_filter_reset(
+            NFD_IN_DATA_EVENT_FILTER,
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+            NFD_IN_DATA_EVENT_FILTER);
+
+    } else {
+        /* Swap to give other threads a chance to run */
+        ctx_swap();
+    }
+
+    if (state.recompute_seq_safe == 1) {
+        precache_bufs_compute_seq_safe();
+        state.recompute_seq_safe = 0;
+    }
 }

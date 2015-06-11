@@ -11,7 +11,6 @@
 #include <nfp/me.h>
 #include <nfp/mem_ring.h>
 
-#include <vnic/pci_in/gather_seq_recv.c>
 #include <vnic/pci_in/issue_dma.c>
 #include <vnic/pci_in/issue_dma_status.c>
 #include <vnic/pci_in/precache_bufs.c>
@@ -35,6 +34,8 @@ main(void)
 
         precache_bufs_setup();
 
+        distr_precache_bufs_setup_shared();
+
         issue_dma_status_setup();
 
         issue_dma_setup_shared();
@@ -52,7 +53,9 @@ main(void)
     if (ctx() == 0) {
         /* CTX0 main loop */
         for (;;) {
-            gather_seq_recv();
+            issue_dma_gather_seq_recv();
+
+            distr_precache_bufs();
 
             precache_bufs();
 

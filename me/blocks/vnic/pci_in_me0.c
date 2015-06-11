@@ -12,7 +12,6 @@
 
 #include <nfp6000/nfp_qc.h>
 
-#include <vnic/pci_in/distr_seqn.c>
 #include <vnic/pci_in/gather.c>
 #include <vnic/pci_in/gather_status.c>
 #include <vnic/pci_in/notify.c>
@@ -62,7 +61,7 @@ main(void)
 #endif
 
         service_qc_setup();
-        distr_seqn_setup();
+        distr_gather_setup_shared();
         nfd_cfg_setup();
         nfd_cfg_flr_setup();
 
@@ -103,7 +102,8 @@ main(void)
         for (;;) {
             service_qc();
 
-            distr_seqn();
+            distr_gather();
+            distr_notify();
 
             nfd_cfg_check_flr_ap();
 

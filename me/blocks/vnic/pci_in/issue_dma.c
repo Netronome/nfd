@@ -73,11 +73,16 @@ static __shared __gpr unsigned int desc_ring_base;
 __shared __lmem struct nfd_in_dma_state queue_data[NFD_IN_MAX_QUEUES];
 
 /* Sequence number declarations */
-extern __shared __gpr unsigned int gather_dma_seq_compl;
+__shared __gpr unsigned int gather_dma_seq_compl = 0;
 __shared __gpr unsigned int gather_dma_seq_serv = 0;
 
 __shared __gpr unsigned int data_dma_seq_issued = 0;
 extern __shared __gpr unsigned int data_dma_seq_safe;
+
+/* Signals and transfer registers for managing
+ * gather_dma_seq_compl updates*/
+__visible volatile __xread unsigned int nfd_in_gather_compl_refl_in;
+__visible volatile SIGNAL nfd_in_gather_compl_refl_sig;
 
 /* DMA descriptor template */
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
@@ -266,6 +271,24 @@ issue_dma_setup()
     wait_msk = __signals(&tx_desc_sig, &dma_order_sig);
     next_ctx = reorder_get_next_ctx(NFD_IN_ISSUE_START_CTX);
 }
+
+
+/**
+ * Check for gather_dma_seq_compl updates
+ *
+ * The gather ME tracks gather DMA completions and reflects the
+ * full sequence number to this ME.  The value must be copied from
+ * transfer registers to shared GPRs for the worker threads.  This
+ * function runs on CTX0 only.
+ */
+__intrinsic void
+issue_dma_gather_seq_recv()
+{
+    if (signal_test(&nfd_in_gather_compl_refl_sig)) {
+        gather_dma_seq_compl = nfd_in_gather_compl_refl_in;
+    }
+}
+
 
 /* XXX temporarily enable _ISSUE_PROC_MU_CHK even without debug checks.
  * This gives us extra protection of the CTM counters while PCI.OUT is not
