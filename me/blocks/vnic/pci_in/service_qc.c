@@ -45,7 +45,7 @@ static SIGNAL rx_ap_s3;
 __shared __gpr struct qc_bitmask pci_out_active_bmsk;
 __remote volatile SIGNAL nfd_out_cache_bmsk_sig;
 
-__shared __gpr struct qc_bitmask cfg_queue_bmsk;
+extern __shared __gpr struct qc_bitmask cfg_queue_bmsk;
 
 NFD_OUT_ACTIVE_BMSK_DECLARE;
 

@@ -146,7 +146,6 @@ main(void)
     } else if (ctx() == 1) {
         for (;;) {
             nfd_cfg_check_flr_ap();
-            nfd_cfg_check_cfg_ap();
 
             ctx_swap();
         }

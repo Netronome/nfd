@@ -118,41 +118,7 @@ NFD_CFG_RINGS_INIT(3);
 NFD_FLR_DECLARE;
 
 
-/*
- * Compute constants to help map from the configuration bitmask
- * to configuration queues. We need to compute the spacing between
- * bitmasks, and a mask for how many times a bit has been tested.
- *
- * There are a few corner cases to consider (such as the case of
- * two vNICs with 32 queues each), so #if-#elif-#else statements are used.
- *
- * For the purposes of computing these constants, we can handle the PF as
- * if it had the same number of queues as the VFs.
- */
-#if (((NFD_MAX_VFS + NFD_MAX_PFS) == 1) ||          \
-     ((NFD_MAX_VFS + NFD_MAX_PFS) * NFD_MAX_VF_QUEUES <= 16))
-#define NFD_CFG_BMSK_TEST_MSK  0
-#define NFD_CFG_BMSK_SPACING   0
-
-#elif (((NFD_MAX_VFS + NFD_MAX_PFS) == 2) ||                        \
-       ((NFD_MAX_VFS + NFD_MAX_PFS) * NFD_MAX_VF_QUEUES <= 32))
-#define NFD_CFG_BMSK_TEST_MSK  1
-
-#if NFD_MAX_VF_QUEUES == 32
-#define NFD_CFG_BMSK_SPACING   64
-#else
-#define NFD_CFG_BMSK_SPACING   32
-#endif
-
-#else
-#define NFD_CFG_BMSK_TEST_MSK  3
-#define NFD_CFG_BMSK_SPACING   32
-#endif
-
-static SIGNAL cfg_ap_sig;
-static __xread unsigned int cfg_ap_xfer;
-static __shared __gpr unsigned int cfg_vnic_bmsk = 0;
-static __gpr unsigned int cfg_vnic_queue_test_cnt = 0;
+__shared __gpr struct qc_bitmask cfg_queue_bmsk;
 
 static SIGNAL flr_ap_sig;
 static __xread unsigned int flr_ap_xfer;
@@ -370,13 +336,6 @@ _nfd_cfg_queue_setup()
 {
     struct qc_queue_config nfd_cfg_queue;
 
-    __cls struct event_cls_filter *event_filter;
-    struct nfp_em_filter_status status;
-    unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
-        ((unsigned int) __MEID>>4), NFP_EVENT_PROVIDER_INDEX_PCIE);
-    unsigned int event_mask, event_match;
-
-
     /*
      * Config queues are small and issue events on not empty.
      * The confq for VNIC N is CONFQ_START + N * vnic_block_size.
@@ -396,37 +355,6 @@ _nfd_cfg_queue_setup()
     /* Just the PF to init */
     qc_init_queue(PCIE_ISL, NFD_CFG_QUEUE, &nfd_cfg_queue);
 #endif
-
-    /* Setup the config event filter and autopush */
-    __implicit_write(&cfg_ap_sig);
-    __implicit_write(&cfg_ap_xfer);
-
-    /*
-     * Mask set to be fairly permissive now
-     * Can make it stricter (based on number of active vNICs) if justified
-     */
-    event_mask = NFP_EVENT_MATCH(0xFF, 0xF81, 0xF);
-    event_match = NFP_EVENT_MATCH(pcie_provider,
-                                  (NFD_CFG_EVENT_DATA<<6) | NFD_CFG_QUEUE,
-                                  0);
-    status.__raw = 0; /* bitmask32 requires no further settings */
-
-    event_filter = event_cls_filter_handle(NFD_CFG_EVENT_FILTER);
-
-    event_cls_filter_setup(event_filter,
-                           NFP_EM_FILTER_MASK_TYPE_MASK32,
-                           event_match, event_mask, status);
-
-    event_cls_autopush_signal_setup(NFD_CFG_EVENT_FILTER,
-                                    (unsigned int) __MEID,
-                                    ctx(),
-                                    __signal_number(&cfg_ap_sig),
-                                    __xfer_reg_number(&cfg_ap_xfer));
-
-    event_cls_autopush_filter_reset(
-        NFD_CFG_EVENT_FILTER,
-        NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-        NFD_CFG_EVENT_FILTER);
 }
 
 /*
@@ -549,24 +477,6 @@ nfd_cfg_flr_setup()
 
 
 /**
- * Look for notification of configuration events
- */
-void
-nfd_cfg_check_cfg_ap()
-{
-    if (signal_test(&cfg_ap_sig)) {
-        /* Set the active bitmask */
-        cfg_vnic_bmsk = cfg_ap_xfer;
-
-        /* Mark the autopush signal and xfer as used
-         * so that the compiler keeps them reserved. */
-        __implicit_write(&cfg_ap_sig);
-        __implicit_write(&cfg_ap_xfer);
-    }
-}
-
-
-/**
  * Update the FLR state in this ME
  *
  * The PF and VF FLR state are checked separately, using "nfd_flr_sent" to
@@ -646,64 +556,26 @@ nfd_cfg_check_flr_ap()
 int
 nfd_cfg_next_vnic()
 {
-    int curr_bit;
-    int queue;
+    /* XXX throttle how often this function runs? */
+    __gpr unsigned int queue;
     int vnic;
-    int masked_test_cnt;
+    int ret;
 
-    __xread struct nfp_qc_sts_lo cfg_queue_sts;
-    SIGNAL sig;
-
-    curr_bit = _ffs(cfg_vnic_bmsk);
-
-    /* cfg_vnic_bmsk empty, fast path short circuits any context swaps */
-    if (curr_bit < 0) {
-        return -1;
-    }
-
-    /* Compute the queue to test.
-     * A free running count of how many queues have been tested
-     * This serves a double function of debugging info and
-     * serving as an offset to compute the queue.
-     * When masked_test_cnt == 0, we have checked every queue associated
-     * with the bitmask. */
-    cfg_vnic_queue_test_cnt++;
-    masked_test_cnt = cfg_vnic_queue_test_cnt & NFD_CFG_BMSK_TEST_MSK;
-    queue = curr_bit | (masked_test_cnt * NFD_CFG_BMSK_SPACING);
-
-    /* Compute vNIC and increment QC read pointer.
-     * If there is not a one-to-one mapping between queues and bits,
-     * first test whether the queue is empty. */
-#if NFD_CFG_BMSK_TEST_MSK == 0
-    vnic = NFD_CFGQ2VNIC(queue / 2);
-    qc_add_to_ptr(PCIE_ISL, queue, QC_RPTR, 1);
-#else
-    __qc_read(PCIE_ISL, queue, QC_RPTR, &cfg_queue_sts.__raw, ctx_swap, &sig);
-    if (cfg_queue_sts.empty) {
-        /* We haven't found a vNIC to service this time */
+    /* Get a bmsk queue number from the configuration queue bmsk */
+    ret = select_queue(&queue, &cfg_queue_bmsk);
+    if (ret) {
+        /* We haven't found a configuration queue to service */
         vnic = -1;
     } else {
-        vnic = NFD_CFGQ2VNIC(queue / 2);
-        qc_add_to_ptr(PCIE_ISL, queue, QC_RPTR, 1);
-    }
-#endif
+        /* We have a configuration queue to service */
 
-    /* Test whether to reset curr_bit */
-    if (masked_test_cnt == 0) {
-        /* We just checked the last queue associated with curr_bit;
-         * reset it. */
-        cfg_vnic_bmsk &= ~(1 << curr_bit);
-    }
+        /* Compute the vNIC associated with that queue */
+        vnic = NFD_CFGQ2VNIC(queue);
 
-    /* Test the bitmask to determine whether to reset the autopush. */
-    if (cfg_vnic_bmsk == 0) {
-        __implicit_write(&cfg_ap_sig);
-        __implicit_write(&cfg_ap_xfer);
-
-        event_cls_autopush_filter_reset(
-            NFD_CFG_EVENT_FILTER,
-            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            NFD_CFG_EVENT_FILTER);
+        /* Clear the bit in the bitmask so the queue isn't picked again,
+         * and increment the QC queue read pointer */
+        clear_queue(&queue, &cfg_queue_bmsk);
+        qc_add_to_ptr(PCIE_ISL, (queue << 1) | NFD_CFG_QUEUE, QC_RPTR, 1);
     }
 
     return vnic;
