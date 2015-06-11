@@ -9,6 +9,7 @@
 #include <nfp.h>
 
 #include <nfp/me.h>
+#include <std/reg_utils.h>
 
 #include <nfp6000/nfp_cls.h>
 
@@ -21,26 +22,26 @@
 #include <nfp6000/nfp_me.h> /* TEMP */
 
 
-/* Compress double-spaced queues to a compact bitmask in the low 16 bits
- * The even/odd bits are filtered out.
+/* Compress quad-spaced queues to a compact bitmask in the low 8 bits
+ * "off" specifies the offset within the input to extract
  *
- * bf_collapse(0b00 11 01 10, 0) -> 0110
- * bf_collapse(0b00 11 01 10, 1) -> 0101
+ * bf_compress_quad(0b0011 0110, 0) -> 10
+ * bf_compress_quad(0b0011 0110, 1) -> 11
+ * bf_compress_quad(0b0011 0110, 2) -> 01
+ * bf_compress_quad(0b0011 0110, 3) -> 00
  *
  * The implementation is a variant of the sheep-and-goat algorithm.
  */
-static __intrinsic unsigned int bf_compress(unsigned int x, int odd)
+static __intrinsic unsigned int bf_compress_quad(unsigned int x, int off)
 {
-    if (odd)
-        x = (x >> 1) & 0x55555555;
-    else
-        x = x & 0x55555555;
+    ctassert(__is_ct_const(off));
 
-    x = (x | x >> 1) & 0x33333333;
-    x = (x | x >> 2) & 0x0f0f0f0f;
-    x = (x | x >> 4) & 0x00ff00ff;
+    x = (x >> off) & 0x11111111;
 
-    return (x | x >> 8) & 0x0000ffff;
+    x = (x | x >> 3) & 0x03030303;
+    x = (x | x >> 6) & 0x000f000f;
+
+    return (x | x >> 12) & 0x000000ff;
 }
 
 
@@ -162,13 +163,17 @@ __intrinsic void
 init_bitmask_filters(__xread struct qc_xfers *xfers,
                      volatile SIGNAL *s0, volatile SIGNAL *s1,
                      volatile SIGNAL *s2, volatile SIGNAL *s3,
-                     unsigned int event_data, unsigned int event_type,
-                     unsigned int start_handle)
+                     volatile SIGNAL *s4, volatile SIGNAL *s5,
+                     volatile SIGNAL *s6, volatile SIGNAL *s7,
+                     unsigned int event_data, unsigned int start_handle)
 {
     __cls struct event_cls_filter *event_filter;
     struct nfp_em_filter_status status;
-    /* WIP 64VFs allow CFG queue events in mask */
-    unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0xFE0, 0xF);
+    /* Configure mask to allow both NFP_EVENT_TYPE_FIFO_NOT_EMPTY (0) and
+     * NFP_EVENT_TYPE_FIFO_ABOVE_WM (2).  TX and CFG queues use "not empty"
+     * and the FL queues use "above watermark".
+     */
+    unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0xFE0, 0xD);
     unsigned int event_match;
     unsigned int meid = __MEID;
     unsigned int ctx = ctx();
@@ -176,15 +181,19 @@ init_bitmask_filters(__xread struct qc_xfers *xfers,
         (meid>>4), NFP_EVENT_PROVIDER_INDEX_PCIE);
 
     ctassert(__is_ct_const(start_handle));
-    ctassert(start_handle + 4 < 16);
+    ctassert(start_handle + 8 < 16);
 
     status.__raw = 0; /* bitmask32 requires no further settings */
-    event_match = NFP_EVENT_MATCH(pcie_provider, event_data, event_type);
+    event_match = NFP_EVENT_MATCH(pcie_provider, event_data, 0);
 
     _INIT_ONE_FILTER(0, start_handle);
     _INIT_ONE_FILTER(1, start_handle + 1);
     _INIT_ONE_FILTER(2, start_handle + 2);
     _INIT_ONE_FILTER(3, start_handle + 3);
+    _INIT_ONE_FILTER(4, start_handle + 4);
+    _INIT_ONE_FILTER(5, start_handle + 5);
+    _INIT_ONE_FILTER(6, start_handle + 6);
+    _INIT_ONE_FILTER(7, start_handle + 7);
 }
 
 __intrinsic void
@@ -205,39 +214,48 @@ init_bitmasks(__gpr struct qc_bitmask *bmsk)
  * The compressed bitmask must then be shifted into the correct bits of
  * the output bitmask.
  */
-#define _CHECK_ONE_FILTER(num, entry, shf)                          \
-do {                                                                \
-    if (signal_test(s##num)) {                                      \
-        unsigned int new_queues;                                    \
-                                                                    \
-        new_queues = bf_compress(xfers->x##num, 0);                 \
-        bmsk->##entry |= new_queues << shf;                         \
-                                                                    \
-        /* TEMP extract a bitmask of config "queues"  */            \
-        new_queues = bf_compress(xfers->x##num, 1);                 \
-        cfg_bmsk->##entry |= new_queues << shf;                     \
-                                                                    \
-        __implicit_write(s##num);                                   \
-        __implicit_write(&(xfers->x##num), sizeof(unsigned int));   \
-        event_cls_autopush_filter_reset(                            \
-            start_handle + num,                                     \
-            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,           \
-            start_handle + num);                                    \
-    }                                                               \
+#define _CHECK_ONE_FILTER(num, entry, shf)                              \
+do {                                                                    \
+    if (signal_test(s##num)) {                                          \
+        unsigned int new_queues;                                        \
+                                                                        \
+        new_queues = bf_compress_quad(xfers->x##num, 0);                \
+        updates[0].##entry |= new_queues << shf;                        \
+                                                                        \
+        new_queues = bf_compress_quad(xfers->x##num, 1);                \
+        updates[1].##entry |= new_queues << shf;                        \
+                                                                        \
+        new_queues = bf_compress_quad(xfers->x##num, 2);                \
+        updates[2].##entry |= new_queues << shf;                        \
+                                                                        \
+        __implicit_write(s##num);                                       \
+        __implicit_write(&(xfers->x##num), sizeof(unsigned int));       \
+        event_cls_autopush_filter_reset(                                \
+            start_handle + num,                                         \
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,               \
+            start_handle + num);                                        \
+    }                                                                   \
 } while (0)
 
 __intrinsic void
-check_bitmask_filters(__shared __gpr struct qc_bitmask *bmsk,
-                      __shared __gpr struct qc_bitmask *cfg_bmsk,
+check_bitmask_filters(__shared __gpr struct qc_bmsk_updates updates[3],
                       __xread struct qc_xfers *xfers,
                       volatile SIGNAL *s0, volatile SIGNAL *s1,
                       volatile SIGNAL *s2, volatile SIGNAL *s3,
+                      volatile SIGNAL *s4, volatile SIGNAL *s5,
+                      volatile SIGNAL *s6, volatile SIGNAL *s7,
                       unsigned int start_handle)
 {
+    reg_zero(updates, sizeof(struct qc_bmsk_updates[3]));
+
     _CHECK_ONE_FILTER(0, bmsk_lo, 0);
-    _CHECK_ONE_FILTER(1, bmsk_lo, 16);
-    _CHECK_ONE_FILTER(2, bmsk_hi, 0);
-    _CHECK_ONE_FILTER(3, bmsk_hi, 16);
+    _CHECK_ONE_FILTER(1, bmsk_lo, 8);
+    _CHECK_ONE_FILTER(2, bmsk_lo, 16);
+    _CHECK_ONE_FILTER(3, bmsk_lo, 24);
+    _CHECK_ONE_FILTER(4, bmsk_hi, 0);
+    _CHECK_ONE_FILTER(5, bmsk_hi, 8);
+    _CHECK_ONE_FILTER(6, bmsk_hi, 16);
+    _CHECK_ONE_FILTER(7, bmsk_hi, 24);
 }
 
 
@@ -302,7 +320,7 @@ check_queues(void *queue_info_struct,
      * Read latest wptr value
      * This is not necessary if wptr - sptr > n * MAX_BATCH_SIZE!
      */
-    qc_queue = (NFD_BMQ2NATQ(queue) << 1) + c->base_queue_num;
+    qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(queue), c->queue_type);
     __qc_read(c->pcie_isl, qc_queue, QC_WPTR, &wptr_raw, ctx_swap, &qc_sig);
     wptr.__raw = wptr_raw;
 

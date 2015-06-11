@@ -9,10 +9,16 @@
 
 
 /* Tuning constants */
+
+/* NFD event filter defines */
+
+#define NFD_EVENT_DATA          (1<<4)
+#define NFD_EVENT_FILTER_START  0
+
 /* nfd_cfg */
-#define NFD_CFG_QUEUE           1
-#define NFD_CFG_EVENT_DATA      (1<<4)
-#define NFD_CFG_EVENT_FILTER    14
+#define NFD_CFG_QUEUE           2
+/* #define NFD_CFG_EVENT_DATA      (1<<4) */
+/* #define NFD_CFG_EVENT_FILTER    14 */
 #define NFD_CFG_RING_SZ         (4 * 512)
 #define NFD_CFG_VF_OFFSET       64
 
@@ -29,9 +35,11 @@
 #define NFD_IN_BUF_STORE_SZ     64
 #define NFD_IN_BUF_RECACHE_WM   16
 
-#define NFD_IN_Q_EVENT_START    0
-#define NFD_IN_Q_START          0
-#define NFD_IN_Q_EVENT_DATA     (1<<4)
+/* #define NFD_IN_Q_EVENT_START    0 */
+/* #define NFD_IN_Q_START          0 */
+/* #define NFD_IN_Q_EVENT_DATA     (1<<4) */
+
+#define NFD_IN_TX_QUEUE         1
 
 #define NFD_IN_ISSUE_START_CTX  1
 #define NFD_IN_NOTIFY_START_CTX 2
@@ -78,9 +86,11 @@
 
 #define NFD_OUT_CREDITS_BASE            0
 
-#define NFD_OUT_Q_EVENT_START           4
-#define NFD_OUT_Q_START                 128
-#define NFD_OUT_Q_EVENT_DATA            (3<<4)
+/* #define NFD_OUT_Q_EVENT_START           4 */
+/* #define NFD_OUT_Q_START                 128 */
+/* #define NFD_OUT_Q_EVENT_DATA            (3<<4) */
+
+#define NFD_OUT_FL_QUEUE                0
 
 /* Additional check queue constants */
 #define NFD_OUT_FL_BATCH_SZ             32   /* Match configured watermark! */

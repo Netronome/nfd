@@ -193,4 +193,21 @@ do {                                              \
 #define NFD_BUILD_QID(_vnic, _vqn) \
     NFD_NATQ2BMQ(NFD_BUILD_NATQ(_vnic, _vqn))
 
+
+/*
+ * Convert between the queue controller queues and natural queues.
+ * Each natural queue has a block of 4 QC queues allocated to it.  Different
+ * types of queues are at different offsets within the block.  Converting
+ * to a QC queue requires the queue offset of the queue type.  Converting
+ * to a natural queue does not, as a >> operator eliminates the low bits.
+ * The defines to specify the types are as follows: NFD_OUT_FL_QUEUE,
+ * NFD_IN_TX_QUEUE, and NFD_CFG_QUEUE.
+ */
+#define NFD_NATQ2QC(_nat_q, _type)             \
+    ((_nat_q << 2) | _type)
+
+#define NFD_QC2NATQ(_qc_q)                     \
+    (_qc_q >> 2)
+
+
 #endif /* __NFD_COMMON_H */

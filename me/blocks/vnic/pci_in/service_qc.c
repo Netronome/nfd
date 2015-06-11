@@ -19,35 +19,36 @@
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/qc.h>
 
+
+/**
+ * QC event update variables
+ */
+static __xread struct qc_xfers qc_ap_xfers;
+
+static SIGNAL qc_ap_s0;
+static SIGNAL qc_ap_s1;
+static SIGNAL qc_ap_s2;
+static SIGNAL qc_ap_s3;
+static SIGNAL qc_ap_s4;
+static SIGNAL qc_ap_s5;
+static SIGNAL qc_ap_s6;
+static SIGNAL qc_ap_s7;
+
+
 /**
  * State variables for PCI.IN queue controller accesses
  */
-static __xread struct qc_xfers tx_ap_xfers;
-
-static SIGNAL tx_ap_s0;
-static SIGNAL tx_ap_s1;
-static SIGNAL tx_ap_s2;
-static SIGNAL tx_ap_s3;
-
 __shared __gpr struct qc_bitmask active_bmsk;
 __shared __gpr struct qc_bitmask pending_bmsk;
 
-/*
- * State variables for PCI.OUT queue controller accesses
- */
-static __xread struct qc_xfers rx_ap_xfers;
-
-static SIGNAL rx_ap_s0;
-static SIGNAL rx_ap_s1;
-static SIGNAL rx_ap_s2;
-static SIGNAL rx_ap_s3;
-
-__shared __gpr struct qc_bitmask pci_out_active_bmsk;
-__remote volatile SIGNAL nfd_out_cache_bmsk_sig;
-
 extern __shared __gpr struct qc_bitmask cfg_queue_bmsk;
 
+/*
+ * Variables for PCI.OUT queue controller accesses
+ */
+__remote volatile SIGNAL nfd_out_cache_bmsk_sig;
 NFD_OUT_ACTIVE_BMSK_DECLARE;
+
 
 __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
 
@@ -79,19 +80,11 @@ service_qc_setup ()
 
     init_bitmasks(&cfg_queue_bmsk);
 
-    /* Configure nfd_in autopush filters */
-    init_bitmask_filters(&tx_ap_xfers, &tx_ap_s0, &tx_ap_s1,
-                         &tx_ap_s2, &tx_ap_s3,
-                         (NFD_IN_Q_EVENT_DATA<<6) | NFD_IN_Q_START,
-                         NFP_EVENT_TYPE_FIFO_NOT_EMPTY,
-                         NFD_IN_Q_EVENT_START);
-
-    /* Configure nfd_out autopush filters */
-    init_bitmask_filters(&rx_ap_xfers, &rx_ap_s0, &rx_ap_s1, &rx_ap_s2,
-                         &rx_ap_s3,(NFD_OUT_Q_EVENT_DATA<<6) | NFD_OUT_Q_START,
-                         NFP_EVENT_TYPE_FIFO_ABOVE_WM,
-                         NFD_OUT_Q_EVENT_START);
-
+    /* Configure autopush filters */
+    init_bitmask_filters(&qc_ap_xfers, &qc_ap_s0, &qc_ap_s1,
+                         &qc_ap_s2, &qc_ap_s3, &qc_ap_s4, &qc_ap_s5,
+                         &qc_ap_s6, &qc_ap_s7, NFD_EVENT_DATA<<6,
+                         NFD_EVENT_FILTER_START);
 
     /* XXX temporarily setup a general last event filter to see what events
      * we are triggering. */
@@ -132,7 +125,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     bmsk_queue = NFD_NATQ2BMQ(queue);
 
     txq.watermark    = NFP_QC_STS_HI_WATERMARK_4;
-    txq.event_data   = NFD_IN_Q_EVENT_DATA;
+    txq.event_data   = NFD_EVENT_DATA;
     txq.ptr          = 0;
 
     if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
@@ -155,7 +148,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 
         txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY;
         txq.size         = ring_sz - 8; /* XXX add define for size shift */
-        qc_init_queue(PCIE_ISL, (queue<<1) | NFD_IN_Q_START, &txq);
+        qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue, NFD_IN_TX_QUEUE), &txq);
     } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* Down the queue:
          * - Prevent it issuing events
@@ -177,7 +170,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
         txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
         txq.size         = 0;
-        qc_init_queue(PCIE_ISL, (queue<<1) | NFD_IN_Q_START, &txq);
+        qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue, NFD_IN_TX_QUEUE), &txq);
     }
 }
 
@@ -189,26 +182,29 @@ void
 service_qc()
 {
     struct check_queues_consts c;
+    __shared __gpr struct qc_bmsk_updates updates[3];
 
-    /* Check nfd_in bitmasks */
-    check_bitmask_filters(&active_bmsk, &cfg_queue_bmsk, &tx_ap_xfers,
-                          &tx_ap_s0, &tx_ap_s1, &tx_ap_s2, &tx_ap_s3,
-                          NFD_IN_Q_EVENT_START);
+    /* Check event filters */
+    check_bitmask_filters(updates, &qc_ap_xfers, &qc_ap_s0, &qc_ap_s1,
+                         &qc_ap_s2, &qc_ap_s3, &qc_ap_s4, &qc_ap_s5,
+                         &qc_ap_s6, &qc_ap_s7, NFD_EVENT_FILTER_START);
 
-    /* Check nfd_out bitmasks */
-    pci_out_active_bmsk.bmsk_lo = 0;
-    pci_out_active_bmsk.bmsk_hi = 0;
-    check_bitmask_filters(&pci_out_active_bmsk, &cfg_queue_bmsk, &rx_ap_xfers,
-                          &rx_ap_s0, &rx_ap_s1, &rx_ap_s2, &rx_ap_s3,
-                          NFD_OUT_Q_EVENT_START);
+    /* Copy over PCI.IN bitmasks */
+    active_bmsk.bmsk_lo |= updates[NFD_IN_TX_QUEUE].bmsk_lo;
+    active_bmsk.bmsk_hi |= updates[NFD_IN_TX_QUEUE].bmsk_hi;
 
-    if (pci_out_active_bmsk.bmsk_lo | pci_out_active_bmsk.bmsk_hi) {
-        __xwrite unsigned int update[2];
+    /* Copy over config bitmasks */
+    cfg_queue_bmsk.bmsk_lo |= updates[NFD_CFG_QUEUE].bmsk_lo;
+    cfg_queue_bmsk.bmsk_hi |= updates[NFD_CFG_QUEUE].bmsk_hi;
 
-        update[0] = pci_out_active_bmsk.bmsk_lo;
-        update[1] = pci_out_active_bmsk.bmsk_hi;
+    /* Send FL bitmasks to PCI.OUT */
+    if (updates[NFD_OUT_FL_QUEUE].bmsk_lo | updates[NFD_OUT_FL_QUEUE].bmsk_hi) {
+        __xwrite unsigned int update_wr[2];
 
-        mem_bitset(update, NFD_OUT_ACTIVE_BMSK_LINK, sizeof update);
+        update_wr[0] = updates[NFD_OUT_FL_QUEUE].bmsk_lo;
+        update_wr[1] = updates[NFD_OUT_FL_QUEUE].bmsk_hi;
+
+        mem_bitset(update_wr, NFD_OUT_ACTIVE_BMSK_LINK, sizeof update_wr);
         send_interthread_sig(NFD_OUT_CACHE_ME, 0,
                              __signal_number(&nfd_out_cache_bmsk_sig,
                                              NFD_OUT_CACHE_ME));
@@ -218,9 +214,9 @@ service_qc()
     c.pcie_isl =       PCIE_ISL;
     c.max_retries =    NFD_IN_MAX_RETRIES;
     c.batch_sz =       NFD_IN_BATCH_SZ;
-    c.base_queue_num = NFD_IN_Q_START;
+    c.queue_type =     NFD_IN_TX_QUEUE;
     c.pending_test =   NFD_IN_PENDING_TEST;
-    c.event_data =     NFD_IN_Q_EVENT_DATA;
+    c.event_data =     NFD_EVENT_DATA;
     c.event_type =     NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY;
     check_queues(&queue_data, &active_bmsk, &pending_bmsk, &c);
 }

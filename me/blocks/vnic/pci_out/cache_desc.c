@@ -252,7 +252,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     bmsk_queue = NFD_NATQ2BMQ(queue_s);
 
     rxq.watermark    = NFP_QC_STS_HI_WATERMARK_32; /* XXX Tune */
-    rxq.event_data   = NFD_OUT_Q_EVENT_DATA;
+    rxq.event_data   = NFD_EVENT_DATA;
     rxq.ptr          = 0;
 
     if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
@@ -281,7 +281,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK;
         rxq.size         = ring_sz - 8; /* XXX add define for size shift */
-        qc_init_queue(PCIE_ISL, (queue_s<<1) | NFD_OUT_Q_START, &rxq);
+        qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue_s, NFD_OUT_FL_QUEUE), &rxq);
 
     } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* XXX consider what is required for PCI.OUT! */
@@ -313,7 +313,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         /* XXX configure both queues without swapping? */
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
         rxq.size         = 0;
-        qc_init_queue(PCIE_ISL, (queue_s<<1) | NFD_OUT_Q_START, &rxq);
+        qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue_s, NFD_OUT_FL_QUEUE), &rxq);
     }
 }
 
@@ -339,7 +339,7 @@ _fetch_fl(__gpr unsigned int *queue)
     int space_chk;
     int ret;        /* Required to ensure __intrinsic_begin|end pairing */
 
-    qc_queue = (NFD_BMQ2NATQ(*queue) << 1) | NFD_OUT_Q_START;
+    qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(*queue), NFD_OUT_FL_QUEUE);
 
     /* Is there a batch to get from this queue?
      * If the queue is active or urgent there should be. */
@@ -370,7 +370,7 @@ _fetch_fl(__gpr unsigned int *queue)
 
             /* Mark the queue not active */
             clear_queue(queue, &active_bmsk);
-            qc_ping_queue(PCIE_ISL, qc_queue, NFD_OUT_Q_EVENT_DATA,
+            qc_ping_queue(PCIE_ISL, qc_queue, NFD_EVENT_DATA,
                           NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK);
 
             /* Indicate work done on queue */

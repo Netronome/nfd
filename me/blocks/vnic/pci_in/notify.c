@@ -340,7 +340,7 @@ notify()
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
-        qc_queue = NFD_BMQ2NATQ(q_batch) << 1;
+        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(q_batch), NFD_IN_TX_QUEUE);
         __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
                         sig_done, &qc_sig);
     } else {

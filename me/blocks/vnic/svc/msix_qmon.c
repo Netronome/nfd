@@ -873,8 +873,9 @@ msix_qmon_loop(const unsigned int pcie_isl)
             qmask = 1ull << qnum;
             enabled &= ~qmask;
 
-            /* XXX assumes/hardcodes that TX queues are first...no macro */
-            count = qc_read(pcie_isl, qnum << 1, QC_RPTR);
+            /* Check if queue got new packets and try to send MSI-X if so */
+            count = qc_read(pcie_isl, NFD_NATQ2QC(qnum, NFD_IN_TX_QUEUE),
+                            QC_RPTR);
             count = NFP_QC_STS_LO_READPTR_of(count);
             if (count != msix_prev_tx_cnt[pcie_isl][qnum]) {
                 newpkts = msix_update_packet_count(pcie_isl, qnum, 0, count);
@@ -917,7 +918,8 @@ msix_qmon_loop(const unsigned int pcie_isl)
             pending &= ~qmask;
 
             /* Update TX queue count in case it changed. */
-            count = qc_read(pcie_isl, qnum << 1, QC_RPTR);
+            count = qc_read(pcie_isl, NFD_NATQ2QC(qnum, NFD_IN_TX_QUEUE),
+                            QC_RPTR);
             count = NFP_QC_STS_LO_READPTR_of(count);
 
             newpkts = msix_update_packet_count(pcie_isl, qnum, 0, count);

@@ -312,20 +312,12 @@ nfd_cfg_setup_vf()
     /* BAR1 (resource2) PCI.IN queues  */
     bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_LEN_32BIT;
     bar_tmp.target = 0; /* Internal PCIe Target */
-    /* XXX this is A0 specific */
-    bar_tmp.base = 0x80000 >> (40 - 19);
+    /* Both the A0 workaround and the B0 enhancement require base = 0
+     * to access the QC. */
+    bar_tmp.base = 0;
     bar = bar_tmp;
 
     bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(1);
-    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
-        ctx_swap[sig];
-
-    /* BAR2 (resource4) PCI.OUT queues */
-    /* XXX this is A0 specific */
-    bar_tmp.base = (0x80000 + 128 * 0x800) >> (40 - 19);
-    bar = bar_tmp;
-
-    bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(2);
     __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
         ctx_swap[sig];
 }
@@ -343,14 +335,15 @@ _nfd_cfg_queue_setup()
      */
     nfd_cfg_queue.watermark  = PCIE_QC_WM_4;
     nfd_cfg_queue.size       = PCIE_QC_SZ_256;
-    nfd_cfg_queue.event_data = NFD_CFG_EVENT_DATA;
+    nfd_cfg_queue.event_data = NFD_EVENT_DATA;
     nfd_cfg_queue.event_type = PCIE_QC_EVENT_NOT_EMPTY;
     nfd_cfg_queue.ptr        = 0;
 
 #if NFD_MAX_VF_QUEUES != 0
-    /* Init the VF config queues and possibly end with PF queue */
+    /* Init the VF config queues and possibly end with PF queue.
+     * Each NFD queue uses a block of 4 QC queues. */
     init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
-                   2 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS + NFD_MAX_PFS);
+                   4 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS + NFD_MAX_PFS);
 #else
     /* Just the PF to init */
     qc_init_queue(PCIE_ISL, NFD_CFG_QUEUE, &nfd_cfg_queue);
@@ -364,11 +357,12 @@ static void
 _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
 {
 #if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
-    unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * vnic * 2);
+    unsigned int nat_q = NFD_MAX_VF_QUEUES * vnic;
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_VF_CAP,
                                    NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
-                                   NFD_CFG_MAX_MTU, tx_q_off,
-                                   NFD_OUT_Q_START + tx_q_off};
+                                   NFD_CFG_MAX_MTU,
+                                   NFD_NATQ2QC(nat_q, NFD_IN_TX_QUEUE),
+                                   NFD_NATQ2QC(nat_q, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
@@ -384,11 +378,12 @@ static void
 _nfd_cfg_init_pf_ctrl_bar()
 {
 #if (NFD_MAX_PF_QUEUES != 0)
-    unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS * 2);
+    unsigned int nat_q = NFD_MAX_VF_QUEUES * NFD_MAX_VFS;
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_PF_CAP,
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
-                                   NFD_CFG_MAX_MTU, tx_q_off,
-                                   NFD_OUT_Q_START + tx_q_off};
+                                   NFD_CFG_MAX_MTU,
+                                   NFD_NATQ2QC(nat_q, NFD_IN_TX_QUEUE),
+                                   NFD_NATQ2QC(nat_q, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
 
     mem_write64(&cfg,
@@ -575,7 +570,7 @@ nfd_cfg_next_vnic()
         /* Clear the bit in the bitmask so the queue isn't picked again,
          * and increment the QC queue read pointer */
         clear_queue(&queue, &cfg_queue_bmsk);
-        qc_add_to_ptr(PCIE_ISL, (queue << 1) | NFD_CFG_QUEUE, QC_RPTR, 1);
+        qc_add_to_ptr(PCIE_ISL, NFD_NATQ2QC(queue, NFD_CFG_QUEUE), QC_RPTR, 1);
     }
 
     return vnic;
