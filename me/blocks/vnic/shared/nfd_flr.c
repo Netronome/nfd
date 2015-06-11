@@ -132,12 +132,12 @@ void
 nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
 {
 #if (NFD_MAX_PF_QUEUES != 0)
-    unsigned int nat_q = NFD_MAX_VF_QUEUES * NFD_MAX_VFS;
+    unsigned int q_base = NFD_MAX_VF_QUEUES * NFD_MAX_VFS;
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_PF_CAP,
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
                                    NFD_CFG_MAX_MTU,
-                                   NFD_NATQ2QC(nat_q, NFD_IN_TX_QUEUE),
-                                   NFD_NATQ2QC(nat_q, NFD_OUT_FL_QUEUE)};
+                                   NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
+                                   NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
 
     mem_write64(&cfg,
@@ -161,12 +161,16 @@ void
 nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, unsigned int vf)
 {
 #if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
-    unsigned int nat_q = NFD_MAX_VF_QUEUES * vf;
+#ifdef NFD_NO_ISOLATION
+    unsigned int q_base = NFD_MAX_VF_QUEUES * vnic;
+#else
+    unsigned int q_base = 0;
+#endif
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_VF_CAP,
                                    NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
                                    NFD_CFG_MAX_MTU,
-                                   NFD_NATQ2QC(nat_q, NFD_IN_TX_QUEUE),
-                                   NFD_NATQ2QC(nat_q, NFD_OUT_FL_QUEUE)};
+                                   NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
+                                   NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
 
     mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_VERSION,
