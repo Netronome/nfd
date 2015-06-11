@@ -20,6 +20,30 @@
  */
 #include <nfp6000/nfp_me.h> /* TEMP */
 
+
+/* Compress double-spaced queues to a compact bitmask in the low 16 bits
+ * The even/odd bits are filtered out.
+ *
+ * bf_collapse(0b00 11 01 10, 0) -> 0110
+ * bf_collapse(0b00 11 01 10, 1) -> 0101
+ *
+ * The implementation is a variant of the sheep-and-goat algorithm.
+ */
+static __intrinsic unsigned int bf_compress(unsigned int x, int odd)
+{
+    if (odd)
+        x = (x >> 1) & 0x55555555;
+    else
+        x = x & 0x55555555;
+
+    x = (x | x >> 1) & 0x33333333;
+    x = (x | x >> 2) & 0x0f0f0f0f;
+    x = (x | x >> 4) & 0x00ff00ff;
+
+    return (x | x >> 8) & 0x0000ffff;
+}
+
+
 /*
  * Select a queue to service
  */
@@ -170,22 +194,23 @@ init_bitmasks(__gpr struct qc_bitmask *bmsk)
 /* Test and reset one bitmask filter if necessary
  * @param num       signal number to test, and xfer to use if set
  * @param entry     bmsk_lo or bmsk_hi
- * @param odd       shift queues to use odd bits, if set
+ * @param shf       amount to shift queues once compacted
  *
- * The queues are all single spaced, so a 1 bit offset for half the filters
- * means that the filters can be packed into 64 bits. Queues 0 to 15 and
- * 32 to 47 share the first 32 bits, with queues from 32 on odd bits. Queues
- * 16 to 31 and 48 to 63 share the second 32 bits, with queues from 48 on
- * odd bits.
+ * The queues are all single spaced, so they must be compressed first.
+ * The compressed bitmask must then be shifted into the correct bits of
+ * the output bitmask.
  */
-#define _CHECK_ONE_FILTER(num, entry, odd)                      \
+#define _CHECK_ONE_FILTER(num, entry, shf)                      \
     do {                                                        \
         if (signal_test(s##num)) {                              \
-            bmsk->##entry |= (xfers->x##num) << odd;            \
+            unsigned int new_queues;                            \
+                                                                \
+            new_queues = bf_compress(xfers->x##num, 0);         \
+            bmsk->##entry |= new_queues << shf;                 \
                                                                 \
             event_cls_autopush_filter_reset(                    \
                 start_handle + num,                             \
-                NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,  \
+                NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,   \
                 start_handle + num);                            \
         }                                                       \
     } while (0)
@@ -198,9 +223,9 @@ check_bitmask_filters(__shared __gpr struct qc_bitmask *bmsk,
                       unsigned int start_handle)
 {
     _CHECK_ONE_FILTER(0, bmsk_lo, 0);
-    _CHECK_ONE_FILTER(1, bmsk_hi, 0);
-    _CHECK_ONE_FILTER(2, bmsk_lo, 1);
-    _CHECK_ONE_FILTER(3, bmsk_hi, 1);
+    _CHECK_ONE_FILTER(1, bmsk_lo, 16);
+    _CHECK_ONE_FILTER(2, bmsk_hi, 0);
+    _CHECK_ONE_FILTER(3, bmsk_hi, 16);
 }
 
 

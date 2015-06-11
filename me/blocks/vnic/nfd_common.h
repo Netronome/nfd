@@ -73,11 +73,9 @@
 /*
  * Conversions between NATQ and BMQ representations
  */
-#define NFD_NATQ2BMQ(_qid) \
-    ((((_qid) << 1) | (((_qid) >> 5) & 1)) & 63)
+#define NFD_NATQ2BMQ(_qid) _qid
 
-#define NFD_BMQ2NATQ(_qid) \
-    (((_qid) >> 1) | (((_qid) << 5) & 32))
+#define NFD_BMQ2NATQ(_qid) _qid
 
 
 /*
