@@ -193,7 +193,7 @@ notify_setup()
 {
     if (ctx() != 0) {
         wait_msk = __signals(&msg_sig, &msg_order_sig);
-        next_ctx = reorder_get_next_ctx(NFD_OUT_ISSUE_START_CTX);
+        next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX);
     }
 }
 
