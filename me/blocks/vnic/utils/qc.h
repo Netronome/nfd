@@ -15,11 +15,23 @@
 #include <std/event.h>
 #include <vnic/utils/qcntl.h>
 
+
+#define NFD_OUT_ACTIVE_BMSK_DECLARE                                     \
+    __asm {.alloc_mem nfd_out_active_bmsk_atomic ctm island 64 64}      \
+    __asm {.declare_resource nfd_out_active_bmsk_mem island 8           \
+            nfd_out_active_bmsk_atomic}                                 \
+    __asm {.alloc_resource nfd_out_active_bmsk nfd_out_active_bmsk_mem  \
+            island 8 8}
+
+#define NFD_OUT_ACTIVE_BMSK_LINK                \
+    (__mem void *) _link_sym(nfd_out_active_bmsk)
+
+
 struct qc_xfers {
-    volatile unsigned int x0;
-    volatile unsigned int x1;
-    volatile unsigned int x2;
-    volatile unsigned int x3;
+    unsigned int x0;
+    unsigned int x1;
+    unsigned int x2;
+    unsigned int x3;
 };
 
 /**

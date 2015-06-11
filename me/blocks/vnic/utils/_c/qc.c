@@ -136,23 +136,27 @@ init_qc_queues(unsigned char pcie_isl, struct qc_queue_config *cfg,
     }
 }
 
-#define _INIT_ONE_FILTER(num, handle)                                       \
-    do {                                                                    \
-        event_filter = event_cls_filter_handle(handle);                     \
-        event_cls_filter_setup(event_filter,                                \
-                               NFP_EM_FILTER_MASK_TYPE_MASK32,              \
-                               (event_match | (num << 9)),                  \
-                               event_mask, status);                         \
-                                                                            \
-        event_cls_autopush_signal_setup(handle, meid,                       \
-                                        ctx,                                \
-                                        __signal_number(s##num),            \
-                                        __xfer_reg_number(&(xfers->x##num))); \
-        event_cls_autopush_filter_reset(                                    \
-            handle,                                                         \
-            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,                   \
-            handle);                                                        \
-    } while (0)
+#define _INIT_ONE_FILTER(num, handle)                                   \
+do {                                                                    \
+    __implicit_write(s##num);                                           \
+    __implicit_write(&(xfers->x##num), sizeof(unsigned int));           \
+                                                                        \
+    event_filter = event_cls_filter_handle(handle);                     \
+    event_cls_filter_setup(event_filter,                                \
+                           NFP_EM_FILTER_MASK_TYPE_MASK32,              \
+                           (event_match | (num << 9)),                  \
+                           event_mask, status);                         \
+                                                                        \
+    event_cls_autopush_signal_setup(handle, meid,                       \
+                                    ctx,                                \
+                                    __signal_number(s##num),            \
+                                    __xfer_reg_number(&(xfers->x##num))); \
+                                                                        \
+    event_cls_autopush_filter_reset(                                    \
+        handle,                                                         \
+        NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,                   \
+        handle);                                                        \
+} while (0)
 
 __intrinsic void
 init_bitmask_filters(__xread struct qc_xfers *xfers,
@@ -200,20 +204,22 @@ init_bitmasks(__gpr struct qc_bitmask *bmsk)
  * The compressed bitmask must then be shifted into the correct bits of
  * the output bitmask.
  */
-#define _CHECK_ONE_FILTER(num, entry, shf)                      \
-    do {                                                        \
-        if (signal_test(s##num)) {                              \
-            unsigned int new_queues;                            \
-                                                                \
-            new_queues = bf_compress(xfers->x##num, 0);         \
-            bmsk->##entry |= new_queues << shf;                 \
-                                                                \
-            event_cls_autopush_filter_reset(                    \
-                start_handle + num,                             \
-                NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,   \
-                start_handle + num);                            \
-        }                                                       \
-    } while (0)
+#define _CHECK_ONE_FILTER(num, entry, shf)                          \
+do {                                                                \
+    if (signal_test(s##num)) {                                      \
+        unsigned int new_queues;                                    \
+                                                                    \
+        new_queues = bf_compress(xfers->x##num, 0);                 \
+        bmsk->##entry |= new_queues << shf;                         \
+                                                                    \
+        __implicit_write(s##num);                                   \
+        __implicit_write(&(xfers->x##num), sizeof(unsigned int));   \
+        event_cls_autopush_filter_reset(                            \
+            start_handle + num,                                     \
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,           \
+            start_handle + num);                                    \
+    }                                                               \
+} while (0)
 
 __intrinsic void
 check_bitmask_filters(__shared __gpr struct qc_bitmask *bmsk,

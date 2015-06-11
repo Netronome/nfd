@@ -56,18 +56,11 @@
 #define NFD_ATOMICS_ALLOC(_off) NFD_ATOMICS_ALLOC_IND(_off)
 
 
-/*
- * State variables for PCI.OUT queue controller accesses
- */
-static __xread struct qc_xfers rx_ap_xfers;
-
-static volatile SIGNAL rx_ap_s0;
-static volatile SIGNAL rx_ap_s1;
-static volatile SIGNAL rx_ap_s2;
-static volatile SIGNAL rx_ap_s3;
-
 __shared __gpr struct qc_bitmask active_bmsk;
 __shared __gpr struct qc_bitmask urgent_bmsk;
+__visible volatile SIGNAL nfd_out_cache_bmsk_sig;
+
+NFD_OUT_ACTIVE_BMSK_DECLARE;
 
 
 /*
@@ -176,12 +169,6 @@ cache_desc_setup_shared()
     /* Zero bitmasks */
     init_bitmasks(&active_bmsk);
     init_bitmasks(&urgent_bmsk);
-
-    /* Configure autopush filters */
-    init_bitmask_filters(&rx_ap_xfers, &rx_ap_s0, &rx_ap_s1, &rx_ap_s2,
-                         &rx_ap_s3,(NFD_OUT_Q_EVENT_DATA<<6) | NFD_OUT_Q_START,
-                         NFP_EVENT_TYPE_FIFO_ABOVE_WM,
-                         NFD_OUT_Q_EVENT_START);
 
     dma_seqn_ap_setup(NFD_OUT_FL_EVENT_FILTER, NFD_OUT_FL_EVENT_FILTER,
                       NFD_OUT_FL_EVENT_TYPE, &fl_cache_event_xfer,
@@ -514,9 +501,16 @@ _complete_fetch()
 __forceinline void
 cache_desc_complete_fetch()
 {
-    /* Check bitmasks */
-    check_bitmask_filters(&active_bmsk, &rx_ap_xfers, &rx_ap_s0, &rx_ap_s1,
-              &rx_ap_s2, &rx_ap_s3, NFD_OUT_Q_EVENT_START);
+    if (signal_test(&nfd_out_cache_bmsk_sig)) {
+        __xrw unsigned int update[2] = {0xffffffff, 0xffffffff};
+
+        mem_test_clr(update, NFD_OUT_ACTIVE_BMSK_LINK, sizeof update);
+        active_bmsk.bmsk_lo |= update[0];
+        active_bmsk.bmsk_hi |= update[1];
+    } else {
+        ctx_swap();
+    }
+
 
     /* Process up to the latest fl_cache_dma_seq_compl */
     _complete_fetch();

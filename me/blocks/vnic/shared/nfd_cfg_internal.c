@@ -151,7 +151,7 @@ NFD_FLR_DECLARE;
 
 static SIGNAL cfg_ap_sig;
 static __xread unsigned int cfg_ap_xfer;
-static volatile __gpr unsigned int cfg_vnic_bmsk = 0;
+static __shared __gpr unsigned int cfg_vnic_bmsk = 0;
 static __gpr unsigned int cfg_vnic_queue_test_cnt = 0;
 
 static SIGNAL flr_ap_sig;

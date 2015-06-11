@@ -24,15 +24,36 @@
  */
 static __xread struct qc_xfers tx_ap_xfers;
 
-static volatile SIGNAL tx_ap_s0;
-static volatile SIGNAL tx_ap_s1;
-static volatile SIGNAL tx_ap_s2;
-static volatile SIGNAL tx_ap_s3;
+static SIGNAL tx_ap_s0;
+static SIGNAL tx_ap_s1;
+static SIGNAL tx_ap_s2;
+static SIGNAL tx_ap_s3;
 
 __shared __gpr struct qc_bitmask active_bmsk;
 __shared __gpr struct qc_bitmask pending_bmsk;
 
+/*
+ * State variables for PCI.OUT queue controller accesses
+ */
+static __xread struct qc_xfers rx_ap_xfers;
+
+static SIGNAL rx_ap_s0;
+static SIGNAL rx_ap_s1;
+static SIGNAL rx_ap_s2;
+static SIGNAL rx_ap_s3;
+
+__shared __gpr struct qc_bitmask pci_out_active_bmsk;
+__remote volatile SIGNAL nfd_out_cache_bmsk_sig;
+
+NFD_OUT_ACTIVE_BMSK_DECLARE;
+
 __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
+
+
+/* XXX nfd_cfg_internal.c defines this currently */
+__intrinsic void send_interthread_sig(unsigned int dst_me, unsigned int ctx,
+                                      unsigned int sig_no);
+
 
 /* XXX rename */
 /**
@@ -60,6 +81,12 @@ service_qc_setup ()
                          (NFD_IN_Q_EVENT_DATA<<6) | NFD_IN_Q_START,
                          NFP_EVENT_TYPE_FIFO_NOT_EMPTY,
                          NFD_IN_Q_EVENT_START);
+
+    /* Configure nfd_out autopush filters */
+    init_bitmask_filters(&rx_ap_xfers, &rx_ap_s0, &rx_ap_s1, &rx_ap_s2,
+                         &rx_ap_s3,(NFD_OUT_Q_EVENT_DATA<<6) | NFD_OUT_Q_START,
+                         NFP_EVENT_TYPE_FIFO_ABOVE_WM,
+                         NFD_OUT_Q_EVENT_START);
 
 
     /* XXX temporarily setup a general last event filter to see what events
@@ -159,9 +186,28 @@ service_qc()
 {
     struct check_queues_consts c;
 
-    /* Check bitmasks */
+    /* Check nfd_in bitmasks */
     check_bitmask_filters(&active_bmsk, &tx_ap_xfers, &tx_ap_s0, &tx_ap_s1,
               &tx_ap_s2, &tx_ap_s3, NFD_IN_Q_EVENT_START);
+
+    /* Check nfd_out bitmasks */
+    pci_out_active_bmsk.bmsk_lo = 0;
+    pci_out_active_bmsk.bmsk_hi = 0;
+    check_bitmask_filters(&pci_out_active_bmsk, &rx_ap_xfers, &rx_ap_s0,
+                          &rx_ap_s1, &rx_ap_s2, &rx_ap_s3,
+                          NFD_OUT_Q_EVENT_START);
+
+    if (pci_out_active_bmsk.bmsk_lo | pci_out_active_bmsk.bmsk_hi) {
+        __xwrite unsigned int update[2];
+
+        update[0] = pci_out_active_bmsk.bmsk_lo;
+        update[1] = pci_out_active_bmsk.bmsk_hi;
+
+        mem_bitset(update, NFD_OUT_ACTIVE_BMSK_LINK, sizeof update);
+        send_interthread_sig(NFD_OUT_CACHE_ME, 0,
+                             __signal_number(&nfd_out_cache_bmsk_sig,
+                                             NFD_OUT_CACHE_ME));
+    }
 
     /* Check queues */
     c.pcie_isl =       PCIE_ISL;

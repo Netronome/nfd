@@ -47,7 +47,6 @@ main(void)
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
         /* Initialisation that does not swap */
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_in0, &cfg_msg);
         gather_setup_shared();
         gather_status_setup();
 
@@ -62,8 +61,6 @@ main(void)
 
         service_qc_setup();
         distr_gather_setup_shared();
-        nfd_cfg_setup();
-        nfd_cfg_flr_setup();
 
         notify_setup_shared();
 
@@ -73,6 +70,12 @@ main(void)
         event_cls_user_event(0x1234);
 
         NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
+    } else if (ctx() == 1) {
+        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_in0, &cfg_msg);
+
+        nfd_cfg_setup();
+        nfd_cfg_flr_setup();
+
     } else {
         gather_setup();
 
@@ -104,10 +107,6 @@ main(void)
 
             distr_gather();
             distr_notify();
-
-            nfd_cfg_check_flr_ap();
-
-            nfd_cfg_check_cfg_ap();
 
             gather_status();
 
@@ -142,6 +141,13 @@ main(void)
             }
 
             /* Yield thread */
+            ctx_swap();
+        }
+    } else if (ctx() == 1) {
+        for (;;) {
+            nfd_cfg_check_flr_ap();
+            nfd_cfg_check_cfg_ap();
+
             ctx_swap();
         }
     } else {
