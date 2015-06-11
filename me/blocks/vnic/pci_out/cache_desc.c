@@ -473,11 +473,11 @@ _complete_fetch()
     if (signal_test(&fl_cache_event_sig)) {
         dma_seqn_advance(&fl_cache_event_xfer, &fl_cache_dma_seq_compl);
 
+        __implicit_write(&fl_cache_event_sig);
         event_cls_autopush_filter_reset(
             NFD_OUT_FL_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_OUT_FL_EVENT_FILTER);
-        __implicit_write(&fl_cache_event_sig);
 
         /* XXX how many updates can we receive at once? Do we need to
          * throttle this? */

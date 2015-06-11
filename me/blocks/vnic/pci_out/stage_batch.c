@@ -569,11 +569,11 @@ distr_seqn()
                      &nfd_out_data_compl_refl_out,
                      sizeof nfd_out_data_compl_refl_out);
 
+        __implicit_write(&data_dma_event_sig);
         event_cls_autopush_filter_reset(
             NFD_OUT_DATA_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_OUT_DATA_EVENT_FILTER);
-        __implicit_write(&data_dma_event_sig);
 
     } else {
         /* Swap to give other threads a chance to run */
@@ -600,11 +600,11 @@ distr_seqn()
         desc_dma_safe = (desc_dma_compl + NFD_OUT_DESC_MAX_IN_FLIGHT -
                          NFD_OUT_MAX_BATCH_SZ);
 
+        __implicit_write(&desc_dma_event_sig);
         event_cls_autopush_filter_reset(
             NFD_OUT_DESC_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_OUT_DESC_EVENT_FILTER);
-        __implicit_write(&desc_dma_event_sig);
 
     } else {
         /* Swap to give other threads a chance to run */

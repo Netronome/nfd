@@ -697,6 +697,9 @@ nfd_cfg_next_vnic()
 
     /* Test the bitmask to determine whether to reset the autopush. */
     if (cfg_vnic_bmsk == 0) {
+        __implicit_write(&cfg_ap_sig);
+        __implicit_write(&cfg_ap_xfer);
+
         event_cls_autopush_filter_reset(
             NFD_CFG_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
