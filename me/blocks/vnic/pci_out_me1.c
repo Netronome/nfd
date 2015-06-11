@@ -25,6 +25,7 @@ main(void)
 
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
+        distr_seqn_setup_shared();
         issue_dma_setup_shared();
         issue_dma_status_setup();
         free_buf_setup();
@@ -42,7 +43,7 @@ main(void)
     if (ctx() == 0) {
         /* CTX0 main loop */
         for (;;) {
-            issue_dma_check_compl();
+            distr_seqn();
 
             /* Running free_buf on CTX0 as well allows CTX1-7 to
              * wait on work in issue_dma without preventing blocking

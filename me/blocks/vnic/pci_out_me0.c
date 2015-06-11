@@ -41,7 +41,7 @@ main(void)
 
         /* This method must complete before stage_batch may run.
          * (stage_batch permits issue_dma and send_desc to go.) */
-        distr_seqn_setup_shared();
+        compute_seqn_setup_shared();
 
         send_desc_setup_shared();
 
@@ -71,8 +71,9 @@ main(void)
             cache_desc_check_urgent(); /* Swaps at least once */
 
             cache_desc_status();
+            ctx_swap();
 
-            distr_seqn(); /* Swaps twice */
+            compute_seqn(); /* Swaps once */
 
             cache_desc_check_active(); /* Swaps at least once */
 

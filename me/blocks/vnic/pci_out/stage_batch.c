@@ -90,16 +90,12 @@ static SIGNAL_MASK stage_wait_msk = 0;
 
 
 /*
- * distr_seqn variables
+ * compute_seqn variables
  */
-static volatile __xread unsigned int data_dma_event_xfer;
+__visible volatile __xread unsigned int nfd_out_data_compl_refl_in = 0;
+__visible volatile SIGNAL nfd_out_data_compl_refl_sig;
 static volatile __xread unsigned int desc_dma_event_xfer;
-static SIGNAL data_dma_event_sig;
 static SIGNAL desc_dma_event_sig;
-
-static __xwrite unsigned int nfd_out_data_compl_refl_out = 0;
-__remote volatile __xread unsigned int nfd_out_data_compl_refl_in;
-__remote volatile SIGNAL nfd_out_data_compl_refl_sig;
 
 
 /*
@@ -535,52 +531,35 @@ stage_batch()
  * Perform once off, CTX0-only initialisation of sequence number autopushes
  */
 void
-distr_seqn_setup_shared()
+compute_seqn_setup_shared()
 {
     dma_seqn_ap_setup(NFD_OUT_DESC_EVENT_FILTER, NFD_OUT_DESC_EVENT_FILTER,
                       NFD_OUT_DESC_EVENT_TYPE, &desc_dma_event_xfer,
                       &desc_dma_event_sig);
 
-    dma_seqn_ap_setup(NFD_OUT_DATA_EVENT_FILTER, NFD_OUT_DATA_EVENT_FILTER,
-                      NFD_OUT_DATA_EVENT_TYPE, &data_dma_event_xfer,
-                      &data_dma_event_sig);
 }
 
 
 /**
- * Check autopushes, compute sequence numbers, and reflect to issue_dma ME
+ * Check seqn reflect and autopush then compute new seqn
+ *
+ * "data_dma_compl" is constructed on the "issue_dma" ME.  It is used
+ * on that ME for tracking in flight DMAs so it is needed there more
+ * urgently.  On this ME, it is used to determine whether there are
+ * any RX descriptor batches that can be sent to the host.
+ *
+ * "desc_dma_compl" is only needed on this ME.  It is used to determine
+ * how many descriptor DMAs have been completed, for in flight DMA
+ * tracking and to know when it is safe to execute "inc_sent".
  */
-__forceinline void
-distr_seqn()
+__intrinsic void
+compute_seqn()
 {
-    /* Service data_dma_compl first in case issue_dma() is waiting */
-    if (signal_test(&data_dma_event_sig)) {
-        __implicit_read(&nfd_out_data_compl_refl_out);
-
-        dma_seqn_advance(&data_dma_event_xfer, &data_dma_compl);
-
-        /* Mirror to remote ME */
-        nfd_out_data_compl_refl_out = data_dma_compl;
-        reflect_data(NFD_OUT_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_out_data_compl_refl_in,
-                                       NFD_OUT_DATA_DMA_ME),
-                     __signal_number(&nfd_out_data_compl_refl_sig,
-                                     NFD_OUT_DATA_DMA_ME),
-                     &nfd_out_data_compl_refl_out,
-                     sizeof nfd_out_data_compl_refl_out);
-
-        __implicit_write(&data_dma_event_sig);
-        event_cls_autopush_filter_reset(
-            NFD_OUT_DATA_EVENT_FILTER,
-            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            NFD_OUT_DATA_EVENT_FILTER);
-
-    } else {
-        /* Swap to give other threads a chance to run */
-        ctx_swap();
+    if (signal_test(&nfd_out_data_compl_refl_sig)) {
+        data_dma_compl = nfd_out_data_compl_refl_in;
     }
 
-    /* desc_dma_compl is only used locally, so less urgent */
+    /* Compute desc_dma_compl */
     if (signal_test(&desc_dma_event_sig)) {
         dma_seqn_advance(&desc_dma_event_xfer, &desc_dma_compl);
 
