@@ -87,6 +87,30 @@ __shared __lmem volatile uint64_t svc_cfg_bars[NFD_MAX_ISL];
  */
 #define NFD_VF_MSIX_TABLE_OFF   0x2000
 
+/**
+ * Read the contents of the specified PCIe C2P BAR
+ * @param pcie_nr    PCIe island number
+ * @param bar_idx    The PCIe CppToPcie BAR index
+ *
+ * XXX This function should go to flowenv
+ */
+__intrinsic static unsigned int
+pcie_c2p_barcfg_read(unsigned int pcie_nr, unsigned char bar_idx)
+{
+    unsigned int isl, bar_addr, tmp;
+    __xread unsigned int bar_val;
+    SIGNAL sig;
+
+    isl = pcie_nr << 30;
+    bar_addr = NFP_PCIE_BARCFG_C2P(bar_idx);
+
+    __asm pcie[read_pci, bar_val, isl, <<8, bar_addr, 1], ctx_swap[sig];
+
+    tmp = (unsigned int)bar_val;
+
+    return tmp;
+}
+
 /*
  * Calculate the CPP2PCIe bar value (should be somewhere else)
  */
@@ -209,28 +233,6 @@ out:
 }
 
 /**
- * Returns contents of specified PCIe C2P BAR
- * @param pcie_nr    PCIe cluster number
- * @param bar_idx    The PCIe CppToPcie BAR index
- */
-__intrinsic unsigned int
-pcie_get_c2p_barcfg(unsigned int pcie_nr, unsigned char bar_idx)
-{
-    unsigned int isl, bar_addr, tmp;
-    __xread unsigned int bar_val;
-    SIGNAL sig;
-
-    isl = pcie_nr << 30;
-    bar_addr = NFP_PCIE_BARCFG_C2P(bar_idx);
-
-    __asm pcie[read_pci, bar_val, isl, <<8, bar_addr, 1], ctx_swap[sig];
-
-    tmp = (unsigned int)bar_val;
-
-    return tmp;
-}
-
-/**
  * Send MSI-X interrupt for specified virtual function and optionally mask
  * @param pcie_nr     PCIe cluster number
  * @param vf_nr       Virtual function number (0 to 15)
@@ -296,7 +298,8 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
                         addr_hi, addr_lo, (vf_nr + 64));
         msix_cur_cpp2pci_addr = bar_addr;
 
-        pcie_get_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSIX);
+        /* Read back the BAR config to make sure it has been written */
+        pcie_c2p_barcfg_read(pcie_nr, PCIE_CPP2PCI_MSIX);
     }
 
     /* Send the MSI-X and automask.  We overlap the commands so that
