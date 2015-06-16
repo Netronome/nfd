@@ -47,7 +47,6 @@
 #include <nfp/pcie.h>
 #include <vnic/shared/nfd_cfg.h>
 
-
 /* Imports this variable in the event this file is compiled separate from
  * svc_me.c */
 __shared __lmem volatile uint64_t svc_cfg_bars[NFD_MAX_ISL];
@@ -87,7 +86,6 @@ __shared __lmem volatile uint64_t svc_cfg_bars[NFD_MAX_ISL];
  * Offset of the MSI-X table in the VF control BAR
  */
 #define NFD_VF_MSIX_TABLE_OFF   0x2000
-
 
 /*
  * Calculate the CPP2PCIe bar value (should be somewhere else)
@@ -211,6 +209,28 @@ out:
 }
 
 /**
+ * Returns contents of specified PCIe C2P BAR
+ * @param pcie_nr    PCIe cluster number
+ * @param bar_idx    The PCIe CppToPcie BAR index
+ */
+__intrinsic unsigned int
+pcie_get_c2p_barcfg(unsigned int pcie_nr, unsigned char bar_idx)
+{
+    unsigned int isl, bar_addr, tmp;
+    __xread unsigned int bar_val;
+    SIGNAL sig;
+
+    isl = pcie_nr << 30;
+    bar_addr = NFP_PCIE_BARCFG_C2P(bar_idx);
+
+    __asm pcie[read_pci, bar_val, isl, <<8, bar_addr, 1], ctx_swap[sig];
+
+    tmp = (unsigned int)bar_val;
+
+    return tmp;
+}
+
+/**
  * Send MSI-X interrupt for specified virtual function and optionally mask
  * @param pcie_nr     PCIe cluster number
  * @param vf_nr       Virtual function number (0 to 15)
@@ -275,6 +295,8 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
         pcie_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSIX,
                         addr_hi, addr_lo, (vf_nr + 64));
         msix_cur_cpp2pci_addr = bar_addr;
+
+        pcie_get_c2p_barcfg(pcie_nr, PCIE_CPP2PCI_MSIX);
     }
 
     /* Send the MSI-X and automask.  We overlap the commands so that
