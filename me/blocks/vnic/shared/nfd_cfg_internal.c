@@ -122,10 +122,10 @@ __shared __gpr struct qc_bitmask cfg_queue_bmsk;
 
 static SIGNAL flr_ap_sig;
 static __xread unsigned int flr_ap_xfer;
-static unsigned int flr_in_prog_vf[2] = {0, 0};
+static __shared __gpr unsigned int flr_in_prog_vf[2] = {0, 0};
 
 #define FLR_IN_PROG_BUSY_shf 31
-static unsigned int flr_in_prog_status = 0;
+static __shared __gpr unsigned int flr_in_prog_status = 0;
 
 
 #ifdef NFD_CFG_SIG_NEXT_ME
