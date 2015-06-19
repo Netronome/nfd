@@ -101,17 +101,17 @@ do {                                                                    \
         /* Handle FLRs */                                               \
         if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_RESET) {         \
                                                                         \
-            /* NB: This method writes ~8K of data */                    \
+            /* NB: This function writes ~8K of data */                  \
             nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic)); \
                                                                         \
             if (cfg_msg##_isl.vnic == NFD_MAX_VFS) {                    \
                 /* We have a PF FLR */                                  \
-                nfd_flr_write_pf_cap(NFD_CFG_BASE_LINK(_isl));          \
+                nfd_flr_init_pf_ctrl_bar(NFD_CFG_BASE_LINK(_isl));      \
                 nfd_flr_ack_pf(_isl);                                   \
                                                                         \
             } else {                                                    \
                 /* We have a VF FLR */                                  \
-                nfd_flr_write_vf_cap(NFD_CFG_BASE_LINK(_isl),           \
+                nfd_flr_init_vf_ctrl_bar(NFD_CFG_BASE_LINK(_isl),       \
                                      cfg_msg##_isl.vnic);               \
                 nfd_flr_ack_vf(_isl, cfg_msg##_isl.vnic);               \
                                                                         \

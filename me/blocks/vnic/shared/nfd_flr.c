@@ -83,9 +83,10 @@
 /** Clear the bulk of the CFG BAR
  * @param addr      start address of the vNIC CFG BAR
  *
- * This method performs the bulk write of data that won't be reset
- * by other methods (e.g. nfd_flr_write_pf_cap and nfd_flr_write_vf_cap.
- * "addr" should be obtained via the appropriate API, e.g. NFD_CFG_BAR_ISL.
+ * This function performs the bulk write of data that won't be reset
+ * by other functions (e.g. nfd_flr_init__pf_ctrl_bar() and
+ * nfd_flr_init_vf_ctrl_bar()).  "addr" should be obtained via the
+ * appropriate API, e.g. NFD_CFG_BAR_ISL.
  */
 __intrinsic void
 nfd_flr_clr_bar(__emem char *addr)
@@ -119,14 +120,14 @@ nfd_flr_clr_bar(__emem char *addr)
 }
 
 
-/** Rewrite the PF capabilities
+/** Init the non-zero parts of the PF control BAR
  * @param isl_base      start address of the CFG BARs for the PCIe island
  *
  * "isl_base" should be obtained via the appropriate API,
  * e.g. NFD_CFG_BASE_LINK.
  */
 void
-nfd_flr_write_pf_cap(__emem char *isl_base)
+nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
 {
 #if (NFD_MAX_PF_QUEUES != 0)
     unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS * 2);
@@ -134,15 +135,19 @@ nfd_flr_write_pf_cap(__emem char *isl_base)
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
                                    NFD_CFG_MAX_MTU, tx_q_off,
                                    NFD_OUT_Q_START + tx_q_off};
+    __xwrite unsigned int exn_lsc = 0xffffffff;
 
     mem_write64(&cfg,
                 NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
+
+    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_LSC,
+               sizeof exn_lsc);
 #endif
 }
 
 
-/** Rewrite the VF capabilities
+/** Init the non-zero parts of the VF control BAR
  * @param isl_base      start address of the CFG BARs for the PCIe island
  * @param vf            VF number on the PCIe island
  *
@@ -150,7 +155,7 @@ nfd_flr_write_pf_cap(__emem char *isl_base)
  * e.g. NFD_CFG_BASE_LINK.
  */
 void
-nfd_flr_write_vf_cap(__emem char *isl_base, unsigned int vf)
+nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, unsigned int vf)
 {
 #if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
     unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * vf * 2);
@@ -158,9 +163,13 @@ nfd_flr_write_vf_cap(__emem char *isl_base, unsigned int vf)
                                    NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
                                    NFD_CFG_MAX_MTU, tx_q_off,
                                    NFD_OUT_Q_START + tx_q_off};
+    __xwrite unsigned int exn_lsc = 0xffffffff;
 
     mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
+
+    mem_write8(&exn_lsc,
+               NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_LSC, sizeof exn_lsc);
 #endif
 }
 

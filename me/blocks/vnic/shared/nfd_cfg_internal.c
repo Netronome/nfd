@@ -429,9 +429,11 @@ _nfd_cfg_queue_setup()
         NFD_CFG_EVENT_FILTER);
 }
 
-
-void
-_nfd_cfg_write_vf_cap(unsigned int vnic)
+/*
+ * Initialise the VF and PF control BAR
+ */
+static void
+_nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
 {
 #if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
     unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * vnic * 2);
@@ -439,15 +441,19 @@ _nfd_cfg_write_vf_cap(unsigned int vnic)
                                    NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
                                    NFD_CFG_MAX_MTU, tx_q_off,
                                    NFD_OUT_Q_START + tx_q_off};
+    __xwrite unsigned int exn_lsc = 0xffffffff;
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
+
+    mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_EXN,
+               sezeof exn_lsc);
 #endif
 }
 
 
-void
-_nfd_cfg_write_pf_cap()
+static void
+_nfd_cfg_init_pf_ctrl_bar()
 {
 #if (NFD_MAX_PF_QUEUES != 0)
     unsigned int tx_q_off = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS * 2);
@@ -455,11 +461,16 @@ _nfd_cfg_write_pf_cap()
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
                                    NFD_CFG_MAX_MTU, tx_q_off,
                                    NFD_OUT_Q_START + tx_q_off};
+    __xwrite unsigned int exn_lsc = 0xffffffff;
 
     mem_write64(&cfg,
                 (NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
                  NFP_NET_CFG_VERSION),
                 sizeof cfg);
+
+    mem_write8(&exn_lsc,
+               NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_LSC,
+               sizeof exn_lsc);
 #endif
 }
 
@@ -488,12 +499,12 @@ nfd_cfg_setup()
      */
 #if NFD_MAX_VFS != 0
     for (vnic = 0; vnic < NFD_MAX_VFS; vnic++) {
-        _nfd_cfg_write_vf_cap(vnic);
+        _nfd_cfg_init_vf_ctrl_bar(vnic);
     }
 #endif
 
 #if NFD_MAX_PF_QUEUES != 0
-    _nfd_cfg_write_pf_cap();
+    _nfd_cfg_init_pf_ctrl_bar();
 #endif
 }
 
