@@ -800,9 +800,10 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
     }
 
     if (fn >= NFD_MAX_VFS)
-        ret = msix_pf_send(pcie_isl + 4, entry, automask);
+        ret = msix_pf_send(pcie_isl + 4, PCIE_CPP2PCIE_QMON, entry, automask);
     else
-        ret = msix_vf_send(pcie_isl + 4, fn, entry, automask);
+        ret = msix_vf_send(pcie_isl + 4, PCIE_CPP2PCIE_QMON, fn,
+                           entry, automask);
 
     /* IRQ issued, cleanup interrupt moderation state */
     if (!ret)

@@ -15,6 +15,20 @@
 /* Set defines */
 #define NFD_MAX_ISL     4   /* Maximum number of PCIe islands NFD may support */
 
+/*
+ * CPP2PCIe BAR allocation
+ * XXX This should go into chip_res
+ */
+enum pcie_cpp2pcie_bar {
+    PCIE_CPP2PCIE_QMON = 0,
+    PCIE_CPP2PCIE_LSC  = 1,
+    PCIE_CPP2PCIE_FREE2,
+    PCIE_CPP2PCIE_FREE3,
+    PCIE_CPP2PCIE_FREE4,
+    PCIE_CPP2PCIE_FREE5,
+    PCIE_CPP2PCIE_FREE6,
+    PCIE_CPP2PCIE_FREE7
+};
 
 /* Helper macros */
 

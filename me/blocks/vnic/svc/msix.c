@@ -87,29 +87,9 @@ __shared __lmem volatile uint64_t svc_cfg_bars[NFD_MAX_ISL];
  */
 #define NFD_VF_MSIX_TABLE_OFF   0x2000
 
-/**
- * Read the contents of the specified PCIe C2P BAR
- * @param pcie_nr    PCIe island number
- * @param bar_idx    The PCIe CppToPcie BAR index
- *
- * XXX This function should go to flowenv
- */
-__intrinsic static unsigned int
-pcie_c2p_barcfg_read(unsigned int pcie_nr, unsigned char bar_idx)
-{
-    unsigned int isl, bar_addr, tmp;
-    __xread unsigned int bar_val;
-    SIGNAL sig;
+/* Global variable to cache the current CPP 2 PCIe BAR */
+__gpr static unsigned int msix_cur_cpp2pci_addr = 0;
 
-    isl = pcie_nr << 30;
-    bar_addr = NFP_PCIE_BARCFG_C2P(bar_idx);
-
-    __asm pcie[read_pci, bar_val, isl, <<8, bar_addr, 1], ctx_swap[sig];
-
-    tmp = (unsigned int)bar_val;
-
-    return tmp;
-}
 
 /*
  * Calculate the CPP2PCIe bar value (should be somewhere else)
@@ -132,31 +112,13 @@ pcie_c2p_barcfg_addr(unsigned int addr_hi,
     return tmp;
 }
 
-/*
- * CPP2PCIe BAR allocation
- * XXX Are these defined as resources somewhere?
- */
-enum pcie_cpp2pci_bar {
-    PCIE_CPP2PCI_MSIX = 0,
-    PCIE_CPP2PCI_FREE1,
-    PCIE_CPP2PCI_FREE2,
-    PCIE_CPP2PCI_FREE3,
-    PCIE_CPP2PCI_FREE4,
-    PCIE_CPP2PCI_FREE5,
-    PCIE_CPP2PCI_FREE6,
-    PCIE_CPP2PCI_FREE7
-};
-
-/* Global variable to cache the current CPP 2 PCIe BAR */
-__gpr static unsigned int msix_cur_cpp2pci_addr = 0;
-
-
 /**
  * Send MSI-X interrupt for a PF and optionally mask the interrupt
  *
  * Returns 0 on success and non-zero when the entry is masked.
  *
  * @param pcie_nr     PCIe island number
+ * @param bar_nr      CPP2PCIe bar to use
  * @param entry_nr    MSI-X table entry number
  * @param mask_en     Boolean, should interrupt be masked after sending.
  * @return            0 on success, else the interrupt was masked.
@@ -176,14 +138,20 @@ __gpr static unsigned int msix_cur_cpp2pci_addr = 0;
  * - If not, generate an interrupt (by performing a PCIe write)
  * - If the caller asks us to mask, mask the entry.
  *
+ * For a given PCI Island and CPP2PCIe BAR this function is only safe
+ * to be called from within a single context. If multiple contexts (or
+ * MEs) are used to send MSI-X interrupts from the same PCIe Island
+ * they must use separate CPP2PCIe BARs.
+ *
  * Note, there is a race potential race between reading the status and
- * generating the interrupt, but this race can only happen if the driver masks 
- * the interrupt in between the ME reading the MSI-X control word and 
- * attempting to send the interrupt.  Since the driver is not masking the 
- * interrupt the race should not happen.
+ * generating the interrupt, but this race can only happen if the
+ * driver masks the interrupt in between the ME reading the MSI-X
+ * control word and attempting to send the interrupt.  Since the
+ * driver is not masking the interrupt the race should not happen.
  */
 __intrinsic int
-msix_pf_send(unsigned int pcie_nr, unsigned int entry_nr, unsigned int mask_en)
+msix_pf_send(unsigned int pcie_nr, unsigned int bar_nr,
+             unsigned int entry_nr, unsigned int mask_en)
 {
     uint32_t entry_addr_hi;
     uint32_t entry_addr_lo;
@@ -226,14 +194,14 @@ msix_pf_send(unsigned int pcie_nr, unsigned int entry_nr, unsigned int mask_en)
     /* Check if we need to re-configure the CPP2PCI BAR */
     bar_addr = pcie_c2p_barcfg_addr(addr_hi, addr_lo, 0);
     if (bar_addr != msix_cur_cpp2pci_addr) {
-        pcie_c2p_barcfg_set(pcie_nr, PCIE_CPP2PCI_MSIX, addr_hi, addr_lo, 0);
+        pcie_c2p_barcfg_set(pcie_nr, bar_nr, addr_hi, addr_lo, 0);
         msix_cur_cpp2pci_addr = bar_addr;
     }
 
     /* Send the MSI-X and automask.  We overlap the commands so that
      * they happen roughly at the same time. */
     msix_data = data;
-    __pcie_write(&msix_data, pcie_nr, PCIE_CPP2PCI_MSIX, addr_hi, addr_lo,
+    __pcie_write(&msix_data, pcie_nr, bar_nr, addr_hi, addr_lo,
                  sizeof(msix_data), sizeof(msix_data), sig_done, &msix_sig);
 
     if (mask_en) {
@@ -243,7 +211,7 @@ msix_pf_send(unsigned int pcie_nr, unsigned int entry_nr, unsigned int mask_en)
             pcie[write_pci, flags_w, entry_addr_hi, <<8, entry_addr_lo, 1], \
                 sig_done[mask_sig]
         }
-        
+
         wait_for_all(&msix_sig, &mask_sig);
     } else {
         wait_for_all(&msix_sig);
@@ -255,9 +223,11 @@ out:
     return ret;
 }
 
+
 /**
  * Send MSI-X interrupt for specified virtual function and optionally mask
  * @param pcie_nr     PCIe cluster number
+ * @param bar_nr      CPP2PCIe bar to use
  * @param vf_nr       Virtual function number (0 to 15)
  * @param entry_nr    MSI-X table entry number
  * @param mask_en     Boolean, should interrupt be masked after sending.
@@ -269,6 +239,11 @@ out:
  * the PCI write to generate a MSI-X.  We cache its config so we don't
  * need to re-program the CPP2PCIe BAR for every MSI-X.
  *
+ * For a given PCI Island and CPP2PCIe BAR this function is only safe
+ * to be called from within a single context. If multiple contexts (or
+ * MEs) are used to send MSI-X interrupts from the same PCIe Island
+ * they must use separate CPP2PCIe BARs.
+ *
  * The steps are as follows:
  * - Read the table entry
  * - Check if the entry is masked
@@ -279,7 +254,7 @@ out:
  * The same potential race as for the PF exists in this code too.
  */
 __intrinsic int
-msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
+msix_vf_send(unsigned int pcie_nr, unsigned int bar_nr, unsigned int vf_nr,
              unsigned int entry_nr, unsigned int mask_en)
 {
     unsigned int addr_hi;
@@ -317,7 +292,7 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
     /* Check if we need to re-configure the CPP2PCI BAR */
     bar_addr = pcie_c2p_barcfg_addr(addr_hi, addr_lo, (vf_nr + 64));
     if (bar_addr != msix_cur_cpp2pci_addr) {
-        pcie_c2p_barcfg_set(pcie_nr, PCIE_CPP2PCI_MSIX,
+        pcie_c2p_barcfg_set(pcie_nr, bar_nr,
                             addr_hi, addr_lo, (vf_nr + 64));
         msix_cur_cpp2pci_addr = bar_addr;
     }
@@ -325,7 +300,7 @@ msix_vf_send(unsigned int pcie_nr, unsigned int vf_nr,
     /* Send the MSI-X and automask.  We overlap the commands so that
      * they happen roughly at the same time. */
     msix_data = data;
-    __pcie_write(&msix_data, pcie_nr, PCIE_CPP2PCI_MSIX, addr_hi, addr_lo,
+    __pcie_write(&msix_data, pcie_nr, bar_nr, addr_hi, addr_lo,
                  sizeof(msix_data), sizeof(msix_data), sig_done, &msix_sig);
 
     if (mask_en) {
