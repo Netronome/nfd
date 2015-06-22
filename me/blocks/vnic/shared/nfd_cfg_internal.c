@@ -447,7 +447,7 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
                 sizeof cfg);
 
     mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_EXN,
-               sezeof exn_lsc);
+               sizeof exn_lsc);
 #endif
 }
 
