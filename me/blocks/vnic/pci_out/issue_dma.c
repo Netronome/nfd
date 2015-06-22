@@ -257,7 +257,8 @@ _recompute_safe()
                                     NFD_OUT_MAX_BATCH_SZ));
 
     data_dma_seq_safe = dma_batch_safe;
-    if (cpp_batch_safe < dma_batch_safe) {
+    /* Wrap safe test for whether cpp_batch_safe < dma_batch_safe */
+    if ((int) (cpp_batch_safe - dma_batch_safe) < 0) {
         data_dma_seq_safe = cpp_batch_safe;
     }
 }
