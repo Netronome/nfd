@@ -712,7 +712,7 @@ nfd_cfg_next_vnic()
  * @param cfg_msg           message to add
  * @param cfg_sig_remote    remote signal to set on success
  * @param next_me           ME to signal on success
- * @param rnum              ring number to use for the ring put
+ * @param rnum              ring number to use for the ring journal
  * @param rbase             base address of the ring to use
  */
 __intrinsic void
@@ -721,7 +721,7 @@ nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                        unsigned int next_me, unsigned int rnum)
 {
     struct nfd_cfg_msg cfg_msg_tmp;
-    __xrw struct nfd_cfg_msg cfg_msg_wr;
+    __xwrite struct nfd_cfg_msg cfg_msg_wr;
     mem_ring_addr_t ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
 
     /* Clear the internal state fields and set msg_valid before sending  */
@@ -731,7 +731,7 @@ nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
     cfg_msg_tmp.vnic = cfg_msg->vnic;
     cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
-    mem_ring_put(rnum, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr);
+    mem_ring_journal(rnum, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr);
 
     send_interthread_sig(next_me, 0,
                          __signal_number(cfg_sig_remote, next_me));
@@ -758,7 +758,7 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
     __xrw struct nfd_cfg_msg cfg_msg_wr;
     __xread struct nfd_cfg_msg cfg_msg_rd;
     mem_ring_addr_t ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
-    SIGNAL_PAIR put_sig;
+    SIGNAL journal_sig;
     SIGNAL_PAIR get_sig;
 
     /* Clear the internal state fields and set msg_valid before sending  */
@@ -768,15 +768,13 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
     cfg_msg_tmp.vnic = cfg_msg->vnic;
     cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
-    /* Put is guaranteed to succeed by design (the ring larger than
+    /* Journal is guaranteed to not overflow by design (it is larger than
      * the number of possible vNICs). */
-    __mem_ring_put(rnum_out, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr,
-                   sizeof cfg_msg_wr, sig_done, &put_sig);
+    __mem_ring_journal(rnum_out, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr,
+                       sizeof cfg_msg_wr, sig_done, &journal_sig);
     __mem_ring_get(rnum_in, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd,
                    sizeof cfg_msg_rd, sig_done, &get_sig);
-    wait_for_all_single(&put_sig.even, &put_sig.odd, &get_sig.even);
-
-    /* XXX don't check put return, assume put succeeded. */
+    wait_for_all_single(&journal_sig, &get_sig.even);
 
     if (!signal_test(&get_sig.odd)) {
         *cfg_msg = cfg_msg_rd;
