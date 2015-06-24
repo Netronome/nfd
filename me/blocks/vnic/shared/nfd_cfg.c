@@ -52,11 +52,20 @@ nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
 
         __implicit_write(cfg_sig);
 
-        ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
-        ret = mem_ring_get(rnum, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd);
+        /* Only check for a new cfg_msg in the ring if we don't have
+         * a message to process currently.  The fact that we have cleared
+         * the signal is okay, because we will continue to poll the ring
+         * as we complete messages. */
+        if (!cfg_msg->msg_valid) {
 
-        if (ret == 0) {
-            *cfg_msg = cfg_msg_rd;
+            /* We aren't currently processing a message, so we can
+             * fetch a new one. */
+            ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
+            ret = mem_ring_get(rnum, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd);
+
+            if (ret == 0) {
+                *cfg_msg = cfg_msg_rd;
+            }
         }
     }
 }
