@@ -164,7 +164,7 @@ precache_bufs()
         if (_precache_buf_bytes_used() >
             (sizeof (unsigned int) * NFD_IN_BUF_RECACHE_WM)) {
             /* Issue the fetch */
-            __mem_ring_get(blm_queue_num, blm_queue_addr, bufs_rd,
+            __mem_ring_pop(blm_queue_num, blm_queue_addr, bufs_rd,
                            sizeof bufs_rd, sizeof bufs_rd,
                            sig_done, &precache_sig);
             state.pending_fetch = 1;
