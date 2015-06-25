@@ -24,6 +24,23 @@
 #include <nfp_net_ctrl.h>
 
 
+/*
+ * NFD FLR handling consists of 3 main components: a part that notices new
+ * FLRs by receiving events and examining HW CSRs, a part that issues
+ * reconfiguration messages for each pending FLR in turn, using the regular
+ * NFD configuration message passing mechanisms, and a part that notices
+ * the FLR configuration messages and acknowledges them to the HW.
+ *
+ * The HW will record an FLR as "in progress" from the time it was issued
+ * until it is finally acked by the FW.  We only Ack the FLR once all NFD
+ * owned MEs have had a chance to reconfigure based on the FLR, so we track
+ * the FLRs that we have "seen" using atomics.  The first stage sets the
+ * atomic for each new FLR that it notices, and the last stage clears the
+ * atomic after it has acked the FLR.  Clearing the atomic only after the
+ * ack ensures that we do not reissue the reconfiguration for the same FLR.
+ */
+
+
 #define NFP_PCIEX_ISL_BASE                                   0x04000000
 #define NFP_PCIEX_ISL_shf                                    24
 /* XXX temp defines that loosely match the BSP pcie_monitor_api.h */
@@ -40,7 +57,7 @@
 
 
 /*
- * Defines that set the structure of "nfd_flr_sent".  These are also
+ * Defines that set the structure of "nfd_flr_seen".  These are also
  * reused for FLR state in nfd_cfg_internal.c.
  */
 #define NFD_FLR_VF_LO_ind   0
@@ -48,17 +65,18 @@
 #define NFD_FLR_PF_ind      2
 #define NFD_FLR_PF_shf      0
 
+#define NFD_FLR_PEND_BUSY_shf 31
+
 /*
- * The "nfd_flr_sent" atomic is used to track which FLRs have been started
+ * The "nfd_flr_seen" atomic is used to track which FLRs have been noticed by
  * by PCI.IN ME0 but have not been completed by the service ME.  It prevents
  * us reissuing an FLR message if something else causes us to check the
  * hardware pending mask.
  *
- * "nfd_flr_sent" is structured as an "array" of
- * 16B entries per PCIe island.  Each entry consists of two 32bit bitmasks
- * "VF_LO" and "VF_HI", and an extra 32bit mask with just one bit used for
- * the PF (selected by NFD_FLR_PF_shf).  There is one byte of padding per
- * PCIe island too.
+ * "nfd_flr_seen" is structured as an "array" of 16B entries per PCIe island.
+ * Each entry consists of two 32bit bitmasks "VF_LO" and "VF_HI", and an
+ * extra 32bit mask with just one bit used for the PF (selected by
+ * NFD_FLR_PF_shf).  There is one byte of padding per PCIe island too.
  *
  * Users outside of this file would generally call APIs from this file, so
  * they should not depend on this structure.
@@ -66,10 +84,10 @@
 #define NFD_FLR_DECLARE                                                 \
     ASM(.alloc_mem nfd_flr_atomic NFD_CFG_RING_EMEM global 64 64)       \
     ASM(.declare_resource nfd_flr_atomic_mem global 64 nfd_flr_atomic)  \
-    ASM(.alloc_resource nfd_flr_sent nfd_flr_atomic_mem global 64 64)
+    ASM(.alloc_resource nfd_flr_seen nfd_flr_atomic_mem global 64 64)
 
 #define NFD_FLR_LINK_IND(_isl)                                  \
-    ((__mem char *) _link_sym(nfd_flr_sent) + ((_isl) * 16))
+    ((__mem char *) _link_sym(nfd_flr_seen) + ((_isl) * 16))
 #define NFD_FLR_LINK(_isl) NFD_FLR_LINK_IND(_isl)
 
 
@@ -182,7 +200,7 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, unsigned int vf)
 }
 
 
-/** Acknowledge the FLR to the hardware, and clear "nfd_flr_sent" bit
+/** Acknowledge the FLR to the hardware, and clear "nfd_flr_seen" bit
  * @param pcie_isl      PCIe island (0..3)
  *
  * This method issues an XPB write to acknowledge the FLR and an
@@ -214,7 +232,7 @@ nfd_flr_ack_pf(unsigned int pcie_isl)
 }
 
 
-/** Acknowledge the FLR to the hardware, and clear "nfd_flr_sent" bit
+/** Acknowledge the FLR to the hardware, and clear "nfd_flr_seen" bit
  * @param pcie_isl      PCIe island (0..3)
  * @param vf            VF number on the PCIe island
  *
@@ -228,7 +246,7 @@ nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
     unsigned int flr_data;
     unsigned int flr_addr;
 
-    unsigned int atomic_data;
+    __xwrite unsigned int atomic_data;
     __mem char *atomic_addr;
 
     flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
@@ -237,29 +255,123 @@ nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
     flr_data |= ((vf & NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk) <<
                  NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf);
 
-    /* nfd_flr_sent is a 64bit mask, sorted from LSB to MSB by NFP
-     * address definitions, so we can use the NFP byte addressing. */
-    atomic_addr = (NFD_FLR_LINK(pcie_isl) + (vf / 8));
-    atomic_data = 1 << (vf & (8 - 1));
+    /* nfd_flr_seen is a 64bit mask, sorted from LSB to MSB by NFP
+     * address definitions.  This places VFs 0..31 in the 4B from
+     * offset 0, and VFs 32..63 from offset 4.  "atomic_addr" should
+     * be 4B aligned, so we divide vf by 32 and multiply by 4 to
+     * obtain the byte offset. */
+    atomic_addr = (NFD_FLR_LINK(pcie_isl) + ((vf / 32) * 4));
+    atomic_data = 1 << (vf & (32 - 1));
 
     /* Issue the FLR ack and then the atomic clear.  This ensures that
      * the atomic is set until the VF FLR in progress bit is cleared. */
     xpb_write(flr_addr, flr_data);
-    mem_bitclr_imm(atomic_data, atomic_addr);
+    mem_bitclr(&atomic_data, atomic_addr, sizeof atomic_data);
 }
 
 
 
 /* Functions called from PCI.IN ME0 */
 
-/** Perform an atomic read of nfd_flr_atomic
- * @param pcie_isl      PCIe island (0..3)
- * @param flr_sent      read xfers for the result
+/** Read the HW FLR and nfd_flr_atomic state
+ * @param pcie_isl              PCIe island (0..3)
+ * @param flr_pend_status    Internal state for FLR processing
+ *
+ * See nfd_cfg_internal.c for a description of the format of
+ * "flr_pend_status".
  */
 __intrinsic void
-nfd_flr_read_sent(unsigned int pcie_isl, __xread unsigned int flr_sent[3])
+nfd_flr_check_pf(unsigned int pcie_isl,
+                 __shared __gpr unsigned int *flr_pend_status)
 {
-    mem_read_atomic(flr_sent, NFD_FLR_LINK(pcie_isl), sizeof flr_sent);
+    __xread unsigned int seen_flr;
+    __mem char *atomic_addr;
+    SIGNAL atomic_sig;
+    __xread unsigned int cntrlr3;
+    unsigned int xpb_addr;
+    SIGNAL xpb_sig;
+    unsigned int pf_atomic_data = 1 << NFD_FLR_PF_shf;
+
+    /* Read state of FLR hardware and seen atomics */
+    atomic_addr = (NFD_FLR_LINK(pcie_isl) +
+                   sizeof pf_atomic_data * NFD_FLR_PF_ind);
+    xpb_addr = NFP_PCIEX_COMPCFG_CNTRLR3;
+
+    __mem_read_atomic(&seen_flr, atomic_addr, sizeof seen_flr, sizeof seen_flr,
+                      sig_done, &atomic_sig);
+    __asm ct[xpb_read, cntrlr3, xpb_addr, 0, 1], sig_done[xpb_sig];
+
+    wait_for_all(&atomic_sig, &xpb_sig);
+
+    /* Test state for an unseen PF FLR */
+    if (cntrlr3 & (1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf)) {
+        if ((seen_flr & pf_atomic_data) == 0) {
+            /* We have found an unseen PF FLR, mark it in local and
+             * atomic state. */
+            *flr_pend_status |= (1 << NFD_FLR_PF_ind);
+            *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
+
+            mem_bitset_imm(pf_atomic_data, atomic_addr);
+        }
+    }
+}
+
+
+/** Read the HW FLR and nfd_flr_atomic state
+ * @param pcie_isl          PCIe island (0..3)
+ * @param flr_pend_status   Internal state for FLR processing
+ * @param flr_pend_vf       VF specific internal FLR state
+ *
+ * See nfd_cfg_internal.c for a description of the format of
+ * "flr_pend_status" and "flr_pend_vf".
+ */
+__intrinsic void
+nfd_flr_check_vfs(unsigned int pcie_isl,
+                  __shared __gpr unsigned int *flr_pend_status,
+                  __shared __gpr unsigned int flr_pend_vf[2])
+{
+    __xread unsigned int seen_flr[2];
+    __xread unsigned int hw_flr[2];
+    __mem char *atomic_addr;
+    SIGNAL atomic_sig;
+    __xread unsigned int cntrlr3;
+    unsigned int xpb_addr;
+    SIGNAL xpb_sig0, xpb_sig1;
+
+    unsigned int new_flr;
+    __xwrite unsigned int new_flr_wr[2];
+
+    /* Read state of FLR hardware and seen atomics */
+    atomic_addr = NFD_FLR_LINK(pcie_isl);
+    __mem_read_atomic(seen_flr, atomic_addr, sizeof seen_flr, sizeof seen_flr,
+                      sig_done, &atomic_sig);
+    xpb_addr = NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0;
+    __asm ct[xpb_read, hw_flr + 0, xpb_addr, 0, 1], sig_done[xpb_sig0];
+    xpb_addr = NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1;
+    __asm ct[xpb_read, hw_flr + 4, xpb_addr, 0, 1], sig_done[xpb_sig1];
+
+    wait_for_all(&atomic_sig, &xpb_sig0, &xpb_sig1);
+
+    /* Handle VFs 0 to 31 */
+    new_flr = hw_flr[0] & ~seen_flr[NFD_FLR_VF_LO_ind];
+    flr_pend_vf[NFD_FLR_VF_LO_ind] |= new_flr;
+    if (flr_pend_vf[NFD_FLR_VF_LO_ind] != 0) {
+        *flr_pend_status |= (1 << NFD_FLR_VF_LO_ind);
+        *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
+    }
+    new_flr_wr[NFD_FLR_VF_LO_ind] = new_flr;
+
+    /* Handle VFs 32 to 63 */
+    new_flr = hw_flr[1] & ~seen_flr[NFD_FLR_VF_HI_ind];
+    flr_pend_vf[NFD_FLR_VF_HI_ind] |= new_flr;
+    if (flr_pend_vf[NFD_FLR_VF_HI_ind] != 0) {
+        *flr_pend_status |= (1 << NFD_FLR_VF_HI_ind);
+        *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
+    }
+    new_flr_wr[NFD_FLR_VF_HI_ind] = new_flr;
+
+    /* Update the nfd_flr_seen atomic */
+    mem_bitset(new_flr_wr, atomic_addr, sizeof new_flr_wr);
 }
 
 
@@ -286,40 +398,4 @@ nfd_flr_write_cfg_msg(__emem char *isl_base, unsigned int vnic)
 
     mem_write64(cfg_bar_msg, NFD_CFG_BAR(isl_base, vnic),
                 sizeof cfg_bar_msg);
-}
-
-
-/** Set "nfd_flr_sent" bit for the PF
- * @param pcie_isl      PCIe island (0..3)
- */
-__intrinsic void
-nfd_flr_set_sent_pf(unsigned int pcie_isl)
-{
-    unsigned int atomic_data;
-    __mem char *atomic_addr;
-
-    atomic_addr = (NFD_FLR_LINK(pcie_isl) +
-                   sizeof atomic_data * NFD_FLR_PF_ind);
-    atomic_data = (1 << NFD_FLR_PF_shf);
-
-    mem_bitset_imm(atomic_data, atomic_addr);
-}
-
-
-/** Set "nfd_flr_sent" bit for the VF
- * @param pcie_isl      PCIe island (0..3)
- * @param vf            VF number on the PCIe island
- */
-__intrinsic void
-nfd_flr_set_sent_vf(unsigned int pcie_isl, unsigned int vf)
-{
-    unsigned int atomic_data;
-    __mem char *atomic_addr;
-
-    /* nfd_flr_sent is a 64bit mask, sorted from LSB to MSB by NFP
-     * address definitions, so we can use the NFP byte addressing. */
-    atomic_addr = (NFD_FLR_LINK(pcie_isl) + (vf / 8));
-    atomic_data = 1 << (vf & (8 - 1));
-
-    mem_bitset_imm(atomic_data, atomic_addr);
 }

@@ -120,12 +120,33 @@ NFD_FLR_DECLARE;
 
 __shared __gpr struct qc_bitmask cfg_queue_bmsk;
 
+/*
+ * "flr_pend_status" is a bit mask containing indicators of whether
+ * an FLR is pending service, and which types.  It contains
+ * the following bits:
+ *
+ * NFD_FLR_PF_ind: A PF FLR is pending.  This is sufficient basis to
+ *                 process the PF FLR as there is only one PF vNIC per island.
+ * NFD_FLR_VF_LO_ind: A VF FLR is pending on at least one of VFs 0..31.
+ *                    flr_pend_vf[NFD_FLR_VF_LO_ind] must be examined
+ *                    to determine which VFs have pending FLRs.
+ * NFD_FLR_VF_HI_ind: A VF FLR is pending on at least one of VFs 32..63.
+ *                    flr_pend_vf[NFD_FLR_VF_HI_ind] must be examined
+ *                    to determine which VFs have pending FLRs.
+ * NFD_FLR_PEND_BUSY_shf: One of the above bits is set.  Used to short
+ *                        circuit nfd_cfg_next_flr() if no FLRs pending.
+ */
+static __shared __gpr unsigned int flr_pend_status = 0;
+
+/*
+ * "flr_pend_vf" consists of two 32-bit bitmask covering the up-to 64 VFs
+ * in the system.  flr_pend_vf[NFD_FLR_VF_LO_ind] covers the low 32 VFs, and
+ * flr_pend_vf[NFD_FLR_VF_HI_ind] covers the high 32 VFs.  Within each bitmask,
+ * the bit offset of a vf can be computed by "1 << (vf & 31)".
+ */
+static __shared __gpr unsigned int flr_pend_vf[2] = {0, 0};
 static SIGNAL flr_ap_sig;
 static __xread unsigned int flr_ap_xfer;
-static __shared __gpr unsigned int flr_in_prog_vf[2] = {0, 0};
-
-#define FLR_IN_PROG_BUSY_shf 31
-static __shared __gpr unsigned int flr_in_prog_status = 0;
 
 
 #ifdef NFD_CFG_SIG_NEXT_ME
@@ -478,61 +499,35 @@ nfd_cfg_flr_setup()
 /**
  * Update the FLR state in this ME
  *
- * The PF and VF FLR state are checked separately, using "nfd_flr_sent" to
- * determine whether we are already processing an FLR for the vNIC.  PCIe state
- * changes are associated with FLRs (both on start and completion), so we also
- * monitor and acknowledge PCIe state changes.  This ensures that we will be
- * aware of VF FLRs that occur, even if we are already processing an FLR.
+ * The PF and VF FLR state are checked separately, using nfd_flr.c APIs.
+ * PCIe state changes are associated with FLRs (both on start and completion),
+ * so we also monitor and acknowledge PCIe state changes.  This ensures that
+ * we will be aware of VF FLRs that occur, even if we are already processing
+ * an FLR.
  */
 void
 nfd_cfg_check_flr_ap()
 {
     if (signal_test(&flr_ap_sig)) {
         __xread unsigned int flr_sent[3];
-        unsigned int flr_status;
+        __xread unsigned int pcie_state_change_stat;
+        __xread unsigned int pf_csr;
+        __xread unsigned int vf_csr[2];
+        unsigned int state_change_ack;
         int vf;
 
         local_csr_write(local_csr_mailbox_0, flr_ap_xfer);
-        flr_status = xpb_read(NFP_PCIEX_COMPCFG_CNTRLR3);
 
-        local_csr_write(local_csr_mailbox_1, flr_status);
-
-
-        /* Read which VF/PF sent messages are still pending */
-        nfd_flr_read_sent(PCIE_ISL, flr_sent);
-
-        /* Handle the PF */
-        if (flr_status & (1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf)) {
-            if (~flr_sent[NFD_FLR_PF_ind] &
-                (1 << NFD_FLR_PF_shf)) {
-                flr_in_prog_status |= (1 << NFD_FLR_PF_ind);
-                flr_in_prog_status |= (1 << FLR_IN_PROG_BUSY_shf);
-            }
-        }
-
-        /* Handle VFs 0 to 31 */
-        flr_in_prog_vf[NFD_FLR_VF_LO_ind] =
-            (xpb_read(NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0) &
-             ~flr_sent[NFD_FLR_VF_LO_ind]);
-        if (flr_in_prog_vf[NFD_FLR_VF_LO_ind] != 0) {
-            flr_in_prog_status |= (1 << NFD_FLR_VF_LO_ind);
-            flr_in_prog_status |= (1 << FLR_IN_PROG_BUSY_shf);
-        }
-
-        /* Handle VFs 32 to 63 */
-        flr_in_prog_vf[NFD_FLR_VF_HI_ind] =
-            (xpb_read(NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1) &
-             ~flr_sent[NFD_FLR_VF_HI_ind]);
-        if (flr_in_prog_vf[NFD_FLR_VF_HI_ind] != 0) {
-            flr_in_prog_status |= (1 << NFD_FLR_VF_HI_ind);
-            flr_in_prog_status |= (1 << FLR_IN_PROG_BUSY_shf);
-        }
+        /* Call nfd_flr.c API to update the FLR pending state */
+        nfd_flr_check_pf(PCIE_ISL, &flr_pend_status);
+        nfd_flr_check_vfs(PCIE_ISL, &flr_pend_status, flr_pend_vf);
 
         /* Acknowledge PCIe state changes */
-        flr_status = xpb_read(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT);
-        if (flr_status & NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk) {
-            flr_status &= NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk;
-            xpb_write(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT, flr_status);
+        state_change_ack = xpb_read(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT);
+        state_change_ack &= NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk;
+        if (state_change_ack) {
+            xpb_write(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT,
+                      state_change_ack);
         }
 
         /* Mark the autopush signal and xfer as used
@@ -675,11 +670,11 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
 __intrinsic int
 nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 {
-    if (bit_test(flr_in_prog_status, FLR_IN_PROG_BUSY_shf)) {
-        if (bit_test(flr_in_prog_status, NFD_FLR_PF_ind)) {
+    if (bit_test(flr_pend_status, NFD_FLR_PEND_BUSY_shf)) {
+        if (bit_test(flr_pend_status, NFD_FLR_PF_ind)) {
             /* The PF gets priority */
 
-            flr_in_prog_status &= ~(1 << NFD_FLR_PF_ind);
+            flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
 
 #if NFD_MAX_PF_QUEUES != 0
             /* Setup the parse_msg info */
@@ -694,24 +689,21 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
             /* Rewrite the CFG BAR for other components */
             nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), NFD_MAX_VFS);
 
-            /* Set FLR sent atomic */
-            nfd_flr_set_sent_pf(PCIE_ISL);
-
 #else
             /* We're not using the PF, just ACK. */
             nfd_flr_ack_pf(PCIE_ISL);
 #endif
 
-        } else if (bit_test(flr_in_prog_status, NFD_FLR_VF_LO_ind)) {
+        } else if (bit_test(flr_pend_status, NFD_FLR_VF_LO_ind)) {
             int vf;
 
-            vf = _ffs(flr_in_prog_vf[NFD_FLR_VF_LO_ind]);
+            vf = _ffs(flr_pend_vf[NFD_FLR_VF_LO_ind]);
 
             if (vf >= 0) {
-                flr_in_prog_vf[NFD_FLR_VF_LO_ind] &= ~(1 << vf);
+                flr_pend_vf[NFD_FLR_VF_LO_ind] &= ~(1 << vf);
 
             } else {
-                flr_in_prog_status &= ~(1 << NFD_FLR_VF_LO_ind);
+                flr_pend_status &= ~(1 << NFD_FLR_VF_LO_ind);
                 return -1;
             }
 
@@ -728,25 +720,22 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
                 /* Rewrite the CFG BAR for other components */
                 nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vf);
 
-                /* Set FLR sent atomic */
-                nfd_flr_set_sent_vf(PCIE_ISL, vf);
-
             } else {
 
                 /* We aren't using this VF, simply acknowledge the FLR. */
                 nfd_flr_ack_vf(PCIE_ISL, vf);
             }
 
-        } else if (bit_test(flr_in_prog_status, NFD_FLR_VF_HI_ind)) {
+        } else if (bit_test(flr_pend_status, NFD_FLR_VF_HI_ind)) {
             int vf;
 
-            vf = _ffs(flr_in_prog_vf[NFD_FLR_VF_HI_ind]);
+            vf = _ffs(flr_pend_vf[NFD_FLR_VF_HI_ind]);
 
             if (vf >= 0) {
-                flr_in_prog_vf[NFD_FLR_VF_HI_ind] &= ~(1 << vf);
+                flr_pend_vf[NFD_FLR_VF_HI_ind] &= ~(1 << vf);
 
             } else {
-                flr_in_prog_status &= ~(1 << NFD_FLR_VF_HI_ind);
+                flr_pend_status &= ~(1 << NFD_FLR_VF_HI_ind);
                 return -1;
             }
 
@@ -765,18 +754,15 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
                 /* Rewrite the CFG BAR for other components */
                 nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vf);
 
-                /* Set FLR sent atomic */
-                nfd_flr_set_sent_vf(PCIE_ISL, vf);
-
             } else {
                 /* We aren't using this VF, simply acknowledge the FLR. */
                 nfd_flr_ack_vf(PCIE_ISL, vf);
             }
 
         } else {
-            /* FLR_IN_PROG_BUSY_shf is set but we aren't actually busy
+            /* NFD_FLR_PEND_BUSY_shf is set but we aren't actually busy
              * processing an FLR.  */
-            flr_in_prog_status = 0;
+            flr_pend_status = 0;
             return -1;
         }
 
