@@ -207,10 +207,10 @@ nfd_flr_ack_pf(unsigned int pcie_isl)
                    sizeof atomic_data * NFD_FLR_PF_ind);
     atomic_data = (1 << NFD_FLR_PF_shf);
 
-    /* Issue the FLR ack and the atomic clear back to back
-     * so that they are more likely to complete simultaneously. */
-    mem_bitclr_imm(atomic_data, atomic_addr);
+    /* Issue the FLR ack and then the atomic clear.  This ensures that
+     * the atomic is set until the VF FLR in progress bit is cleared. */
     xpb_write(flr_addr, flr_data);
+    mem_bitclr_imm(atomic_data, atomic_addr);
 }
 
 
@@ -242,10 +242,10 @@ nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
     atomic_addr = (NFD_FLR_LINK(pcie_isl) + (vf / 8));
     atomic_data = 1 << (vf & (8 - 1));
 
-    /* Issue the FLR ack and the atomic clear back to back
-     * so that they are more likely to complete simultaneously. */
-    mem_bitclr_imm(atomic_data, atomic_addr);
+    /* Issue the FLR ack and then the atomic clear.  This ensures that
+     * the atomic is set until the VF FLR in progress bit is cleared. */
     xpb_write(flr_addr, flr_data);
+    mem_bitclr_imm(atomic_data, atomic_addr);
 }
 
 
