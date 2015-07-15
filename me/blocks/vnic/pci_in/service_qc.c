@@ -65,9 +65,6 @@ __intrinsic void send_interthread_sig(unsigned int dst_me, unsigned int ctx,
 void
 service_qc_setup ()
 {
-    struct nfp_em_filter_status tmp_status;
-    __cls struct event_cls_filter *tmp_event_filter;
-
 #ifdef NFD_VNIC_SIM
     /* Set QC to generate events including 8bit queue numbers.
      * The configurator performs this job on hardware. */
@@ -86,14 +83,6 @@ service_qc_setup ()
                          &qc_ap_s6, &qc_ap_s7, NFD_EVENT_DATA<<6,
                          NFD_EVENT_FILTER_START);
 
-    /* XXX temporarily setup a general last event filter to see what events
-     * we are triggering. */
-    tmp_status.__raw = 0; /* bitmask32 requires no further settings */
-    tmp_event_filter = event_cls_filter_handle(8);
-    event_cls_filter_setup(tmp_event_filter, NFP_EM_FILTER_MASK_TYPE_LASTEV,
-                           ((4 | PCIE_ISL)<<18), 0xFC0000, tmp_status);
-
-    /* XXX set all QC queues to a safe state! */
 }
 
 

@@ -76,8 +76,6 @@ main(void)
 
         /* TEMP: Mark initialisation complete */
         status |= (1<<STATUS_INIT_DONE_BIT);
-        /* TEMP: Trigger user event (easy to look for) */
-        event_cls_user_event(0x1234);
 
         NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
     } else if (ctx() == 1) {
