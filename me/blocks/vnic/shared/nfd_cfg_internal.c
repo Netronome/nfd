@@ -995,7 +995,8 @@ nfd_cfg_check_pcie_link()
 
     if (pcie_sts != NFP_PCIEX_CLOCK_RESET_CTRL_ACTIVE) {
         /* Write the raw value we read to Mailboxes for debugging purposes */
-        local_csr_write(local_csr_mailbox_0, pcie_sts_raw);
+        local_csr_write(local_csr_mailbox_0, NFD_CFG_PCIE_LINK_DOWN);
+        local_csr_write(local_csr_mailbox_1, pcie_sts_raw);
 
         /* Nothing more to do on this PCIe island, stop the ME */
         halt();

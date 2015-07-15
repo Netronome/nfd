@@ -483,6 +483,9 @@ struct nfd_out_data_batch {
 #error "Incompatible defines: Neither NFD_VNIC_PF nor NFD_VNIC_VF set"
 #endif
 
+/* NFD halt error codes */
+#define NFD_CFG_PCIE_LINK_DOWN          0x800
+
 #endif /* __NFP_LANG_MICROC */
 
 #endif /* !_BLOCKS__SHARED_NFD_INTERNAL_H_ */
