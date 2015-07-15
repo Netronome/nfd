@@ -16,9 +16,33 @@
 #include "nfd_user_cfg.h"
 
 
-/* XXX Magic number currently
- * Set to official version number before release */
-#define NFD_CFG_VERSION 0x1248
+/* /\* XXX Magic number currently */
+/*  * Set to official version number before release *\/ */
+/* #define NFD_CFG_VERSION 0x1248 */
+
+#ifndef NFD_CFG_CLASS
+/* The user hasn't specified a firmware class, so we set default class */
+#define NFD_CFG_CLASS NFD_CFG_CLASS_DEFAULT
+#endif
+
+#if NFD_CFG_CLASS == NFD_CFG_CLASS_DEFAULT
+/* Firmwares with default class must have class version 0.
+ * The behaviour of default class firmwares is fully specified by
+ * the NFD major and minor version numbers. */
+#ifndef NFD_CFG_CLASS_VERSION
+#define NFD_CFG_CLASS_VERSION   0
+#elif NFD_CFG_CLASS_VERSION != 0
+#error "NFD_CFG_CLASS_VERSION must be zero for default class firmwares"
+#endif
+#endif
+
+
+#define NFD_CFG_VERSION                         \
+    (NFD_CFG_CLASS_VER(NFD_CFG_CLASS_VERSION) | \
+     NFD_CFG_CLASS_TYPE(NFD_CFG_CLASS) |        \
+     NFD_CFG_MAJOR_VERSION(NFD_CFG_MAJOR) |     \
+     NFD_CFG_MINOR_VERSION(NFD_CFG_MINOR))
+
 
 #ifndef NFD_CFG_MAX_MTU
 #define NFD_CFG_MAX_MTU         1500

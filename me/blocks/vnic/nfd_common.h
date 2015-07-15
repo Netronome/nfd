@@ -9,6 +9,43 @@
 
 #include <nfd_user_cfg.h>
 
+
+/* NFD version number define guards */
+#ifdef NFD_CFG_MAJOR
+#error "NFD application code may not set NFD_CFG_MAJOR version number"
+#endif
+
+#ifdef NFD_CFG_MINOR
+#error "NFD application code may not set NFD_CFG_MINOR version number"
+#endif
+
+/* NFD version numbers.  Increment major version number for each incompatible
+ * ABI change.  Increment minor version number for each compatible ABI change
+ * (e.g. a new feature flag).  Reset minor version number to zero for each
+ * major version number change. */
+#define NFD_CFG_MAJOR               1
+#define NFD_CFG_MINOR               0
+#define NFD_CFG_CLASS_DEFAULT       0
+
+/* Version number helper defines */
+#define NFD_CFG_CLASS_VER_msk       0xff
+#define NFD_CFG_CLASS_VER_shf       24
+#define NFD_CFG_CLASS_VER(x)        (((x) & 0xff) << 24)
+#define NFD_CFG_CLASS_VER_of(x)     (((x) >> 24) & 0xff)
+#define NFD_CFG_CLASS_TYPE_msk      0xff
+#define NFD_CFG_CLASS_TYPE_shf      16
+#define NFD_CFG_CLASS_TYPE(x)       (((x) & 0xff) << 16)
+#define NFD_CFG_CLASS_TYPE_of(x)    (((x) >> 16) & 0xff)
+#define NFD_CFG_MAJOR_VERSION_msk   0xff
+#define NFD_CFG_MAJOR_VERSION_shf   8
+#define NFD_CFG_MAJOR_VERSION(x)    (((x) & 0xff) << 8)
+#define NFD_CFG_MAJOR_VERSION_of(x) (((x) >> 8) & 0xff)
+#define NFD_CFG_MINOR_VERSION_msk   0xff
+#define NFD_CFG_MINOR_VERSION_shf   0
+#define NFD_CFG_MINOR_VERSION(x)    (((x) & 0xff) << 0)
+#define NFD_CFG_MINOR_VERSION_of(x) (((x) >> 0) & 0xff)
+
+
 /* User define consistency checks */
 #ifndef NFD_MAX_VF_QUEUES
 #error "NFD_MAX_VF_QUEUES is not defined but is required"
@@ -29,6 +66,14 @@
 #if ((NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0))
 #error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
 #endif
+
+
+#ifdef NFD_CFG_CLASS
+#ifndef NFD_CFG_CLASS_VERSION
+#error "NFD_CFG_CLASS_VERSION must be provided if NFD_CFG_CLASS is specified"
+#endif
+#endif
+
 
 
 #define NFD_IN_DESC_SIZE        16

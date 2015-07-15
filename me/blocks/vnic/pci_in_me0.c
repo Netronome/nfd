@@ -16,7 +16,15 @@
 #include <vnic/pci_in/gather_status.c>
 #include <vnic/pci_in/notify.c>
 #include <vnic/pci_in/service_qc.c>
+#include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_cfg_internal.c>
+
+#if NFD_CFG_CLASS != NFD_CFG_CLASS_DEFAULT
+#pragma message( "Non-zero (default) NFD_CFG_CLASS set!" )
+#pragma message( "Please ensure that the above class has been correctly" )
+#pragma message( "reserved for this product." )
+#endif
+
 
 /*
  * Temporary header includes
