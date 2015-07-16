@@ -80,6 +80,7 @@ main(void)
         NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
     } else if (ctx() == 1) {
         nfd_cfg_flr_setup();
+        nfd_cfg_pcie_monitor_stop();        /* Will halt ME on ABI mismatch */
 
     } else {
         gather_setup();

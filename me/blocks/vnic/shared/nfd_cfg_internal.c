@@ -457,7 +457,6 @@ nfd_cfg_setup()
 }
 
 
-
 /**
  * Perform per PCIe island FLR event filter and autopush initialisation
  */
@@ -493,6 +492,52 @@ nfd_cfg_flr_setup()
         NFD_CFG_FLR_EVENT_FILTER,
         NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
         NFD_CFG_FLR_EVENT_FILTER);
+}
+
+
+/**
+ * Request the pcie_monitor to stop processing PCIe events from the island
+ *
+ * This function will check the pcie_monitor ABI version number, and will
+ * halt on a mismatch.  It should only be invoked after the NFD FLR autopush
+ * has been configured.
+ */
+__intrinsic void
+nfd_cfg_pcie_monitor_stop()
+{
+/* Values defined by the pcie_monitor ABI */
+#define NFP_BSP_PCIE_MON_ABI_BASE   0x4000
+#define NFP_BSP_PCIE_MON_ABI_CHK    0x50434900
+#define NFP_BSP_PCIE_MON_CTRL_BASE  0x4010
+#define NFP_BSP_PCIE_MON_ISL_STRIDE 0x4
+#define NFP_BSP_PCIE_MON_ENABLE_shf 0
+
+    unsigned int addr_hi;
+    unsigned int addr_lo;
+    __xread unsigned int chk_val;
+    SIGNAL chk_sig;
+
+    /* The pcie_monitor lives in the ARM island according to the ABI */
+    addr_hi = (unsigned long long) (__LoadTimeConstant("__addr_arm_cls")) >> 8;
+
+    /* Check for compatible pcie_monitor ABI on FW load */
+    addr_lo = NFP_BSP_PCIE_MON_ABI_BASE;
+    __asm cls[read, chk_val, addr_hi, <<8, addr_lo, 1], ctx_swap[chk_sig];
+
+    if (chk_val != NFP_BSP_PCIE_MON_ABI_CHK) {
+        /* Write the raw value we read to Mailboxes for debugging purposes */
+        local_csr_write(local_csr_mailbox_0, NFD_CFG_PCIE_MON_ABI_MISMATCH);
+        local_csr_write(local_csr_mailbox_1, chk_val);
+
+        /* We have an ABI mismatch with the pcie_monitor, halt. */
+        halt();
+    }
+
+    /* We disable the pcie_monitor by clearing a bit in ARM CLS */
+    addr_lo = (NFP_BSP_PCIE_MON_CTRL_BASE +
+               PCIE_ISL * NFP_BSP_PCIE_MON_ISL_STRIDE);
+    __asm cls[set_imm, --, addr_hi, <<8, addr_lo,   \
+              (1 << NFP_BSP_PCIE_MON_ENABLE_shf)];
 }
 
 

@@ -485,6 +485,7 @@ struct nfd_out_data_batch {
 
 /* NFD halt error codes */
 #define NFD_CFG_PCIE_LINK_DOWN          0x800
+#define NFD_CFG_PCIE_MON_ABI_MISMATCH   0x801
 
 #endif /* __NFP_LANG_MICROC */
 
