@@ -49,6 +49,8 @@ struct _input_batch {
  */
 extern __shared __lmem struct nfd_out_queue_info *queue_data;
 
+extern __shared __lmem unsigned int nfd_out_fl_u[NFD_OUT_MAX_QUEUES];
+
 
 /*
  * Rings and queues
@@ -89,6 +91,8 @@ __shared __gpr unsigned int full_cnt1 = 0;
 
 unsigned int next_ctx;
 
+unsigned int nfd_out_fl_u_base;
+
 
 
 /**
@@ -122,6 +126,8 @@ stage_batch_setup()
 
     /* Initialise the "next_ctx" message used for ordering signals. */
     next_ctx = reorder_get_next_ctx(NFD_OUT_STAGE_START_CTX);
+
+    nfd_out_fl_u_base = (unsigned int) nfd_out_fl_u;
 }
 
 
@@ -134,6 +140,9 @@ stage_batch_setup()
  * must be zero when received from the app.  Currently a separate up bit
  * is set if the queue is up.  This will allow the data DMA(s) to go to
  * the host.  The buffer is always freed whether the queue is down or not.
+ *
+ * *l$index1 is used to access the FL_U values, and *l$index2 to access
+ * the queue_data for the queue.
  */
 /* XXX unclear why we can't accessin_batch.pkt3.rxd.__raw[0] in ASM  */
 #define _STAGE_BATCH_PROC(_pkt, _num)                                   \
@@ -144,6 +153,9 @@ do {                                                                    \
                     >>NFD_OUT_RX_DESC_QUEUE_shf] }                      \
         __asm { alu[queue_ptr, --, b, queue, <<NFD_OUT_QUEUE_INFO_SZ_lg2] } \
         __asm { local_csr_wr[active_lm_addr_2, queue_ptr] }             \
+        __asm { alu[queue_ptr, --, b, queue, <<2] }                     \
+        __asm { alu[queue_ptr, nfd_out_fl_u_base, +, queue_ptr] }       \
+        __asm { local_csr_wr[active_lm_addr_1, queue_ptr] }             \
         __asm { br_inp_state[nn_full, sb_full1##_pkt##_num] }           \
     sb_cont1##_pkt##_num:                                               \
                                                                         \
@@ -156,9 +168,8 @@ do {                                                                    \
         __asm { alu[up, 1, AND, *l$index2[NFD_OUT_QUEUE_INFO_BITFIELD], \
                     >>NFD_OUT_QUEUE_INFO_UP_shf] }                      \
         __asm { alu[stage_info, (NFD_OUT_FL_BUFS_PER_QUEUE - 1), and,   \
-                    *l$index2[NFD_OUT_QUEUE_INFO_FLU]] }                \
-        __asm { alu[*l$index2[NFD_OUT_QUEUE_INFO_FLU],                  \
-                    *l$index2[NFD_OUT_QUEUE_INFO_FLU], +, up] }         \
+                    *l$index1] }                                        \
+        __asm { alu[*l$index1, *l$index1, +, up] }                      \
         __asm { ld_field[stage_info, 8,                                 \
                          *l$index2[NFD_OUT_QUEUE_INFO_BITFIELD],        \
                          >>(NFD_OUT_QUEUE_INFO_RID_shf -                \

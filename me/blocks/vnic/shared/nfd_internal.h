@@ -246,7 +246,7 @@ struct nfd_out_queue_info {
     unsigned int ring_base_hi:8;
     unsigned int ring_base_lo;
     unsigned int fl_a;
-    unsigned int fl_u;
+    unsigned int rx_s;
     unsigned int rx_w;
 };
 

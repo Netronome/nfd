@@ -63,6 +63,11 @@ __visible volatile SIGNAL nfd_out_cache_bmsk_sig;
 
 NFD_OUT_ACTIVE_BMSK_DECLARE;
 
+#define NFD_OUT_WIP_STAGE_BATCH
+#ifdef NFD_OUT_WIP_STAGE_BATCH
+__shared __lmem unsigned int nfd_out_fl_u[NFD_OUT_MAX_QUEUES];
+#endif
+
 
 /*
  * Memory for PCI.OUT
@@ -297,8 +302,12 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;
         queue_data[bmsk_queue].ring_base_lo = ring_base[0];
         queue_data[bmsk_queue].fl_a = 0;
-        queue_data[bmsk_queue].fl_u = 0;
+        queue_data[bmsk_queue].rx_s = 0;
         queue_data[bmsk_queue].rx_w = 0;
+
+#ifdef NFD_OUT_WIP_STAGE_BATCH
+        nfd_out_fl_u[bmsk_queue] = 0;
+#endif
 
         /* Reset credits */
         _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue, NFD_OUT_ATOMICS_SZ);
@@ -329,8 +338,12 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].fl_s = 0;
         queue_data[bmsk_queue].up = 0;
         queue_data[bmsk_queue].fl_a = 0;
-        queue_data[bmsk_queue].fl_u = 0;
+        queue_data[bmsk_queue].rx_s = 0;
         queue_data[bmsk_queue].rx_w = 0;
+
+#ifdef NFD_OUT_WIP_STAGE_BATCH
+        nfd_out_fl_u[bmsk_queue] = 0;
+#endif
 
         /* Reset credits */
         _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue, NFD_OUT_ATOMICS_SZ);
@@ -687,7 +700,7 @@ _start_send(__gpr unsigned int *queue)
     SIGNAL atomic_sig;
     SIGNAL dma_sig;
     SIGNAL_MASK dma_sig_msk = 0;
-    unsigned int rx_w;
+    unsigned int rx_s;
     __xwrite struct nfp_pcie_dma_cmd descr;
 
 
@@ -702,10 +715,10 @@ _start_send(__gpr unsigned int *queue)
     /* Check that the queue is up and abort processing if down,
      * clearing state */
     if (queue_data[*queue].up) {
-        /* Check whether rx_w can be advanced */
-        rx_w = queue_data[*queue].rx_w;
-        if (rx_w != dma_done) {
-            unsigned int rx_w_max;
+        /* Check whether rx_s can be advanced */
+        rx_s = queue_data[*queue].rx_s;
+        if (rx_s != dma_done) {
+            unsigned int rx_s_max;
             int dma_batch_correction;
             unsigned int dma_batch;
             unsigned int pcie_addr_off;
@@ -719,23 +732,23 @@ _start_send(__gpr unsigned int *queue)
 
             /*
              * Compute the DMA batch size, strategy:
-             * Round rx_w up to the next NFD_OUT_DESC_MAX_BATCH_SZ multiple
-             * (1024B multiple).  This provides rx_w_max.  We then compute the
-             * dma_batch that would produce this rx_w.  Subtracting the
-             * rx_w_max from dma_done produces a correction value.
+             * Round rx_s up to the next NFD_OUT_DESC_MAX_BATCH_SZ multiple
+             * (1024B multiple).  This provides rx_s_max.  We then compute the
+             * dma_batch that would produce this rx_s.  Subtracting the
+             * rx_s_max from dma_done produces a correction value.
              * If positive or zero, leave dma_batch unchanged.  If negative,
-             * correct rx_w and dma_batch by adding the negative error.
+             * correct rx_s and dma_batch by adding the negative error.
              */
-            rx_w_max = NFD_OUT_DESC_MAX_BATCH_SZ + rx_w;
-            rx_w_max &= ~(NFD_OUT_DESC_MAX_BATCH_SZ - 1);
-            dma_batch_correction = dma_done - rx_w_max;
+            rx_s_max = NFD_OUT_DESC_MAX_BATCH_SZ + rx_s;
+            rx_s_max &= ~(NFD_OUT_DESC_MAX_BATCH_SZ - 1);
+            dma_batch_correction = dma_done - rx_s_max;
             dma_batch = (NFD_OUT_DESC_MAX_BATCH_SZ -
-                         (rx_w & (NFD_OUT_DESC_MAX_BATCH_SZ - 1)));
+                         (rx_s & (NFD_OUT_DESC_MAX_BATCH_SZ - 1)));
             if (dma_batch_correction < 0) {
                 dma_batch += dma_batch_correction;
             }
 
-            pcie_addr_off = rx_w & queue_data[*queue].ring_sz_msk;
+            pcie_addr_off = rx_s & queue_data[*queue].ring_sz_msk;
             pcie_addr_off = pcie_addr_off * sizeof(struct nfd_out_rx_desc);
 
             /* Complete descriptor */
@@ -745,15 +758,15 @@ _start_send(__gpr unsigned int *queue)
             rx_descr_tmp.pcie_addr_lo = (queue_data[*queue].ring_base_lo +
                                          pcie_addr_off);
             rx_descr_tmp.cpp_addr_lo =
-                cache_desc_compute_fl_addr(queue, rx_w);
+                cache_desc_compute_fl_addr(queue, rx_s);
             rx_descr_tmp.rid = queue_data[*queue].requester_id;
             /* Can replace with ld_field instruction if 8bit seqn is enough */
             pcie_dma_set_event(&rx_descr_tmp, NFD_OUT_DESC_EVENT_TYPE,
                                desc_dma_issued);
             descr = rx_descr_tmp;
 
-            /* Increment rx_w and desc_dma_pkts_served */
-            rx_w += dma_batch;
+            /* Increment rx_s and desc_dma_pkts_served */
+            rx_s += dma_batch;
             desc_dma_pkts_issued += dma_batch;
 
             /* Add batch message to LM queue
@@ -773,7 +786,7 @@ _start_send(__gpr unsigned int *queue)
 
         /* Adjust the queue pending flag if necessary.
          * "pending" is set if our previous read still shows work to do. */
-        if (rx_w == dma_done) {
+        if (rx_s == dma_done) {
             clear_queue(queue, &pending_bmsk);
         } else {
             set_queue(queue, &pending_bmsk);
@@ -781,18 +794,18 @@ _start_send(__gpr unsigned int *queue)
 
         /* Flag the queue urgent if necessary.  This provides feedback to
          * cache_desc about which queues have been used. */
-        if (queue_data[*queue].fl_a - rx_w < NFD_OUT_FL_SOFT_THRESH) {
+        if (queue_data[*queue].fl_a - rx_s < NFD_OUT_FL_SOFT_THRESH) {
             set_queue(queue, &urgent_bmsk);
 
-            if (queue_data[*queue].fl_a == rx_w) {
+            if (queue_data[*queue].fl_a == rx_s) {
                 /* We don't have any credits cached for this queue,
                  * so can't receive any more packets from it. */
                 clear_queue(queue, &cached_bmsk);
             }
         }
 
-        /* Write back the rx_w value to LM */
-        queue_data[*queue].rx_w = rx_w;
+        /* Write back the rx_s value to LM */
+        queue_data[*queue].rx_s = rx_s;
 
     } else {
         /* The queue is down.  Clear the cached and pending state so that
@@ -910,6 +923,7 @@ send_desc_complete_send()
             send_msg = rx_desc_pending[pending_slot];
 
             /* Increment sent counters */
+            queue_data[send_msg.queue].rx_w += send_msg.count;
             _add_imm(NFD_OUT_CREDITS_BASE, send_msg.queue, send_msg.count,
                      NFD_OUT_ATOMICS_SENT);
             desc_dma_pkts_served += send_msg.count;
