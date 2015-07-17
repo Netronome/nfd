@@ -422,6 +422,12 @@ struct nfd_out_issue_rx_desc {
 #define NFD_OUT_RX_DESC_QUEUE_msk   0x3f
 #define NFD_OUT_RX_DESC_QUEUE_shf   16
 
+#define NFD_OUT_RX_INDEX0           0
+#define NFD_OUT_RX_INDEX1           2
+#define NFD_OUT_RX_INDEX2           4
+#define NFD_OUT_RX_INDEX3           6
+
+
 struct nfd_out_stage_info {
     union {
         struct {
@@ -438,6 +444,11 @@ struct nfd_out_stage_info {
 #define NFD_OUT_STAGE_INFO_UP_shf    16
 #define NFD_OUT_STAGE_INFO_RID_msk   0xff
 #define NFD_OUT_STAGE_INFO_RID_shf   24
+
+#define NFD_OUT_SB_INDEX0           1
+#define NFD_OUT_SB_INDEX1           3
+#define NFD_OUT_SB_INDEX2           5
+#define NFD_OUT_SB_INDEX3           7
 
 
 /**

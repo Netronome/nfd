@@ -55,12 +55,28 @@ struct _cpp_desc_batch {
     struct nfd_out_cpp_desc_ring pkt3;
 };
 
+/* This can't fit into _cpp_desc_batch as we use indexed addressing
+ * with unrestricted addressing on the CPP descriptor */
+struct _rx_desc_batch {
+    struct nfd_out_issue_rx_desc rx0;
+    struct nfd_out_stage_info sb0;
+    struct nfd_out_issue_rx_desc rx1;
+    struct nfd_out_stage_info sb1;
+    struct nfd_out_issue_rx_desc rx2;
+    struct nfd_out_stage_info sb2;
+    struct nfd_out_issue_rx_desc rx3;
+    struct nfd_out_stage_info sb3;
+};
+
 
 /*
  * Rings and queues
  */
 static __shared __lmem struct _cpp_desc_batch
     cpp_desc_ring[NFD_OUT_CPP_BATCH_RING_BAT];
+
+static __shared __lmem struct _rx_desc_batch
+    rx_desc_ring[NFD_OUT_CPP_BATCH_RING_BAT];
 
 /*
  * Sequence numbers
@@ -89,7 +105,7 @@ __shared __gpr unsigned int empty_cnt1 = 0;
 /*
  * issue_dma variables
  */
-static __shared __gpr struct nfp_pcie_dma_cmd descr_tmp; /* TEMP, xfer limits */
+static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 static __xwrite struct _dma_desc_batch dma_out_main;
 static __xwrite struct _dma_desc_batch dma_out_resv;
 
@@ -103,6 +119,7 @@ static __shared __gpr unsigned int ctm_cpp_lo_msk =
 static SIGNAL data_sig0, data_sig1, data_sig2, data_sig3;
 static SIGNAL_MASK data_wait_msk = 0;
 static SIGNAL fl_sig0,  fl_sig1,  fl_sig2,  fl_sig3;
+static SIGNAL rx_sig0,  rx_sig1,  rx_sig2,  rx_sig3;
 static SIGNAL_MASK fl_wait_msk = 0;
 
 SIGNAL get_order_sig, issue_order_sig;
@@ -248,6 +265,7 @@ issue_dma_setup()
     /* Expect a full batch by default */
     data_wait_msk = __signals(&get_order_sig);
     fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
+                            &rx_sig0, &rx_sig1, &rx_sig2, &rx_sig3,
                             &issue_order_sig);
 
     next_ctx = reorder_get_next_ctx(NFD_OUT_ISSUE_START_CTX);
@@ -361,14 +379,18 @@ distr_seqn()
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     unsigned int ctm_msg;                                               \
+    struct nfd_out_issue_rx_desc rxd;                                   \
+    struct nfd_out_stage_info sbd;                                      \
                                                                         \
+    __asm { alu[rxd, --, b, *l$index1[NFD_OUT_RX_INDEX##_pkt]] }        \
+    __asm { alu[sbd, --, b, *l$index1[NFD_OUT_SB_INDEX##_pkt]] }        \
     __asm { alu[ctm_msg, --, b, *l$index2[NFD_OUT_CPP_CTM_INDEX##_pkt]] } \
-    if (sbd##_pkt.up) {                                                 \
+    if (sbd.up) {                                                       \
         unsigned int ctm_hi;                                            \
                                                                         \
         if (ctm_msg & (1<< NFD_OUT_CPP_CTM_CTM_ONLY_shf)) {             \
             __critical_path();                                          \
-            descr_tmp.rid = sbd##_pkt.rid;                              \
+            descr_tmp.rid = sbd.rid;                                    \
             descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;      \
                                                                         \
             ctm_hi = 0x80 | (ctm_msg >> NFD_OUT_CPP_CTM_ISL_shf);       \
@@ -384,9 +406,9 @@ do {                                                                    \
                                                                         \
             descr_tmp.pcie_addr_lo = fl_entries[_pkt].dma_addr_lo;      \
             descr_tmp.pcie_addr_lo += NFP_NET_RX_OFFSET;                \
-            descr_tmp.pcie_addr_lo -= rx_desc##_pkt.meta_len;           \
+            descr_tmp.pcie_addr_lo -= rxd.meta_len;                     \
                                                                         \
-            descr_tmp.length = rx_desc##_pkt##.data_len - 1;            \
+            descr_tmp.length = rxd.data_len - 1;                        \
             pcie_dma_set_event(&descr_tmp, _type, _src);                \
                                                                         \
             dma_out_main.pkt##_pkt = descr_tmp;                         \
@@ -403,13 +425,13 @@ do {                                                                    \
             msg.cpp.__raw[0] = ctm_msg;                                 \
             __asm { alu[msg.cpp.__raw[1], --, b,                        \
                         *l$index2[NFD_OUT_CPP_MU_INDEX##_pkt]] }        \
-            descr_tmp.rid = sbd##_pkt.rid;                              \
+            descr_tmp.rid = sbd.rid;                                    \
             descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;      \
                                                                         \
-            data_len = rx_desc##_pkt##.data_len;                        \
+            data_len = rxd.data_len;                                    \
             pcie_lo_start = fl_entries[_pkt].dma_addr_lo;               \
             pcie_lo_start += NFP_NET_RX_OFFSET;                         \
-            pcie_lo_start -= rx_desc##_pkt.meta_len;                    \
+            pcie_lo_start -= rxd.meta_len;                              \
                                                                         \
             ctm_hi = msg.cpp.isl;                                       \
             if (ctm_hi == 0) {                                          \
@@ -671,6 +693,7 @@ do {                                                                 \
 #define _GET_MSG(_pkt)                                                  \
 do {                                                                    \
     unsigned int count = sizeof(struct nfd_out_fl_desc) >> 3;           \
+    unsigned int queue;                                                 \
                                                                         \
     /* Stage batch may head of line block, while enqueuing */           \
     /* a message batch, so while dequeuing we must also */              \
@@ -683,16 +706,24 @@ do {                                                                    \
                                                                         \
     __asm { alu[*l$index2[NFD_OUT_CPP_CTM_INDEX##_pkt], --, b, *n$index++] } \
     __asm { alu[*l$index2[NFD_OUT_CPP_MU_INDEX##_pkt], --, b, *n$index++] } \
-    __asm { alu[rx_desc##_pkt, --, b, *n$index] }                       \
+    __asm { alu[*l$index1[NFD_OUT_RX_INDEX##_pkt], --, b, *n$index] }   \
     rx_descs[_pkt].__raw[0] = nn_ring_get();                            \
     rx_descs[_pkt].__raw[1] = nn_ring_get();                            \
-    sbd##_pkt.__raw = nn_ring_get();                                    \
-    fl_cache_index = sbd##_pkt.seqn_num * sizeof(struct nfd_out_fl_desc); \
-    fl_cache_index |= rx_desc##_pkt.queue * NFD_OUT_FL_SZ_PER_QUEUE;    \
+    __asm { alu[*l$index1[NFD_OUT_SB_INDEX##_pkt], --, b, *n$index++] } \
+    __asm { ld_field_w_clr[fl_cache_index, 3,                           \
+                           *l$index1[NFD_OUT_SB_INDEX##_pkt]] }         \
+    fl_cache_index = fl_cache_index * sizeof(struct nfd_out_fl_desc);   \
+    __asm { alu[queue, NFD_OUT_RX_DESC_QUEUE_msk, and,                  \
+                *l$index1[NFD_OUT_RX_INDEX##_pkt],                      \
+                >>NFD_OUT_RX_DESC_QUEUE_shf] }                          \
+    fl_cache_index |= queue * NFD_OUT_FL_SZ_PER_QUEUE;                  \
     fl_cache_index |= fl_cache_mem_addr_lo;                             \
-    __asm { mem[read, fl_entries[_pkt], 0, fl_cache_index,              \
+    __asm { mem[read, fl_entries + (8 * _pkt), 0, fl_cache_index,       \
                 __ct_const_val(count)], sig_done[fl_sig##_pkt] }        \
+    __asm { mem[write, rx_descs + (8 * _pkt), 0, fl_cache_index,        \
+                __ct_const_val(count)], sig_done[rx_sig##_pkt] }        \
 } while (0)
+
 
 
 /**
@@ -703,7 +734,7 @@ do {                                                                    \
 do {                                                                \
     __asm { alu[*l$index2[NFD_OUT_CPP_CTM_INDEX##_pkt], --, b, 0] } \
     __asm { alu[*l$index2[NFD_OUT_CPP_MU_INDEX##_pkt], --, b, 0] }  \
-    fl_wait_msk &= ~__signals(&fl_sig##_pkt);                       \
+    fl_wait_msk &= ~__signals(&fl_sig##_pkt, &rx_sig##_pkt);        \
 } while (0)
 
 
@@ -721,8 +752,7 @@ issue_dma()
     struct nfd_out_data_batch_msg msg;
     unsigned int n_bat;
     unsigned int cpp_index;
-    struct nfd_out_issue_rx_desc rx_desc0, rx_desc1, rx_desc2, rx_desc3;
-    struct nfd_out_stage_info sbd0, sbd1, sbd2, sbd3;
+    unsigned int rx_index;
     unsigned int fl_cache_index;
 
     /* Start of "get" order stage */
@@ -739,8 +769,10 @@ issue_dma()
         cpp_index = (data_dma_seq_started &
                      (NFD_OUT_CPP_BATCH_RING_BAT - 1));
         data_dma_seq_started++;
+        rx_index = (unsigned int) &rx_desc_ring[cpp_index];
         cpp_index = (unsigned int) &cpp_desc_ring[cpp_index];
         local_csr_write(local_csr_active_lm_addr_2, cpp_index);
+        local_csr_write(local_csr_active_lm_addr_1, rx_index);
 
         data_wait_msk = __signals(&data_sig0, &data_sig1, &data_sig2,
                                   &data_sig3, &get_order_sig);
@@ -763,9 +795,14 @@ issue_dma()
                 __implicit_read(&fl_sig1);
                 __implicit_read(&fl_sig2);
                 __implicit_read(&fl_sig3);
+                __implicit_read(&rx_sig0);
+                __implicit_read(&rx_sig1);
+                __implicit_read(&rx_sig2);
+                __implicit_read(&rx_sig3);
                 __implicit_read(&issue_order_sig);
 
                 fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
+                                        &rx_sig0, &rx_sig1, &rx_sig2, &rx_sig3,
                                         &issue_order_sig);
 
                 data_dma_seq_issued++;
@@ -791,9 +828,14 @@ issue_dma()
                 __implicit_read(&fl_sig1);
                 __implicit_read(&fl_sig2);
                 __implicit_read(&fl_sig3);
+                __implicit_read(&rx_sig0);
+                __implicit_read(&rx_sig1);
+                __implicit_read(&rx_sig2);
+                __implicit_read(&rx_sig3);
                 __implicit_read(&issue_order_sig);
 
                 fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
+                                        &rx_sig0, &rx_sig1, &rx_sig2, &rx_sig3,
                                         &issue_order_sig);
 
                 data_dma_seq_issued++;
@@ -819,9 +861,14 @@ issue_dma()
                 __implicit_read(&fl_sig1);
                 __implicit_read(&fl_sig2);
                 __implicit_read(&fl_sig3);
+                __implicit_read(&rx_sig0);
+                __implicit_read(&rx_sig1);
+                __implicit_read(&rx_sig2);
+                __implicit_read(&rx_sig3);
                 __implicit_read(&issue_order_sig);
 
                 fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
+                                        &rx_sig0, &rx_sig1, &rx_sig2, &rx_sig3,
                                         &issue_order_sig);
 
                 data_dma_seq_issued++;
@@ -852,9 +899,14 @@ issue_dma()
             __implicit_read(&fl_sig1);
             __implicit_read(&fl_sig2);
             __implicit_read(&fl_sig3);
+            __implicit_read(&rx_sig0);
+            __implicit_read(&rx_sig1);
+            __implicit_read(&rx_sig2);
+            __implicit_read(&rx_sig3);
             __implicit_read(&issue_order_sig);
 
             fl_wait_msk = __signals(&fl_sig0, &fl_sig1, &fl_sig2, &fl_sig3,
+                                    &rx_sig0, &rx_sig1, &rx_sig2, &rx_sig3,
                                     &issue_order_sig);
 
             data_dma_seq_issued++;
