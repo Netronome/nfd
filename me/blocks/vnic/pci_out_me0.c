@@ -39,16 +39,17 @@ main(void)
 
         cache_desc_status_setup();
 
-        /* This method must complete before stage_batch may run.
-         * (stage_batch permits issue_dma and send_desc to go.) */
-        compute_seqn_setup_shared();
-
-        send_desc_setup_shared();
-
         /* CTX 1-7 will stall until this starts ordering stages */
         stage_batch_setup_shared();
 
         NFD_INIT_DONE_SET(PCIE_ISL, 0);     /* XXX Remove? */
+    } else if (ctx() == 1) {
+        send_desc_setup_shared();
+
+        /* send_desc uses cache_desc_compute_fl_addr
+         * as a service function */
+        cache_desc_setup();
+
     } else {
         /* These methods do not have dependencies on the
          * setup_shared() methods. */
@@ -56,7 +57,6 @@ main(void)
 
         stage_batch_setup();
 
-        send_desc_setup();
     }
 
     /*
@@ -65,15 +65,12 @@ main(void)
     if (ctx() == 0) {
         /* CTX0 main loop */
         for (;;) {
-            /* cache_desc(); */
             cache_desc_complete_fetch(); /* Swaps once */
 
             cache_desc_check_urgent(); /* Swaps at least once */
 
             cache_desc_status();
             ctx_swap();
-
-            compute_seqn(); /* Swaps once */
 
             cache_desc_check_active(); /* Swaps at least once */
 
@@ -101,6 +98,19 @@ main(void)
             /* Yield thread */
             ctx_swap();
         }
+     } else if (ctx() == 1) {
+        for (;;) {
+            /* CTX1 main loop */
+            send_desc_complete_send();  /* Swaps once */
+
+            send_desc_check_cached();   /* Swaps at least once */
+
+            send_desc_check_cached();   /* Swaps at least once */
+
+            send_desc_check_pending();   /* Swaps at least once */
+
+            /* ctx_swap(); */
+        }
     } else {
         /* Worker main loop */
         for (;;) {
@@ -108,15 +118,8 @@ main(void)
              * has completed. */
             stage_batch();
 
-            /* This method won't start until stage_batch has
-             * processed a batch. */
-            send_desc();
-
-            /* This method won't start until a send_desc batch has completed */
-            inc_sent();
-
-            /* /\* Yield thread *\/ */
-            /* ctx_swap(); */
+            /* Yield thread */
+            ctx_swap();
         }
     }
 }

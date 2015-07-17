@@ -96,7 +96,7 @@
 #define NFD_OUT_FL_BATCH_SZ             32   /* Match configured watermark! */
 
 
-#define NFD_OUT_STAGE_START_CTX         1
+#define NFD_OUT_STAGE_START_CTX         2
 #define NFD_OUT_STAGE_WAIT_CYCLES       200
 #define NFD_OUT_ISSUE_START_CTX         1
 
@@ -113,6 +113,7 @@
 #define NFD_OUT_DATA_MAX_IN_FLIGHT      64
 #define NFD_OUT_RESV_MAX_IN_FLIGHT      64
 #define NFD_OUT_DESC_MAX_IN_FLIGHT      64
+#define NFD_OUT_DESC_MAX_BATCH_SZ       128
 
 #define NFD_OUT_MAX_RESV_PER_PKT        3
 
@@ -138,7 +139,6 @@
 #define NFD_OUT_DMA_SPLIT_MIN           2048    /* XXX optimise */
 
 /* Ring defines */
-#define NFD_OUT_DESC_BATCH_RING_BAT     128
 #define NFD_OUT_CPP_BATCH_RING_BAT      64
 
 /* Debug defines */
@@ -289,39 +289,6 @@ struct nfd_out_fl_desc {
     };
 };
 
-
-/**
- * Message format used between "stage_batch" and "send_desc"
- * "num" provides the number of packets in this batch.  RX descriptors
- * are only DMA'ed if "send_pktX" is set.
- */
-struct nfd_out_desc_batch_msg {
-    union {
-        struct {
-            unsigned int send_pkt0:1;
-            unsigned int send_pkt1:1;
-            unsigned int send_pkt2:1;
-            unsigned int send_pkt3:1;
-            unsigned int queue_pkt0:6;
-            unsigned int queue_pkt1:6;
-            unsigned int queue_pkt2:6;
-            unsigned int queue_pkt3:6;
-            unsigned int num:4;
-        };
-        unsigned int __raw;
-    };
-};
-
-#define NFD_OUT_DESC_SEND_PKT0_shf  31
-#define NFD_OUT_DESC_SEND_PKT1_shf  30
-#define NFD_OUT_DESC_SEND_PKT2_shf  29
-#define NFD_OUT_DESC_SEND_PKT3_shf  28
-#define NFD_OUT_DESC_QUEUE_PKT0_shf 22
-#define NFD_OUT_DESC_QUEUE_PKT1_shf 16
-#define NFD_OUT_DESC_QUEUE_PKT2_shf 10
-#define NFD_OUT_DESC_QUEUE_PKT3_shf 4
-#define NFD_OUT_DESC_QUEUE_msk      0x3f
-#define NFD_OUT_DESC_NUM_msk        0xf
 
 /**
  * Batch header used on the "stage_batch" to "issue_dma" NN ring
@@ -477,6 +444,17 @@ struct nfd_out_data_batch {
     struct nfd_out_data_dma_info pkt3;
 };
 
+
+struct nfd_out_send_desc_msg {
+    union {
+        struct {
+            unsigned int spare:16;         /* Unused */
+            unsigned int count:8;          /* Number of descriptors sent */
+            unsigned int queue:8;          /* Queue serviced */
+        };
+        unsigned int __raw;
+    };
+};
 
 #if defined(__NFP_LANG_MICROC)
 

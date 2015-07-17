@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <nfp.h>
 
+#include <nfp/me.h>
 #include <nfp/pcie.h>
 #include <std/event.h>
 
@@ -90,6 +91,29 @@ __export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_SZ_PER_QUEUE)
     fl_cache_mem[NFD_OUT_MAX_QUEUES][NFD_OUT_FL_BUFS_PER_QUEUE];
 
 static __gpr unsigned int fl_cache_mem_addr_lo;
+
+
+/*
+ * send_desc variables
+ */
+__shared __lmem struct nfd_out_send_desc_msg
+    rx_desc_pending[NFD_OUT_DESC_MAX_IN_FLIGHT];
+
+__gpr unsigned int rx_desc_mem_addr_lo;
+__gpr unsigned int inc_sent_msg_addr;
+
+static __gpr struct nfp_pcie_dma_cmd rx_descr_tmp;
+__shared __gpr unsigned int desc_dma_issued = 0;
+__shared __gpr unsigned int desc_dma_compl = 0;
+__shared __gpr unsigned int desc_dma_served = 0;
+__shared __gpr unsigned int desc_dma_pkts_issued = 0;
+__shared __gpr unsigned int desc_dma_pkts_served = 0;
+
+static volatile __xread unsigned int desc_dma_event_xfer;
+static SIGNAL desc_dma_event_sig;
+
+__shared __gpr struct qc_bitmask cached_bmsk;
+__shared __gpr struct qc_bitmask pending_bmsk;
 
 
 /*
@@ -293,9 +317,11 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
          * - Clear tx_w and tx_s
          * - Try to count pending packets? Host responsibility? */
 
-        /* Clear active and urgent bitmask bits */
+        /* Clear all bitmask bits */
         clear_queue(&bmsk_queue, &active_bmsk);
         clear_queue(&bmsk_queue, &urgent_bmsk);
+        clear_queue(&bmsk_queue, &cached_bmsk);
+        clear_queue(&bmsk_queue, &pending_bmsk);
 
         /* Clear queue LM state */
         /* XXX check what is required for recycling host buffers */
@@ -454,7 +480,7 @@ _fetch_fl(__gpr unsigned int *queue)
 void
 _complete_fetch()
 {
-    unsigned int queue_c;
+    __gpr unsigned int queue_c;
     unsigned int pending_slot;
 
     if (signal_test(&fl_cache_event_sig)) {
@@ -487,6 +513,9 @@ _complete_fetch()
              * NB: If NFP cached credits are not used, there is nothing to
              * fill the LM pointer usage slots */
             queue_data[queue_c].fl_a += NFD_OUT_FL_BATCH_SZ;
+
+            /* Set the queue in the cached_bmsk for send_desc */
+            set_queue(&queue_c, &cached_bmsk);
         }
     } else {
         /* Swap to give other threads a chance to run */
@@ -595,4 +624,299 @@ cache_desc_compute_fl_addr(__gpr unsigned int *queue, unsigned int seq)
     ret |= fl_cache_mem_addr_lo;
 
     return ret;
+}
+
+
+
+
+/**
+ * Perform once off, CTX0-only initialisation of the send_desc DMA config
+ */
+void
+send_desc_setup_shared()
+{
+    struct pcie_dma_cfg_one cfg;
+
+    /* Zero bitmasks */
+    init_bitmasks(&cached_bmsk);
+    init_bitmasks(&pending_bmsk);
+
+    dma_seqn_ap_setup(NFD_OUT_DESC_EVENT_FILTER, NFD_OUT_DESC_EVENT_FILTER,
+                      NFD_OUT_DESC_EVENT_TYPE, &desc_dma_event_xfer,
+                      &desc_dma_event_sig);
+
+    /*
+     * Set up RX_FL_CFG_REG DMA Config Register
+     */
+    cfg.__raw = 0;
+#ifdef NFD_VNIC_NO_HOST
+    /* Use signal_only for seqn num generation
+     * Don't actually DMA data */
+    cfg.signal_only = 1;
+#else
+    cfg.signal_only = 0;
+#endif
+    cfg.end_pad     = 0;
+    cfg.start_pad   = 0;
+    /* Ordering settings? */
+    cfg.target_64   = 1;
+    cfg.cpp_target  = 7;
+    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DESC_CFG_REG, cfg);
+
+    /*
+     * Initialise a DMA descriptor template
+     * RequesterID (rid), CPP address, and PCIe address and length
+     * will be overwritten per transaction.
+     * For dma_mode, we technically only want to overwrite the "source"
+     * field, i.e. 12 of the 16 bits.
+     */
+    rx_descr_tmp.rid_override = 1;
+    rx_descr_tmp.trans_class = 0;
+    rx_descr_tmp.cpp_token = 0;
+    rx_descr_tmp.dma_cfg_index = NFD_OUT_DESC_CFG_REG;
+    /* cpp_addr_hi = 0 will target local CTM, as desired. */
+    rx_descr_tmp.cpp_addr_hi = 0;
+}
+
+
+__intrinsic void
+_start_send(__gpr unsigned int *queue)
+{
+    __xread unsigned int dma_done;
+    unsigned int atomic_addr;
+    SIGNAL atomic_sig;
+    SIGNAL dma_sig;
+    SIGNAL_MASK dma_sig_msk = 0;
+    unsigned int rx_w;
+    __xwrite struct nfp_pcie_dma_cmd descr;
+
+
+    /* Read DMA done atomic */
+    /* If we have picked a queue to service, we always read its atomics.
+     * The queue may be down, or go down after we issue the read.  In either
+     * case, we will unflag its state so that it doesn't get checked again. */
+    atomic_addr = (*queue * NFD_OUT_ATOMICS_SZ) | NFD_OUT_ATOMICS_DMA_DONE;
+    __asm mem[atomic_read, dma_done, 0, atomic_addr, 1], ctx_swap[atomic_sig];
+
+
+    /* Check that the queue is up and abort processing if down,
+     * clearing state */
+    if (queue_data[*queue].up) {
+        /* Check whether rx_w can be advanced */
+        rx_w = queue_data[*queue].rx_w;
+        if (rx_w != dma_done) {
+            unsigned int rx_w_max;
+            int dma_batch_correction;
+            unsigned int dma_batch;
+            unsigned int pcie_addr_off;
+            unsigned int dma_length;
+            unsigned int pending_slot;
+            struct nfd_out_send_desc_msg send_msg;
+
+            /* Increment desc_dma_issued upfront
+             * to avoid ambiguity about sequence number zero */
+            desc_dma_issued++;
+
+            /*
+             * Compute the DMA batch size, strategy:
+             * Round rx_w up to the next NFD_OUT_DESC_MAX_BATCH_SZ multiple
+             * (1024B multiple).  This provides rx_w_max.  We then compute the
+             * dma_batch that would produce this rx_w.  Subtracting the
+             * rx_w_max from dma_done produces a correction value.
+             * If positive or zero, leave dma_batch unchanged.  If negative,
+             * correct rx_w and dma_batch by adding the negative error.
+             */
+            rx_w_max = NFD_OUT_DESC_MAX_BATCH_SZ + rx_w;
+            rx_w_max &= ~(NFD_OUT_DESC_MAX_BATCH_SZ - 1);
+            dma_batch_correction = dma_done - rx_w_max;
+            dma_batch = (NFD_OUT_DESC_MAX_BATCH_SZ -
+                         (rx_w & (NFD_OUT_DESC_MAX_BATCH_SZ - 1)));
+            if (dma_batch_correction < 0) {
+                dma_batch += dma_batch_correction;
+            }
+
+            pcie_addr_off = rx_w & queue_data[*queue].ring_sz_msk;
+            pcie_addr_off = pcie_addr_off * sizeof(struct nfd_out_rx_desc);
+
+            /* Complete descriptor */
+            dma_length = (dma_batch * sizeof(struct nfd_out_rx_desc)) - 1;
+            rx_descr_tmp.length = dma_length;
+            rx_descr_tmp.pcie_addr_hi = queue_data[*queue].ring_base_hi;
+            rx_descr_tmp.pcie_addr_lo = (queue_data[*queue].ring_base_lo +
+                                         pcie_addr_off);
+            rx_descr_tmp.cpp_addr_lo =
+                cache_desc_compute_fl_addr(queue, rx_w);
+            rx_descr_tmp.rid = queue_data[*queue].requester_id;
+            /* Can replace with ld_field instruction if 8bit seqn is enough */
+            pcie_dma_set_event(&rx_descr_tmp, NFD_OUT_DESC_EVENT_TYPE,
+                               desc_dma_issued);
+            descr = rx_descr_tmp;
+
+            /* Increment rx_w and desc_dma_pkts_served */
+            rx_w += dma_batch;
+            desc_dma_pkts_issued += dma_batch;
+
+            /* Add batch message to LM queue
+             * XXX check defer slots filled */
+            pending_slot = (desc_dma_issued & (NFD_OUT_DESC_MAX_IN_FLIGHT -1));
+            send_msg.spare = 0;
+            send_msg.count = dma_batch;
+            send_msg.queue = *queue;
+            rx_desc_pending[pending_slot] = send_msg;
+
+            /* Issue DMA */
+            dma_sig_msk = __signals(&dma_sig);
+            __pcie_dma_enq(PCIE_ISL, &descr, NFD_OUT_DESC_DMA_QUEUE,
+                           sig_done, &dma_sig);
+
+        }
+
+        /* Adjust the queue pending flag if necessary.
+         * "pending" is set if our previous read still shows work to do. */
+        if (rx_w == dma_done) {
+            clear_queue(queue, &pending_bmsk);
+        } else {
+            set_queue(queue, &pending_bmsk);
+        }
+
+        /* Flag the queue urgent if necessary.  This provides feedback to
+         * cache_desc about which queues have been used. */
+        if (queue_data[*queue].fl_a - rx_w < NFD_OUT_FL_SOFT_THRESH) {
+            set_queue(queue, &urgent_bmsk);
+
+            if (queue_data[*queue].fl_a == rx_w) {
+                /* We don't have any credits cached for this queue,
+                 * so can't receive any more packets from it. */
+                clear_queue(queue, &cached_bmsk);
+            }
+        }
+
+        /* Write back the rx_w value to LM */
+        queue_data[*queue].rx_w = rx_w;
+
+    } else {
+        /* The queue is down.  Clear the cached and pending state so that
+         * it will not get checked again, but leave everything else
+         * unchanged. */
+        clear_queue(queue, &cached_bmsk);
+        clear_queue(queue, &pending_bmsk);
+
+        /* Swap to keep context swaps balanced in various paths */
+        ctx_swap();
+    }
+
+    /* Wait on the DMA enqueue signal via a mask in case it wasn't issued */
+    wait_sig_mask(dma_sig_msk);
+    __implicit_read(&dma_sig);
+}
+
+
+
+/**
+ * Check the cached bitmask for a queue to service, and
+ * attempt to work on that queue.  The "cached" and "pending"
+ * bitmasks are updated as processing progresses.  The "urgent"
+ * bitmask is also updated as feedback to cache_desc.
+ *
+ * This method may be called multiple separate times from the
+ * dispatch loop for finer balance of RX DMAs with other tasks.
+ */
+__forceinline void
+send_desc_check_cached()
+{
+    __gpr unsigned int queue;
+    int ret = 0;
+
+    if ((desc_dma_issued - desc_dma_served) < NFD_OUT_DESC_MAX_IN_FLIGHT) {
+        __critical_path();
+
+        /* Look for a cached queue */
+        ret = select_queue(&queue, &cached_bmsk);
+        if (ret) {
+            /* No cached queues found */
+            return;
+        }
+
+        /* Try to work on that queue */
+        _start_send(&queue);
+    }
+}
+
+
+/**
+ * Check the pending bitmask for a queue to service, and
+ * attempt to work on that queue.  The "cached" and "pending"
+ * bitmasks are updated as processing progresses.  The "urgent"
+ * bitmask is also updated as feedback to cache_desc.
+ *
+ * This method may be called multiple separate times from the
+ * dispatch loop for finer balance of RX DMAs with other tasks.
+ */
+__forceinline void
+send_desc_check_pending()
+{
+    __gpr unsigned int queue;
+    int ret = 0;
+
+    if ((desc_dma_issued - desc_dma_served) < NFD_OUT_DESC_MAX_IN_FLIGHT) {
+        __critical_path();
+
+        /* Look for a pending queue */
+        ret = select_queue(&queue, &pending_bmsk);
+        if (ret) {
+            /* No pending queues found */
+            return;
+        }
+
+        /* Try to work on that queue */
+        _start_send(&queue);
+    }
+}
+
+
+/**
+ * Check the desc_dma autopush, and if DMAs have completed, process the
+ * send_desc message ring.  We increment NFD_OUT_ATOMICS_SENT for each
+ * message to notify the MSIX generation code about the completed DMAs.
+ * We do _not_ check whether each queue is up at this stage, if it had
+ * been down when we were processing the send, the send would have been
+ * aborted.  The MSIX code ignores sent packet counts on down queues.
+ */
+__intrinsic void
+send_desc_complete_send()
+{
+    struct nfd_out_send_desc_msg send_msg;
+    unsigned int pending_slot;
+
+    if (signal_test(&desc_dma_event_sig)) {
+        dma_seqn_advance(&desc_dma_event_xfer, &desc_dma_compl);
+
+        __implicit_write(&desc_dma_event_sig);
+        event_cls_autopush_filter_reset(
+            NFD_OUT_DESC_EVENT_FILTER,
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+            NFD_OUT_DESC_EVENT_FILTER);
+
+        /* XXX how many updates can we receive at once? Do we need to
+         * throttle this? */
+        while (desc_dma_compl != desc_dma_served) {
+            /* Increment desc_dma_served upfront
+             * to avoid ambiguity about sequence number zero */
+            desc_dma_served++;
+
+            /* Extract queue and count from the rx_desc_pending message */
+            pending_slot = (desc_dma_served &
+                            (NFD_OUT_DESC_MAX_IN_FLIGHT -1));
+            send_msg = rx_desc_pending[pending_slot];
+
+            /* Increment sent counters */
+            _add_imm(NFD_OUT_CREDITS_BASE, send_msg.queue, send_msg.count,
+                     NFD_OUT_ATOMICS_SENT);
+            desc_dma_pkts_served += send_msg.count;
+        }
+
+    } else {
+        /* Swap to give other threads a chance to run */
+        ctx_swap();
+    }
 }

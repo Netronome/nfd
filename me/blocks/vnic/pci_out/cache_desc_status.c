@@ -22,7 +22,7 @@
  */
 extern __shared __lmem struct nfd_out_queue_info *queue_data;
 
-
+/* XXX rename state */
 /**
  * cache_desc state
  */
@@ -33,21 +33,20 @@ extern __gpr unsigned int fl_cache_dma_seq_issued;
 extern __gpr unsigned int fl_cache_dma_seq_compl;
 extern __gpr unsigned int fl_cache_dma_seq_served;
 
+extern __shared __gpr unsigned int batch_issued;
+
 
 /**
  * stage_batch state
  */
-extern __shared __gpr unsigned int batch_issued;
-extern __shared __gpr unsigned int batch_safe;
-
-extern __shared __gpr unsigned int data_dma_compl;
-extern __shared __gpr unsigned int desc_batch_served;
+extern __shared __gpr struct qc_bitmask cached_bmsk;
+extern __shared __gpr struct qc_bitmask pending_bmsk;
 
 extern __shared __gpr unsigned int desc_dma_issued;
 extern __shared __gpr unsigned int desc_dma_compl;
-extern __shared __gpr unsigned int desc_dma_safe;
+extern __shared __gpr unsigned int desc_dma_served;
+extern __shared __gpr unsigned int desc_dma_pkts_served;
 
-extern __shared __gpr unsigned int desc_batch_compl;
 
 #define _ZERO_ARRAY     {0, 0, 0, 0, 0, 0, 0, 0}
 
@@ -112,20 +111,21 @@ cache_desc_status()
         status_cache_desc.fl_cache_compl = fl_cache_dma_seq_compl;
         status_cache_desc.fl_cache_served = fl_cache_dma_seq_served;
 
+        status_cache_desc.batch_issued = batch_issued;
 
         /*
          * Collect stage_batch data
          */
-        status_stage.batch_issued = batch_issued;
-        status_stage.batch_safe = batch_safe;
-        status_stage.data_dma_compl = data_dma_compl;
-        status_stage.desc_batch_served = desc_batch_served;
+        status_stage.cached_bmsk_hi = cached_bmsk.bmsk_hi;
+        status_stage.cached_bmsk_lo = cached_bmsk.bmsk_lo;
+        status_stage.pending_bmsk_hi = pending_bmsk.bmsk_hi;
+        status_stage.pending_bmsk_lo = pending_bmsk.bmsk_lo;
 
         status_stage.desc_dma_issued = desc_dma_issued;
         status_stage.desc_dma_compl = desc_dma_compl;
-        status_stage.desc_dma_safe = desc_dma_safe;
+        status_stage.desc_dma_served = desc_dma_served;
 
-        status_stage.desc_batch_compl = desc_batch_compl;
+        status_stage.desc_dma_pkts_served = desc_dma_pkts_served;
 
         /*
          * Reset the alarm

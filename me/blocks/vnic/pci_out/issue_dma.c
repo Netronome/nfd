@@ -129,10 +129,6 @@ unsigned int next_ctx;
 static volatile __xread unsigned int data_dma_event_xfer;
 static SIGNAL data_dma_event_sig;
 
-__remote volatile __xread unsigned int nfd_out_data_compl_refl_in;
-__remote volatile SIGNAL nfd_out_data_compl_refl_sig;
-static __xwrite unsigned int nfd_out_data_compl_refl_out = 0;
-
 
 /* Declarations to access the FL/RX descriptor cache */
 #define NFD_OUT_FL_SZ_PER_QUEUE   \
@@ -165,39 +161,6 @@ _swap_on_msk(SIGNAL_MASK *wait_msk)
         ctx_arb[--], defer[1];
         local_csr_wr[local_csr_active_ctx_wakeup_events, *wait_msk];
     }
-}
-
-
-/* XXX Move to some sort of CT reflect library */
-__intrinsic void
-reflect_data(unsigned int dst_me, unsigned int dst_xfer,
-             unsigned int sig_no, volatile __xwrite void *src_xfer,
-             size_t size)
-{
-    #define OV_SIG_NUM 13
-
-    unsigned int addr;
-    unsigned int count = (size >> 2);
-    struct nfp_mecsr_cmd_indirect_ref_0 indirect;
-
-    /* ctassert(__is_write_reg(src_xfer)); */ /* TEMP, avoid volatile warnings */
-    ctassert(__is_ct_const(size));
-
-    /* Generic address computation.
-     * Could be expensive if dst_me, or dst_xfer
-     * not compile time constants */
-    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
-
-    indirect.__raw = 0;
-    indirect.signal_num = sig_no;
-    local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
-
-    /* Currently just support reflect_write_sig_remote */
-    __asm {
-        alu[--, --, b, 1, <<OV_SIG_NUM];
-        ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
-           __ct_const_val(count)], indirect_ref;
-    };
 }
 
 
@@ -309,26 +272,14 @@ distr_seqn_setup_shared()
 
 
 /**
- * Check autopush, compute data_dma_compl, and reflect to stage batch ME
+ * Check autopush and compute data_dma_compl
  */
 __intrinsic void
 distr_seqn()
 {
     if (signal_test(&data_dma_event_sig)) {
-        __implicit_read(&nfd_out_data_compl_refl_out);
-
         dma_seqn_advance(&data_dma_event_xfer, &data_dma_seq_compl);
         _recompute_safe();
-
-        /* Mirror to remote ME */
-        nfd_out_data_compl_refl_out = data_dma_seq_compl;
-        reflect_data(NFD_OUT_STAGE_ME,
-                     __xfer_reg_number(&nfd_out_data_compl_refl_in,
-                                       NFD_OUT_STAGE_ME),
-                     __signal_number(&nfd_out_data_compl_refl_sig,
-                                     NFD_OUT_STAGE_ME),
-                     &nfd_out_data_compl_refl_out,
-                     sizeof nfd_out_data_compl_refl_out);
 
         event_cls_autopush_filter_reset(
             NFD_OUT_DATA_EVENT_FILTER,

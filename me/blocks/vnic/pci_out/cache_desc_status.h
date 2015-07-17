@@ -21,18 +21,18 @@ struct nfd_out_cache_desc_status {
     unsigned int fl_cache_issued;
     unsigned int fl_cache_compl;
     unsigned int fl_cache_served;
-    unsigned int spare;
+    unsigned int batch_issued;
 };
 
 struct nfd_out_stage_batch_status {
-    unsigned int batch_issued;
-    unsigned int batch_safe;
-    unsigned int data_dma_compl;
-    unsigned int desc_batch_served;
+    unsigned int cached_bmsk_hi;
+    unsigned int cached_bmsk_lo;
+    unsigned int pending_bmsk_hi;
+    unsigned int pending_bmsk_lo;
     unsigned int desc_dma_issued;
     unsigned int desc_dma_compl;
-    unsigned int desc_dma_safe;
-    unsigned int desc_batch_compl;
+    unsigned int desc_dma_served;
+    unsigned int desc_dma_pkts_served;
 };
 
 
