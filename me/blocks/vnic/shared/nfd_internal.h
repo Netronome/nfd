@@ -411,15 +411,34 @@ struct nfd_out_issue_rx_desc {
         struct {
             unsigned int dd:1;              /* Descriptor done, must be set */
             unsigned int meta_len:7;        /* Length of meta data prepended */
-            unsigned int rid:8;             /* Requester ID for the pkt */
+            unsigned int queue:8;             /* Requester ID for the pkt */
             unsigned int data_len:16;       /* Total data length */
         };
         unsigned int __raw;
     };
 };
 
+
 #define NFD_OUT_RX_DESC_QUEUE_msk   0x3f
 #define NFD_OUT_RX_DESC_QUEUE_shf   16
+
+struct nfd_out_stage_info {
+    union {
+        struct {
+            unsigned int rid:8;         /* Requester ID for the pkt */
+            unsigned int spare:7;       /* Unused */
+            unsigned int up:1;          /* The queue is up */
+            unsigned int seqn_num:16;   /* Sequence number (per queue) */
+        };
+        unsigned int __raw;
+    };
+};
+
+#define NFD_OUT_STAGE_INFO_UP_msk    1
+#define NFD_OUT_STAGE_INFO_UP_shf    16
+#define NFD_OUT_STAGE_INFO_RID_msk   0xff
+#define NFD_OUT_STAGE_INFO_RID_shf   24
+
 
 /**
  * Descriptor passed between "stage_batch" and "issue_dma"
@@ -429,10 +448,10 @@ struct nfd_out_data_dma_info {
     union {
         struct {
             struct nfd_out_cpp_desc cpp;        /* CPP descriptor */
-            struct nfd_out_issue_rx_desc rxd;   /* Modified RX descriptor */
-            unsigned int fl_cache_index;        /* FL descriptor index */
+            struct nfd_out_rx_desc rxd;         /* RX descriptor */
+            struct nfd_out_stage_info sbd;      /* Stage batch descriptor */
         };
-        unsigned int __raw[4];
+        unsigned int __raw[5];
     };
 };
 

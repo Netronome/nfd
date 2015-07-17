@@ -284,61 +284,45 @@ do {                                                                    \
         __asm { local_csr_wr[active_lm_addr_2, queue_ptr] }             \
         __asm { alu[desc_batch_tmp, desc_batch_tmp, or, queue,          \
                     <<NFD_OUT_DESC_QUEUE_PKT##_pkt##_shf] }             \
-        __asm { alu[fl_index, fl_cache_mem_addr_lo, or, queue,          \
-                    <<NFD_OUT_FL_CACHE_Q_SZ_lg2] }                      \
-                                                                        \
         __asm { br_inp_state[nn_full, sb_full1##_pkt##_num] }           \
     sb_cont1##_pkt##_num:                                               \
+                                                                        \
+        /* Put the first 3 LW of input to output  */                    \
+        __asm { alu[*n$index++, --, b, in_batch + (0 + 16 * _pkt)] }    \
+        __asm { alu[*n$index++, --, b, in_batch + (4 + 16 * _pkt)] }    \
+        __asm { alu[*n$index++, --, b, in_batch + (8 + 16 * _pkt)] }    \
+                                                                        \
+        /* Compute our new partial data word */                         \
         __asm { alu[up, 1, AND, *l$index2[NFD_OUT_QUEUE_INFO_BITFIELD], \
                     >>NFD_OUT_QUEUE_INFO_UP_shf] }                      \
-        /* Check for urgent queues */                                   \
-        __asm { alu[urgent, *l$index2[NFD_OUT_QUEUE_INFO_FLA], -,       \
-                    NFD_OUT_FL_SOFT_THRESH] }                           \
-        __asm { alu[urgent, urgent, -, *l$index2[NFD_OUT_QUEUE_INFO_FLU]] } \
-        __asm { blt[sb_urgent##_pkt##_num] }                            \
-    sb_cont_urgent##_pkt##_num:                                         \
-                                                                        \
-        __asm { alu[*n$index++, in_batch + (0 + 16 * _pkt), or, up,     \
-                    <<NFD_OUT_CPP_CTM_RESERVED_shf] }                   \
-        __asm { alu[*n$index++, --, b, in_batch + (4 + 16 * _pkt)] }    \
-        __asm { alu[desc_batch_tmp, desc_batch_tmp, or, up,             \
-                    <<NFD_OUT_DESC_SEND_PKT##_pkt##_shf] }              \
-        __asm { ld_field[rx_desc_info, 4,                               \
+        __asm { alu[stage_info, (NFD_OUT_FL_BUFS_PER_QUEUE - 1), and,   \
+                    *l$index2[NFD_OUT_QUEUE_INFO_FLU]] }                \
+        __asm { alu[*l$index2[NFD_OUT_QUEUE_INFO_FLU],                  \
+                    *l$index2[NFD_OUT_QUEUE_INFO_FLU], +, up] }         \
+        __asm { ld_field[stage_info, 8,                                 \
                          *l$index2[NFD_OUT_QUEUE_INFO_BITFIELD],        \
                          >>(NFD_OUT_QUEUE_INFO_RID_shf -                \
-                            NFD_OUT_RX_DESC_QUEUE_shf)] }               \
+                            NFD_OUT_STAGE_INFO_RID_shf)] }              \
                                                                         \
         __asm { br_inp_state[nn_full, sb_full2##_pkt##_num] }           \
     sb_cont2##_pkt##_num:                                               \
-                                                                        \
-        __asm { alu[*n$index++, --, b, rx_desc_info] }                  \
-        __asm { alu[used_seq, (NFD_OUT_FL_BUFS_PER_QUEUE - 1), and,     \
-                    *l$index2[NFD_OUT_QUEUE_INFO_FLU]] }                \
-        __asm { alu[*n$index++, fl_index, or, used_seq, <<3] }          \
-        __asm { alu[*l$index2[NFD_OUT_QUEUE_INFO_FLU],                  \
-                    *l$index2[NFD_OUT_QUEUE_INFO_FLU], +, up] }         \
+        __asm { alu[*n$index++, --, b, in_batch + (12 + 16 * _pkt)] }   \
+        __asm { alu[*n$index++, stage_info, OR, up,                     \
+                    <<NFD_OUT_STAGE_INFO_UP_shf] }                      \
+        __asm { alu[desc_batch_tmp, desc_batch_tmp, or, up,             \
+                    <<NFD_OUT_DESC_SEND_PKT##_pkt##_shf] }              \
         __asm { br[sb_end##_pkt##_num] }                                \
-                                                                        \
-    sb_urgent##_pkt##_num:                                              \
-        __asm { alu[--, queue, and, 32] }                               \
-        __asm { alu[urgent, 0, or, up, <<indirect], no_cc }             \
-        __asm { bne[sb_urgent_hi##_pkt##_num] }                         \
-        __asm { alu[urgent_bmsk.bmsk_lo, urgent_bmsk.bmsk_lo, or, urgent] } \
-        __asm { br[sb_cont_urgent##_pkt##_num] }                        \
-    sb_urgent_hi##_pkt##_num:                                           \
-        __asm { alu[urgent_bmsk.bmsk_hi, urgent_bmsk.bmsk_hi, or, urgent] } \
-        __asm { br[sb_cont_urgent##_pkt##_num] }                        \
                                                                         \
     sb_full1##_pkt##_num:                                               \
         __asm { alu[full_cnt1, full_cnt1, +, 1] }                       \
-        __asm { local_csr_wr[local_csr_mailbox_1, full_cnt1] }     \
+        __asm { local_csr_wr[local_csr_mailbox_1, full_cnt1] }          \
         __asm { ctx_arb[voluntary] }                                    \
         __asm { br_inp_state[nn_full, sb_full1##_pkt##_num] }           \
         __asm { br[sb_cont1##_pkt##_num] }                              \
                                                                         \
     sb_full2##_pkt##_num:                                               \
         __asm { alu[full_cnt1, full_cnt1, +, 1] }                       \
-        __asm { local_csr_wr[local_csr_mailbox_1, full_cnt1] }     \
+        __asm { local_csr_wr[local_csr_mailbox_1, full_cnt1] }          \
         __asm { ctx_arb[voluntary] }                                    \
         __asm { br_inp_state[nn_full, sb_full2##_pkt##_num] }           \
         __asm { br[sb_cont2##_pkt##_num] }                              \
@@ -371,8 +355,7 @@ stage_batch()
     unsigned int up, used_seq;
     unsigned int rx_desc_info;
     unsigned int queue_ptr;
-    unsigned int fl_index;
-    unsigned int urgent;
+    unsigned int stage_info;
     /* __shared __lmem struct nfd_out_queue_info *queue_ptr; */
     struct nfd_out_data_batch_msg data_batch_msg = {0};
     struct nfd_out_desc_batch_msg desc_batch_tmp;

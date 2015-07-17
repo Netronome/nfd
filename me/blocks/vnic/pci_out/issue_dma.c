@@ -89,11 +89,12 @@ __shared __gpr unsigned int empty_cnt1 = 0;
 /*
  * issue_dma variables
  */
-static __gpr struct nfp_pcie_dma_cmd descr_tmp;
+static __shared __gpr struct nfp_pcie_dma_cmd descr_tmp; /* TEMP, xfer limits */
 static __xwrite struct _dma_desc_batch dma_out_main;
 static __xwrite struct _dma_desc_batch dma_out_resv;
 
 static __xread struct nfd_out_fl_desc fl_entries[4];
+static __xwrite struct nfd_out_rx_desc rx_descs[4];
 
 static __shared __gpr unsigned int ctm_cpp_lo_msk =
     ((NFD_OUT_CPP_CTM_PKTNUM_msk << NFD_OUT_CPP_CTM_PKTNUM_shf) |
@@ -113,6 +114,15 @@ static SIGNAL data_dma_event_sig;
 __remote volatile __xread unsigned int nfd_out_data_compl_refl_in;
 __remote volatile SIGNAL nfd_out_data_compl_refl_sig;
 static __xwrite unsigned int nfd_out_data_compl_refl_out = 0;
+
+
+/* Declarations to access the FL/RX descriptor cache */
+#define NFD_OUT_FL_SZ_PER_QUEUE   \
+    (NFD_OUT_FL_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
+__export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_SZ_PER_QUEUE)
+    struct nfd_out_fl_desc
+    fl_cache_mem[NFD_OUT_MAX_QUEUES][NFD_OUT_FL_BUFS_PER_QUEUE];
+static __shared __gpr unsigned int fl_cache_mem_addr_lo;
 
 
 /*
@@ -207,6 +217,9 @@ issue_dma_setup_shared()
     cfg = cfg_tmp;
 
     pcie_dma_cfg_set_pair(PCIE_ISL, NFD_OUT_DATA_CFG_REG, &cfg);
+
+    /* Setup the address of the FL/RX descriptor cache */
+    fl_cache_mem_addr_lo = ((unsigned long long) fl_cache_mem & 0xffffffff);
 
     /* Kick off ordering */
     reorder_start(NFD_OUT_ISSUE_START_CTX, &get_order_sig);
@@ -350,12 +363,12 @@ do {                                                                    \
     unsigned int ctm_msg;                                               \
                                                                         \
     __asm { alu[ctm_msg, --, b, *l$index2[NFD_OUT_CPP_CTM_INDEX##_pkt]] } \
-    if (ctm_msg & (1<< NFD_OUT_CPP_CTM_RESERVED_shf)) {                 \
+    if (sbd##_pkt.up) {                                                 \
         unsigned int ctm_hi;                                            \
                                                                         \
         if (ctm_msg & (1<< NFD_OUT_CPP_CTM_CTM_ONLY_shf)) {             \
             __critical_path();                                          \
-            descr_tmp.rid = rx_desc##_pkt.rid;                          \
+            descr_tmp.rid = sbd##_pkt.rid;                              \
             descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;      \
                                                                         \
             ctm_hi = 0x80 | (ctm_msg >> NFD_OUT_CPP_CTM_ISL_shf);       \
@@ -390,7 +403,7 @@ do {                                                                    \
             msg.cpp.__raw[0] = ctm_msg;                                 \
             __asm { alu[msg.cpp.__raw[1], --, b,                        \
                         *l$index2[NFD_OUT_CPP_MU_INDEX##_pkt]] }        \
-            descr_tmp.rid = rx_desc##_pkt.rid;                          \
+            descr_tmp.rid = sbd##_pkt.rid;                              \
             descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;      \
                                                                         \
             data_len = rx_desc##_pkt##.data_len;                        \
@@ -670,8 +683,13 @@ do {                                                                    \
                                                                         \
     __asm { alu[*l$index2[NFD_OUT_CPP_CTM_INDEX##_pkt], --, b, *n$index++] } \
     __asm { alu[*l$index2[NFD_OUT_CPP_MU_INDEX##_pkt], --, b, *n$index++] } \
-    rx_desc##_pkt.__raw = nn_ring_get();                                \
-    fl_cache_index = nn_ring_get();                                     \
+    __asm { alu[rx_desc##_pkt, --, b, *n$index] }                       \
+    rx_descs[_pkt].__raw[0] = nn_ring_get();                            \
+    rx_descs[_pkt].__raw[1] = nn_ring_get();                            \
+    sbd##_pkt.__raw = nn_ring_get();                                    \
+    fl_cache_index = sbd##_pkt.seqn_num * sizeof(struct nfd_out_fl_desc); \
+    fl_cache_index |= rx_desc##_pkt.queue * NFD_OUT_FL_SZ_PER_QUEUE;    \
+    fl_cache_index |= fl_cache_mem_addr_lo;                             \
     __asm { mem[read, fl_entries[_pkt], 0, fl_cache_index,              \
                 __ct_const_val(count)], sig_done[fl_sig##_pkt] }        \
 } while (0)
@@ -704,6 +722,7 @@ issue_dma()
     unsigned int n_bat;
     unsigned int cpp_index;
     struct nfd_out_issue_rx_desc rx_desc0, rx_desc1, rx_desc2, rx_desc3;
+    struct nfd_out_stage_info sbd0, sbd1, sbd2, sbd3;
     unsigned int fl_cache_index;
 
     /* Start of "get" order stage */
