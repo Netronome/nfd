@@ -78,6 +78,7 @@ static __shared __lmem struct _cpp_desc_batch
 static __shared __lmem struct _rx_desc_batch
     rx_desc_ring[NFD_OUT_CPP_BATCH_RING_BAT];
 
+
 /*
  * Sequence numbers
  */
@@ -970,6 +971,7 @@ do {                                                                    \
     unsigned int isl_hi;                                                \
     unsigned int pktnum;                                                \
     unsigned int resv_dma_cnt;                                          \
+    unsigned int dma_done_addr;                                         \
                                                                         \
     __asm {                                                             \
         /* Test whether there's a packet to free */                     \
@@ -979,6 +981,16 @@ do {                                                                    \
                      << NFD_OUT_FREE_MU_BLS_shf] }                      \
                                                                         \
         __asm { beq[free_end##_pkt] }                                   \
+        /* Increment the DMA done atomic */                             \
+        /* XXX perhaps only do this if the queue is up? */              \
+        __asm { alu[dma_done_addr, NFD_OUT_RX_DESC_QUEUE_msk, and,      \
+                    *l$index1[NFD_OUT_RX_INDEX##_pkt],                  \
+                    >>NFD_OUT_RX_DESC_QUEUE_shf] }                      \
+        __asm { alu[dma_done_addr, NFD_OUT_ATOMICS_DMA_DONE, or,        \
+                    dma_done_addr, <<NFD_OUT_ATOMICS_SZ_LG2] }          \
+        __asm { mem[incr, --, 0, dma_done_addr] }                       \
+                                                                        \
+        /* Free the MU pointer */                                       \
         __asm { alu [rnum, blm_rnum_start, or,                          \
                      *l$index3[NFD_OUT_FREE_MU_INDEX##_pkt],            \
                      >>NFD_OUT_FREE_MU_BLS_shf] }                       \
@@ -1016,6 +1028,7 @@ __forceinline void
 free_buf()
 {
     unsigned int cpp_index;
+    unsigned int rx_index;
 
     if (data_dma_seq_served != data_dma_seq_compl) {
         /*
@@ -1024,6 +1037,8 @@ free_buf()
          */
         cpp_index = data_dma_seq_served & (NFD_OUT_CPP_BATCH_RING_BAT - 1);
         data_dma_seq_served++;
+        rx_index = (unsigned int) &rx_desc_ring[cpp_index];
+        local_csr_write(local_csr_active_lm_addr_1, rx_index);
         cpp_index = (unsigned int) &cpp_desc_ring[cpp_index];
         local_csr_write(local_csr_active_lm_addr_3, cpp_index);
 
