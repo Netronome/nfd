@@ -12,7 +12,6 @@
 #define __NFD_DIRECT_ACCESS     0x80
 
 #ifndef NFD_PCIE_ISL_BASE
-#warning "NFD_PCIE_ISL_BASE not defined:  assuming PCI islands start at island 4"
 #define NFD_PCIE_ISL_BASE 4
 #endif /* NFD_PCIE_ISL_BASE */
 

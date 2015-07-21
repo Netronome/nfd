@@ -51,7 +51,7 @@ ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
     (NFD_MAX_ISL * NFD_CFG_NUM_RINGS * NFD_CFG_RING_SZ))
 
 #define NFD_CFG_RINGS_INIT_IND(_isl)                                    \
-    ASM(.declare_resource nfd_cfg_ring_mem##_isl global 8192 nfd_cfg_ring_mem) \
+    ASM(.declare_resource nfd_cfg_ring_mem##_isl global 10240 nfd_cfg_ring_mem) \
     ASM(.alloc_resource nfd_cfg_ring_mem##_isl##0 nfd_cfg_ring_mem##_isl \
         global 2048 2048)                                               \
     ASM(.alloc_resource nfd_cfg_ring_mem##_isl##1 nfd_cfg_ring_mem##_isl \
@@ -60,11 +60,14 @@ ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
         global 2048 2048)                                               \
     ASM(.alloc_resource nfd_cfg_ring_mem##_isl##3 nfd_cfg_ring_mem##_isl \
         global 2048 2048)                                               \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##4 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
                                                                         \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##0 nfd_cfg_ring_mem##_isl##0) \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##1 nfd_cfg_ring_mem##_isl##1) \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_mem##_isl##2) \
-    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_mem##_isl##3)
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_mem##_isl##3) \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##4 nfd_cfg_ring_mem##_isl##4)
 
 #define NFD_CFG_RINGS_INIT(_isl) NFD_CFG_RINGS_INIT_IND(_isl)
 
@@ -177,6 +180,8 @@ send_interthread_sig(unsigned int dst_me, unsigned int ctx, unsigned int sig_no)
     addr = ((dst_me & 0x3F0)<<20 | (dst_me & 15)<<9 | (ctx & 7) << 6 |
             (sig_no & 15)<<2);
 
+    // REMOVE ME
+    local_csr_write(local_csr_mailbox_0, addr);
     __asm ct[interthread_signal, --, addr, 0, --];
 }
 
@@ -434,7 +439,7 @@ nfd_cfg_setup()
 
     /* XXX remove once .declare_resource and .alloc_resource support
      * bracketed expressions. */
-    ctassert(NFD_CFG_NUM_RINGS == 4);
+    ctassert(NFD_CFG_NUM_RINGS == 8);
     ctassert(NFD_CFG_RING_SZ == 2048);
 
     /* Setup the configuration queues */

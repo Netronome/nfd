@@ -91,9 +91,33 @@ __shared __lmem unsigned int fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
 NFD_ATOMICS_ALLOC(NFD_OUT_CREDITS_BASE);
 
 
+#if 0
+
 __export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_SZ_PER_QUEUE)
     struct nfd_out_fl_desc
     fl_cache_mem[NFD_OUT_MAX_QUEUES][NFD_OUT_FL_BUFS_PER_QUEUE];
+
+#else
+
+#define FL_CACHE_SIZE (NFD_OUT_MAX_QUEUES * NFD_OUT_FL_BUFS_PER_QUEUE * 8)
+
+#if (PCIE_ISL == 0)
+ASM(.alloc_mem fl_cache_mem0 i4.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
+#define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem0))
+#elif (PCIE_ISL == 1)
+ASM(.alloc_mem fl_cache_mem1 i5.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
+#define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem1))
+#elif (PCIE_ISL == 2)
+ASM(.alloc_mem fl_cache_mem2 i6.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
+#define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem2))
+#elif (PCIE_ISL == 3)
+ASM(.alloc_mem fl_cache_mem3 i7.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
+#define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem3))
+#else
+#error "Unknown PCIE_ISL value"
+#endif
+
+#endif
 
 static __gpr unsigned int fl_cache_mem_addr_lo;
 
@@ -238,7 +262,7 @@ cache_desc_setup_shared()
     descr_tmp.cpp_addr_hi = 0;
 
     /* Initialise addresses of the FL cache and credits */
-    fl_cache_mem_addr_lo = ((unsigned long long) fl_cache_mem & 0xffffffff);
+    fl_cache_mem_addr_lo = ((unsigned long long) FL_CACHE_MEM & 0xffffffff);
 }
 
 
@@ -251,7 +275,7 @@ cache_desc_setup_shared()
 void
 cache_desc_setup()
 {
-    fl_cache_mem_addr_lo = ((unsigned long long) fl_cache_mem & 0xffffffff);
+    fl_cache_mem_addr_lo = ((unsigned long long) FL_CACHE_MEM & 0xffffffff);
 }
 
 
