@@ -264,7 +264,7 @@
     .reg tmp_lo
     .reg off
 
-    move(out_hi, (nfd_cfg_base/**/PCIE_ISL >> 8))
+    move(out_hi, ((nfd_cfg_base/**/PCIE_ISL >> 8) & 0xFF000000))
     move(tmp_lo, (nfd_cfg_base/**/PCIE_ISL & 0xFFFFFFFF))
     alu[off, --, B, in_vnic, <<(log2(NFP_NET_CFG_BAR_SZ))]
     alu[out_lo, tmp_lo, +, off]
