@@ -39,9 +39,6 @@ main(void)
 
         cache_desc_status_setup();
 
-        /* CTX 1-7 will stall until this starts ordering stages */
-        stage_batch_setup_shared();
-
         NFD_INIT_DONE_SET(PCIE_ISL, 0);     /* XXX Remove? */
     } else if (ctx() == 1) {
         send_desc_setup_shared();
@@ -51,12 +48,8 @@ main(void)
         cache_desc_setup();
 
     } else {
-        /* These methods do not have dependencies on the
-         * setup_shared() methods. */
-        cache_desc_setup();
-
-        stage_batch_setup();
-
+        /* CTX >1 are unused currently */
+        ctx_wait(kill);
     }
 
     /*
@@ -114,12 +107,8 @@ main(void)
     } else {
         /* Worker main loop */
         for (;;) {
-            /* This method will stall until stage_batch_setup_shared
-             * has completed. */
-            stage_batch();
-
-            /* Yield thread */
-            ctx_swap();
+            /* CTX >1 are unused currently */
+            ctx_wait(kill);
         }
     }
 }

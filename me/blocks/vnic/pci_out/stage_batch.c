@@ -101,9 +101,13 @@ unsigned int nfd_out_fl_u_base;
 void
 stage_batch_setup_shared()
 {
+/* Prevent stage_batch from running by preventing
+ * the ordering from starting */
+#if 0
     /* Kick off ordering */
     reorder_start(NFD_OUT_STAGE_START_CTX, &get_order_sig);
     reorder_start(NFD_OUT_STAGE_START_CTX, &put_order_sig);
+#endif
 }
 
 

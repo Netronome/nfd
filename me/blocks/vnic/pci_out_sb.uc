@@ -761,7 +761,7 @@ worker_loop#:
 
 #macro die_if_debug()
 
-    #if 1 /* XXX REMOVE ME when really integrated */
+    #if 0 /* XXX REMOVE ME when really integrated */
 
         // Fake out the assembler
         alu[--, --, B, 0]
