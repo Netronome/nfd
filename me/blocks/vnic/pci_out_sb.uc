@@ -47,6 +47,7 @@
 #define SB_WQ_ENABLED_bf        0, 31, 31
 #define SB_WQ_RID_bf            0, 30, 23
 #define SB_WQ_SEQ_bf            0, 15, 8
+#define SB_WQ_SIZE_LW           5
 
 
 
@@ -136,9 +137,11 @@
 #if USE_MU_WORK_QUEUES
 
 // MU work queues
+#define NFD_OUT_SB_WQ_SIZE_LW  1024
 #define_eval __EMEM 'NFD_PCIE/**/PCIE_ISL/**/_EMEM'
 .alloc_resource nfd_out_sb_ring_num/**/PCIE_ISL __EMEM/**/_queues global 1 1
-.alloc_mem nfd_out_sb_ring_mem/**/PCIE_ISL __EMEM global 2048 2048
+.alloc_mem nfd_out_sb_ring_mem/**/PCIE_ISL __EMEM global \
+    (NFD_OUT_SB_WQ_SIZE_LW * 4) (NFD_OUT_SB_WQ_SIZE_LW * 4)
 .init_mu_ring nfd_out_sb_ring_num/**/PCIE_ISL nfd_out_sb_ring_mem/**/PCIE_ISL
 #undef __EMEM
 
@@ -465,6 +468,11 @@
 
     move(lma, sb_wq_credits)
     local_csr_wr[LM_WQ_CREDIT_CSR, lma]
+    nop
+    nop
+    nop
+    move(LM_WQ_CREDITS, (NFD_OUT_SB_WQ_SIZE_LW / SB_WQ_SIZE_LW))
+
     local_csr_wr[MAILBOX0, 0xFF]
 
     .while (1) 
