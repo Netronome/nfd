@@ -8,9 +8,13 @@
 #include <nfd_common.h>
 #include <nfd_cfg_pf_bars.uc>
 #include <nfd_out.uc>   /* for definitions only */
+#include <pci_out_sb.h>
+#include <pci_out_sb_iface.uc>
 
 
 /**
+ * For reference
+ *
  * Input descriptors (from clients):
  *
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
@@ -43,14 +47,6 @@
  *       +-+-------------+---------------+-------------------------------+
  */
 
-// Fields not defined in the base descriptor definitions
-#define SB_WQ_ENABLED_bf        0, 31, 31
-#define SB_WQ_RID_bf            0, 30, 23
-#define SB_WQ_SEQ_bf            0, 15, 8
-#define SB_WQ_SIZE_LW           5
-
-
-
 #define NFD_OUT_FL_DESC_SIZE            8
 #define NFD_OUT_FL_DESC_SIZE_lg2        (log2(NFD_OUT_FL_DESC_SIZE))
 
@@ -77,9 +73,6 @@
 #define EMEM_ADDR(_x) (streq('_x','emem0') ? __ADDR_EMEM0 : \
                        (streq('_x','emem1') ? __ADDR_EMEM1 : \
                        (streq('_x','emem2') ? __ADDR_EMEM2 : NOEMEM)))
-
-/* REMOVE ME */
-#define USE_MU_WORK_QUEUES 1
 
 /* REMOVE ME:  in nfd_internal.h ... but this is not uc-safe */
 #define NFD_CFG_VF_OFFSET               64
@@ -133,44 +126,10 @@
 .alloc_mem nfd_out_ring_mem/**/PCIE_ISL __EMEM global NFD_OUT_RING_SZ NFD_OUT_RING_SZ
 .init_mu_ring nfd_out_ring_num/**/PCIE_ISL/**/0 nfd_out_ring_mem/**/PCIE_ISL
 
-#if USE_MU_WORK_QUEUES
-
-// MU work queues
-#define NFD_OUT_SB_WQ_SIZE_LW  1024
-#define_eval __EMEM 'NFD_PCIE/**/PCIE_ISL/**/_EMEM'
-.alloc_resource nfd_out_sb_ring_num/**/PCIE_ISL __EMEM/**/_queues global 1 1
-.alloc_mem nfd_out_sb_ring_mem/**/PCIE_ISL __EMEM global \
-    (NFD_OUT_SB_WQ_SIZE_LW * 4) (NFD_OUT_SB_WQ_SIZE_LW * 4)
-.init_mu_ring nfd_out_sb_ring_num/**/PCIE_ISL nfd_out_sb_ring_mem/**/PCIE_ISL
-#undef __EMEM
-
-#else /* USE_MU_WORK_QUEUES */
-
-// CLS work queues
-#define NFD_OUT_SB_WQ_SIZE_LW  1024
-#define NFD_OUT_SB_WQ_OFF 0
-#define NFD_OUT_SB_WQ_NUM 15
-.alloc_mem nfd_out_sb_wq_mem/**/PCIE_ISL cls+NFD_OUT_SB_WQ_OFF \
-    island (NFD_OUT_SB_WQ_SIZE_LW * 4) (NFD_OUT_SB_WQ_SIZE_LW * 4)
-.alloc_resource nfd_out_sb_ring_num/**/PCIE_ISL \
-    cls_rings+NFD_OUT_SB_WQ_NUM island 1 1
-.init_csr cls:i/**/THIS_ISL/**/.Rings.RingBase/**/NFD_OUT_SB_WQ_NUM \
-    (((NFD_OUT_SB_WQ_OFF >> 7) << 0) | ((log2(NFD_OUT_SB_WQ_SIZE_LW) - 5) << 16))
-.init_csr cls:i/**/THIS_ISL/**/.Rings.RingPtrs/**/NFD_OUT_SB_WQ_NUM 0
-
-#endif /* USE_MU_WORK_QUEUES */
-
 // Cache memory
 #define_eval NFD_OUT_CACHE_ISL (NFD_PCIE_ISL_BASE + PCIE_ISL)
 #define_eval NFD_OUT_CACHE_SIZE (NFD_OUT_FL_CACHE_SIZE_PER_QUEUE * NFD_OUT_MAX_QUEUES)
 .alloc_mem fl_cache_mem/**/PCIE_ISL i/**/NFD_OUT_CACHE_ISL/**/.ctm global NFD_OUT_CACHE_SIZE NFD_OUT_CACHE_SIZE
-
-// Ticket release bitmaps
-.alloc_mem nfd_out_sb_release/**/PCIE_ISL ctm island \
-    (NFD_OUT_MAX_QUEUES * 16) (NFD_OUT_MAX_QUEUES * 16)
-
-// WQ credits
-.alloc_mem nfd_out_sb_wq_credits/**/PCIE_ISL ctm global 4 4
 
 // Config rings
 .alloc_resource nfd_cfg_ring_nums NFD_CFG_RING_EMEM/**/_queues global 32
@@ -628,15 +587,17 @@ test_ready_to_send#:
     alu[addr_lo, addr_lo, OR, LM_STATUS, <<(F_L(SB_WQ_RID_bf) - (F_L(SB_WQ_SEQ_bf) - NFD_OUT_FL_DESC_SIZE_lg2))]
 
     // Start sending the work to issue DMA, but see below: we're not quite done
-    #if USE_MU_WORK_QUEUES
+    #if SB_USE_MU_WORK_QUEUES
 
-        mem[qadd_work, out_xfer[0], g_out_wq_hi, <<8, g_out_wq_lo, 5], sig_done[cur_outsig]
+        mem[qadd_work, out_xfer[0], g_out_wq_hi, <<8, g_out_wq_lo, SB_WQ_SIZE_LW],
+            sig_done[cur_outsig]
 
-    #else
+    #else /* SB_USE_MU_WORK_QUEUES */
 
-        cls[ring_workq_add_work, out_xfer[0], g_out_wq_hi, <<8, g_out_wq_lo, 5], sig_done[cur_outsig]
+        cls[ring_workq_add_work, out_xfer[0], g_out_wq_hi, <<8, g_out_wq_lo, SB_WQ_SIZE_LW],
+            sig_done[cur_outsig]
 
-    #endif
+    #endif /* SB_USE_MU_WORK_QUEUES */
 
     /*
      * Wait for least recent I/Os to complete.
@@ -730,17 +691,17 @@ flow_controlled#:
     move(lma, sb_wq_credits)
     local_csr_wr[LM_WQ_CREDIT_CSR, lma]
 
-    #if USE_MU_WORK_QUEUES
+    #if SB_USE_MU_WORK_QUEUES
 
         move(g_out_wq_hi, ((nfd_out_sb_ring_mem/**/PCIE_ISL >> 8) & 0xFF000000))
         move(g_out_wq_lo, nfd_out_sb_ring_num/**/PCIE_ISL)
 
-    #else /* USE_MU_WORK_QUEUES */
+    #else /* SB_USE_MU_WORK_QUEUES */
 
         move(g_out_wq_hi, 0)
         move(g_out_wq_lo, ((nfd_out_sb_ring_num/**/PCIE_ISL) << 2))
 
-    #endif /* USE_MU_WORK_QUEUES */
+    #endif /* SB_USE_MU_WORK_QUEUES */
 
     /*
      * ORDERED ADD TO THE WORK QUEUE
@@ -798,8 +759,29 @@ worker_loop#:
 #endm
 
 
+#macro die_if_debug()
+
+    #if 1 /* XXX REMOVE ME when really integrated */
+
+        // Fake out the assembler
+        alu[--, --, B, 0]
+        beq[die_now#]
+        bne[die_now#]
+        br[keep_going#]
+
+    die_now#:
+        ctx_arb[kill]
+
+    keep_going#:
+        // not reached
+    #endif
+
+#endm
+
+
 
 main#:
+    pci_out_sb_declare()
 
     .if (ctx() == STAGE_BATCH_MANAGER_CTX)
 
@@ -807,20 +789,7 @@ main#:
 
     .else
 
-        #if 1 /* XXX REMOVE ME when really integrated */
-
-            // Fake out the assembler
-            alu[--, --, B, 0]
-            beq[die_now#]
-            bne[die_now#]
-            br[keep_going#]
-
-        die_now#:
-            ctx_arb[kill]
-
-        keep_going#:
-            // not reached
-        #endif
+        die_if_debug()
 
         worker_main_loop()
 
