@@ -54,14 +54,6 @@
 #define NFD_OUT_FL_DESC_SIZE            8
 #define NFD_OUT_FL_DESC_SIZE_lg2        (log2(NFD_OUT_FL_DESC_SIZE))
 
-#ifndef NFD_OUT_FL_CACHE_SIZE
-#error "NFD_OUT_FL_CACHE_SIZE must be defined"
-#endif
-
-#if (NFD_OUT_FL_CACHE_SIZE & (NFD_OUT_FL_CACHE_SIZE - 1))
-#error "NFD_OUT_FL_CACHE_SIZE must be a power of 2"
-#endif
-
 #ifndef STAGE_BATCH_MANAGER_CTX
 #error "STAGE_BATCH_MANAGER_CTX must be defined"
 #endif
@@ -90,8 +82,14 @@
 #define USE_MU_WORK_QUEUES 1
 
 /* REMOVE ME:  in nfd_internal.h ... but this is not uc-safe */
-#define NFD_CFG_VF_OFFSET       64
-#define NFD_OUT_FL_BUFS_PER_QUEUE       256
+#define NFD_CFG_VF_OFFSET               64
+#define NFD_OUT_FL_DESC_PER_QUEUE       256
+
+#define NFD_OUT_FL_CACHE_SIZE_PER_QUEUE \
+    (NFD_OUT_FL_DESC_PER_QUEUE * NFD_OUT_FL_DESC_SIZE)
+#define NFD_OUT_FL_CACHE_SIZE_PER_QUEUE_lg2 \
+    (log2(NFD_OUT_FL_CACHE_SIZE_PER_QUEUE))
+
 
 /**
  * LM state:
@@ -118,11 +116,12 @@
 #define LM_STATUS_wrd           1
 #define LM_SEQ                  LM_QSTATE_PTR[LM_SEQ_wrd]
 #define LM_STATUS               LM_QSTATE_PTR[LM_STATUS_wrd]
-
-
+#define LM_CACHE_ADDR_RS8_wrd   2
 #define LM_WQ_CREDIT_CSR        ACTIVE_LM_ADDR_1
 #define LM_WQ_CREDIT_PTR        *l$index1
 #define LM_WQ_CREDITS           LM_WQ_CREDIT_PTR
+#define LM_CACHE_ADDR_RS8       LM_QSTATE_PTR[LM_CACHE_ADDR_RS8_wrd]
+
 
 // LMEM data structures
 .alloc_mem sb_ctx_base lmem+0 me (LM_QSTATE_SIZE * NFD_OUT_MAX_QUEUES)
@@ -163,9 +162,8 @@
 
 // Cache memory
 #define_eval NFD_OUT_CACHE_ISL (NFD_PCIE_ISL_BASE + PCIE_ISL)
-#define_eval NFD_OUT_CACHE_SIZE (NFD_OUT_FL_DESC_SIZE * NFD_OUT_MAX_QUEUES * NFD_OUT_FL_BUFS_PER_QUEUE)
-#define_eval NFD_OUT_CACHE_ALIGN (NFD_OUT_MAX_QUEUES * NFD_OUT_FL_BUFS_PER_QUEUE * 8)
-.alloc_mem fl_cache_mem/**/PCIE_ISL i/**/NFD_OUT_CACHE_ISL/**/.ctm global NFD_OUT_CACHE_SIZE NFD_OUT_CACHE_ALIGN
+#define_eval NFD_OUT_CACHE_SIZE (NFD_OUT_FL_CACHE_SIZE_PER_QUEUE * NFD_OUT_MAX_QUEUES)
+.alloc_mem fl_cache_mem/**/PCIE_ISL i/**/NFD_OUT_CACHE_ISL/**/.ctm global NFD_OUT_CACHE_SIZE NFD_OUT_CACHE_SIZE
 
 // Ticket release bitmaps
 .alloc_mem nfd_out_sb_release/**/PCIE_ISL ctm island \
@@ -225,6 +223,7 @@
     .reg changed
     .reg rid
     .reg currently_up
+    .reg base_addr
 
     alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_VF_QUEUES))]
 
@@ -245,6 +244,9 @@
             bitfield_insert__sz1(F_AML(LM_QSTATE, LM_QSTATE_RID_bf), rid)
             bitfield_insert__sz1(F_AML(LM_QSTATE, LM_QSTATE_ENABLED_bf), 1)
             move(LM_SEQ, 0)
+            // Precomputation to save cycles later
+            move(base_addr, (fl_cache_mem/**/PCIE_ISL >> 8))
+            alu[LM_CACHE_ADDR_RS8, base_addr, OR, qid, <<(NFD_OUT_FL_CACHE_SIZE_PER_QUEUE_lg2 - 8)]
             _reset_ticket_bitmap(qid)
 
         .else
@@ -585,8 +587,8 @@ ready_to_send#:
      * - issue read then write
      */
     alu[addr_lo, g_cache_addr_lo_mask, AND, LM_SEQ, <<NFD_OUT_FL_DESC_SIZE_lg2]
-    mem[read, $buf_desc[0], g_cache_addr_hi, <<8, addr_lo, 1], sig_done[fl_read_sig]
-    mem[write, out_xfer[4], g_cache_addr_hi, <<8, addr_lo, 1], sig_done[cur_outsig]
+    mem[read, $buf_desc[0], LM_CACHE_ADDR_RS8, <<8, addr_lo, 1], sig_done[fl_read_sig]
+    mem[write, out_xfer[4], LM_CACHE_ADDR_RS8, <<8, addr_lo, 1], sig_done[cur_outsig]
 
     // Start next work queue dequeue
     mem[qadd_thread, in_xfer[0], g_in_wq_hi, <<8, g_in_wq_lo, 4], sig_done[cur_insig]
@@ -678,7 +680,6 @@ flow_controlled#:
     // global per-context registers
     .reg volatile g_sig_next_worker
     .reg volatile g_lm_qstate_mask
-    .reg volatile g_cache_addr_hi
     .reg volatile g_cache_addr_lo_mask
     .reg volatile g_in_wq_hi
     .reg volatile g_in_wq_lo
@@ -717,8 +718,7 @@ flow_controlled#:
     alu[g_sig_next_worker, next_ctx, OR, (&ordersig), <<3]
 
     move(g_lm_qstate_mask, ((NFD_OUT_MAX_QUEUES - 1) << LM_QSTATE_SIZE_lg2))
-    move(g_cache_addr_hi, (fl_cache_mem/**/PCIE_ISL >> 8))
-    move(g_cache_addr_lo_mask, ((NFD_OUT_FL_CACHE_SIZE - 1) << NFD_OUT_FL_DESC_SIZE_lg2))
+    move(g_cache_addr_lo_mask, ((NFD_OUT_FL_DESC_PER_QUEUE - 1) << NFD_OUT_FL_DESC_SIZE_lg2))
     move(g_in_wq_hi, ((nfd_out_ring_mem/**/PCIE_ISL >> 8) & 0xFF000000))
     move(g_in_wq_lo, nfd_out_ring_num/**/PCIE_ISL/**/0)
     move(lma, sb_wq_credits)
