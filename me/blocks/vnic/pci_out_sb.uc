@@ -371,6 +371,22 @@
 #endm
 
 
+#macro signal_ctx(in_ctx, in_signum)
+.begin
+
+
+    #if (isnum(in_ctx) && isnum(in_signum))
+        local_csr_wr[SAME_ME_SIGNAL, (in_ctx | (in_signum <<3))]
+    #else
+        .reg sigval
+        alu[sigval, in_ctx, OR, in_signum, <<3]
+        local_csr_wr[SAME_ME_SIGNAL, sigval]
+    #endif
+
+.end
+#endm
+
+
 // REMOVE ME
 .reg @CONFIGS
 .init @CONFIGS 0
@@ -468,6 +484,7 @@
     .addr _nfd_cfg_sig_sb PCI_OUT_SB_CFG_SIG_NUM
 
 
+    // Shared ME initialization
     move(lma, sb_wq_credits)
     local_csr_wr[LM_WQ_CREDIT_CSR, lma]
     nop
@@ -475,6 +492,10 @@
     nop
     move(LM_WQ_CREDITS, (NFD_OUT_SB_WQ_SIZE_LW / SB_WQ_SIZE_LW))
 
+    // Shared ME initialization finished: kickstart workers
+    signal_ctx(STAGE_BATCH_FIRST_WORKER, ORDER_SIG_NUM)
+
+    // REMOVE ME
     local_csr_wr[MAILBOX0, 0xFF]
 
     .while (1) 
@@ -564,9 +585,9 @@
 
     // Loop here if no WQ credits
 test_ready_to_send#:
-    br=byte[LM_WQ_CREDITS, 0, 0, maybe_flow_controlled#]
+    alu[LM_WQ_CREDITS, LM_WQ_CREDITS, -, 1]
+    blt[flow_controlled#]
 
-ready_to_send#:
     // Burn per-CTX GPR to make 1 cycle
     local_csr_wr[SAME_ME_SIGNAL, g_sig_next_worker]
 
@@ -633,25 +654,10 @@ ready_to_send#:
     move(out_xfer[1], $buf_desc[1])
     #pragma warning(default:5009)
 
-    /*
-     * Slow path exception handler.
-     *
-     * Out of credits, or least significant byte == 0.  Even if there can
-     * be more than 256 credits outstanding (requiring this test), we should
-     * only hit this condition about 1 out of every 256 packets.  So the total
-     * cost would be 9/256 = ~0.04 cycles per packet.  At the very worst it
-     * be once out of every 64 packets meaning 9 / 64 = ~0.16 cycles per
-     * packet.
-     */
-maybe_flow_controlled#:
-    alu[--, --, B, LM_WQ_CREDITS]
-    beq[flow_controlled#]
-    br[ready_to_send#], defer[1]
-    alu[LM_WQ_CREDITS, LM_WQ_CREDITS, -, 1]
-
     // No credits, yield and then branch back to the test
 flow_controlled#:
-    ctx_arb[voluntary], br[test_ready_to_send#]
+    ctx_arb[voluntary], defer[1], br[test_ready_to_send#]
+    alu[LM_WQ_CREDITS, LM_WQ_CREDITS, +, 1]
 
 .end
 #endm
@@ -745,6 +751,7 @@ flow_controlled#:
         .set_sig ordersig
         ctx_arb[ordersig]
         mem[qadd_thread, $in_/**/__BLOCK[0], g_in_wq_hi, <<8, g_in_wq_lo, 4], sig_done[insig_/**/__BLOCK]
+        signal_ctx(ctx, (&outsig_/**/__BLOCK))
         local_csr_wr[SAME_ME_SIGNAL, g_sig_next_worker]
 
         #define_eval __BLOCK (__BLOCK + 1)
@@ -757,7 +764,8 @@ flow_controlled#:
 
     // Wait for the signal for the first block
     .set_sig ordersig
-    ctx_arb[insig_0, ordersig]
+    .set_sig outsig_0
+    ctx_arb[insig_0, outsig_0, ordersig]
 
 worker_loop#:
 
