@@ -17,8 +17,15 @@
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
 
+#include <vnic/pci_out.h>
 #include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_internal.h>
 
+
+#include <nfp_net_ctrl.h>
+
+
+NFD_BLM_Q_ALLOC(NFD_OUT_BLM_POOL_START);
 
 #define DECLARE_SB_IND2(_isl, _emem)                                    \
     _emem##_queues_DECL                                                 \
@@ -37,6 +44,10 @@ DECLARE_SB(PCIE_ISL);
 #define LINK_SB_CREDITS_IND(_isl)               \
     _link_sym(nfd_out_sb_wq_credits##_isl)
 #define LINK_SB_CREDITS(_isl) LINK_SB_CREDITS_IND(_isl)
+
+#define LINK_DMA_DONE_IND(_isl)                         \
+    (__LoadTimeConstant("__addr_pcie" #_isl "_ctm"))
+#define LINK_DMA_DONE(_isl) LINK_DMA_DONE_IND(_isl)
 
 
 EMEM0_QUEUE_ALLOC(nfd_out_issue_dbg_num, global);
@@ -62,8 +73,7 @@ struct nfd_out_wq_msg {
             unsigned int reserved:1;    /* Must be zero from application */
             unsigned int offset:13;     /* Offset where data starts in NFP */
 
-            unsigned int nbi:1;         /* NBI that received the pkt */
-            unsigned int bls:2;         /* NBI buffer list */
+            unsigned int blq:3;         /* BLM buffer queue (nbi:bls) */
             unsigned int mu_addr:29;    /* Pkt MU address */
 
             unsigned int dd:1;          /* Descriptor done, must be set */
@@ -85,35 +95,114 @@ unsigned int dbg_rnum;
 mem_ring_addr_t dbg_raddr;
 
 
+mem_ring_addr_t blm_raddr;
+unsigned int blm_rnum_start;
+
+
 unsigned int pkt_cnt = 0;
 
 
 __xread struct nfd_out_wq_msg in_msg;
 __xwrite unsigned int journal_msg[8];
+__gpr struct nfp_pcie_dma_cmd descr_tmp;
+__xwrite struct nfp_pcie_dma_cmd descr;
+
+SIGNAL dma_compl;
+
+__shared __gpr unsigned int credits_to_return = 0;
+
+unsigned int dma_done_hi;
+
+
+void
+issue_dma_setup_shared()
+{
+    /* Don't initialise the NFD_OUT_DATA_CFG_REG while the legacy
+     * issue_dma() is still linked in the FW. */
+#if 0
+    struct pcie_dma_cfg_one cfg;
+
+    /*
+     * Set up NFD_OUT_DATA_CFG_REG Config Register
+     */
+    cfg.__raw = 0;
+#ifdef NFD_VNIC_NO_HOST
+    /* Use signal_only for seqn num generation
+     * Don't actually DMA data */
+    cfg.signal_only = 1;
+#else
+    cfg.signal_only = 0;
+#endif
+    cfg.end_pad     = 0;
+    cfg.start_pad   = 0;
+    /* Ordering settings? */
+    cfg.target_64   = 1;
+    cfg.cpp_target  = 7;
+    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DATA_CFG_REG, cfg);
+#endif
+
+    /*
+     * Initialise a DMA descriptor template
+     * RequesterID (rid), CPP address, and PCIe address will be
+     * overwritten per transaction.
+     * For dma_mode, we technically only want to overwrite the "source"
+     * field, i.e. 12 of the 16 bits.
+     */
+    descr_tmp.rid_override = 1;
+    descr_tmp.trans_class = 0;
+    descr_tmp.cpp_token = NFD_OUT_DATA_DMA_TOKEN;
+    descr_tmp.dma_cfg_index = NFD_OUT_DATA_CFG_REG;
+}
+
 
 int
 main(void)
 {
+    unsigned int ctx;
+    unsigned int meid;
+
     if (ctx() != 0) {
         /* We just use CTX0 to avoid any ordering issues */
         ctx_wait(kill);
     }
+
+    /* Extract thread data */
+    ctx = ctx();
+    meid = __MEID;
 
     /* Input ring */
     in_ring_num = LINK_SB_WQ(PCIE_ISL);
     in_ring_addr = (unsigned long long) NFD_EMEM_LINK(PCIE_ISL) >> 8;
 
     /* Credit access */
-    credit_addr = (unsigned int) (LINK_SB_CREDITS(PCIE_ISL) >> 8);
+    credit_addr = (unsigned long long) (LINK_SB_CREDITS(PCIE_ISL) >> 8);
+    dma_done_hi = (unsigned long long) (LINK_DMA_DONE(PCIE_ISL) >> 8);
 
     /* Debug journal */
     dbg_rnum = _link_sym(nfd_out_issue_dbg_num);
     dbg_raddr = (_link_sym(nfd_out_issue_dbg_journal) >> 8) & 0xff000000;
 
+    /* Freeing packets */
+    blm_raddr = ((unsigned long long) NFD_OUT_BLM_RADDR >> 8) & 0xff000000;
+    blm_rnum_start = NFD_BLM_Q_LINK(NFD_OUT_BLM_POOL_START);
+
+
+    /* Setup DMA CFG and template */
+    issue_dma_setup_shared();
 
 
     for (;;) {
-        mem_workq_add_thread(in_ring_num, in_ring_addr, &in_msg, sizeof in_msg);
+        unsigned int queue;
+        unsigned int ctm_hi;
+        unsigned int ctm_lo;
+        unsigned int dma_done_lo;
+        unsigned int blm_rnum;
+        unsigned int pktnum;
+
+        /* Get a packet and return the credit */
+        mem_workq_add_thread(in_ring_num, in_ring_addr, &in_msg,
+                             sizeof in_msg);
+        credits_to_return++;
 
         pkt_cnt++;
 
@@ -129,5 +218,65 @@ main(void)
         journal_msg[7] = 0;
 
         mem_ring_journal(dbg_rnum, dbg_raddr, journal_msg, sizeof journal_msg);
+
+
+        /* Issue the DMA */
+        queue = in_msg.queue;
+
+        if (in_msg.ctm_only == 0) {
+            /* Only handle the fast path */
+            halt();
+        }
+
+        if (in_msg.isl == 0) {
+            /* Only handle the fast path */
+            halt();
+        }
+
+
+        if (in_msg.up) {
+            /* ctm_hi address will be reused when freeing the buffer */
+            ctm_hi = 0x80 | in_msg.isl;
+            ctm_lo = 0x80000000 | (in_msg.pktnum << 16);
+
+            descr_tmp.cpp_addr_hi = ctm_hi;
+            descr_tmp.cpp_addr_lo = ctm_lo | in_msg.offset;
+
+            /* PCIe addresses */
+            descr_tmp.pcie_addr_hi = in_msg.pcie_addr_hi;
+            descr_tmp.pcie_addr_lo = in_msg.pcie_addr_lo;
+            descr_tmp.pcie_addr_lo += NFP_NET_RX_OFFSET;
+            descr_tmp.pcie_addr_lo -= in_msg.meta_len;
+
+            /* Finish off and issue the DMA */
+            descr_tmp.length = in_msg.data_len - 1;
+            descr_tmp.rid = in_msg.rid;
+            pcie_dma_set_sig(&descr_tmp, meid, ctx,
+                             __signal_number(&dma_compl));
+            descr = descr_tmp;
+            pcie_dma_enq(PCIE_ISL, &descr, NFD_OUT_DATA_DMA_QUEUE);
+            __implicit_write(&dma_compl);
+
+
+            /* Wait for the DMA to complete */
+            wait_for_all(&dma_compl);
+
+            /* Increment the dma_done atomic */
+            dma_done_lo = ((queue * NFD_OUT_ATOMICS_SZ) |
+            NFD_OUT_ATOMICS_DMA_DONE);
+            __asm { mem[incr, --, dma_done_hi, <<8, dma_done_lo] };
+        }
+
+        /* Free the buffer */
+        blm_rnum = blm_rnum_start + in_msg.blq;
+        mem_ring_journal_fast(blm_rnum, blm_raddr, in_msg.mu_addr);
+
+        if (in_msg.ctm_only == 1) {
+            ctm_hi = ctm_hi << 24;
+            pktnum = in_msg.pktnum;
+
+            __asm mem[packet_free, --, ctm_hi, <<8, pktnum];
+        }
+
     }
 }
