@@ -237,32 +237,18 @@ __intrinsic void nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc,
 
 
 /**
- * Enqueue descriptor(s) to PCI.OUT ring
+ * Add descriptor(s) to the PCI.OUT ring
  * @param pcie_isl      PCIe island to send the descriptors to
  * @param bmsk_queue    Queue to send the packets (bitmask numbered)
  * @param desc_out      Write transfer registers to hold the descriptors
  * @param sync          Type of synchronisation to use
- * @param sigpair       Signal pair for the ring put
+ * @param sig           Signal on send completion
  *
- * This method selects the appropriate MU ring to enqueue the packet to.  It
- * also tests whether the packet requires one descriptor or two and manages
- * signalling with "sop" and "eop" appropriately.
  * */
 __intrinsic void __nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
-                                __xrw struct nfd_out_input *desc_out,
+                                __xwrite struct nfd_out_input *desc_out,
                                 __gpr struct nfd_out_input *desc,
-                                sync_t sync, SIGNAL_PAIR *sigpair);
-
-
-/**
- * Test result of "__nfd_out_send"
- * @param desc_out      Write transfer registers that were used in send
- *
- * This helper function tests for error codes from the hardware queue engine
- * that indicate whether a "__nfd_out_send" call failed.  "desc_out" must have
- * been used in the "__nfd_out_send" call of interest, immediately before.
- */
-__intrinsic int nfd_out_send_test(__xrw struct nfd_out_input *desc_out);
+                                sync_t sync, SIGNAL *sig);
 
 
 /**
@@ -271,10 +257,9 @@ __intrinsic int nfd_out_send_test(__xrw struct nfd_out_input *desc_out);
  * @param bmsk_queue    Queue to send the packets (bitmask numbered)
  * @param desc_out      Write transfer registers to hold the descriptors
  *
- * See "__pci_out_send" above.
  */
-__intrinsic int nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
-                             __gpr struct nfd_out_input *desc);
+__intrinsic void nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
+                              __gpr struct nfd_out_input *desc);
 
 #endif /* __NFP_LANG_MICROC */
 

@@ -225,14 +225,11 @@ nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc, unsigned int vlan,
 }
 
 
-/* XXX selecting between the PCIe islands becomes ugly if not CT const.
- * This can be optimised for specific use cases, depending on what assumptions
- * the calling applications is able to make. */
 __intrinsic void
 __nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
-               __xrw struct nfd_out_input *desc_out,
+               __xwrite struct nfd_out_input *desc_out,
                __gpr struct nfd_out_input *desc,
-               sync_t sync, SIGNAL_PAIR *sigpair)
+               sync_t sync, SIGNAL *sig)
 {
     unsigned int desc_sz = sizeof(struct nfd_out_input);
     mem_ring_addr_t raddr;
@@ -251,31 +248,18 @@ __nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
     desc->cpp.reserved = 0;
     *desc_out = *desc;
 
-    __mem_ring_put(rnum, raddr, desc_out, desc_sz, desc_sz,
-                   sig_done, sigpair);
+    __mem_ring_journal(rnum, raddr, desc_out, desc_sz, desc_sz,
+                       sig_done, sig);
 }
 
 
-__intrinsic int
-nfd_out_send_test(__xrw struct nfd_out_input *desc_out)
-{
-    int result;
-
-    result = desc_out->cpp.__raw[0];
-    return (result & (1 << 31)) ? (result << 2) : -1;
-}
-
-
-__intrinsic int
+__intrinsic void
 nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
              __gpr struct nfd_out_input *desc)
 {
-    __xrw struct nfd_out_input data[2];
-    SIGNAL_PAIR sigpair;
+    __xwrite struct nfd_out_input data;
+    SIGNAL sig;
 
-    __nfd_out_send(pcie_isl, bmsk_queue, data, desc, sig_done, &sigpair);
-    wait_for_all(&sigpair);
-
-    return nfd_out_send_test(data);
-
+    __nfd_out_send(pcie_isl, bmsk_queue, &data, desc, sig_done, &sig);
+    wait_for_all(&sig);
 }
