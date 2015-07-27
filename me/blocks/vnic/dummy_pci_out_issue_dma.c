@@ -42,7 +42,7 @@ DECLARE_SB(PCIE_ISL);
 #define LINK_SB_WQ(_isl) LINK_SB_WQ_IND(_isl)
 
 #define LINK_SB_CREDITS_IND(_isl)               \
-    _link_sym(nfd_out_sb_wq_credits##_isl)
+    ((__mem void *) _link_sym(nfd_out_sb_wq_credits##_isl))
 #define LINK_SB_CREDITS(_isl) LINK_SB_CREDITS_IND(_isl)
 
 #define LINK_DMA_DONE_IND(_isl)                         \
@@ -53,6 +53,9 @@ DECLARE_SB(PCIE_ISL);
 EMEM0_QUEUE_ALLOC(nfd_out_issue_dbg_num, global);
 __asm .alloc_mem nfd_out_issue_dbg_journal emem0 global SZ_16M SZ_16M;
 __asm .init_mu_ring nfd_out_issue_dbg_num nfd_out_issue_dbg_journal;
+
+
+#define NFD_PCI_OUT_SB_CREDIT_WM    64
 
 
 struct nfd_out_wq_msg {
@@ -86,9 +89,26 @@ struct nfd_out_wq_msg {
 };
 
 
+/* XXX move to some sort of CT library */
+__intrinsic void
+send_interthread_sig(unsigned int dst_me, unsigned int ctx, unsigned int sig_no)
+{
+    unsigned int addr;
+
+    /* Generic address computation.
+     * Could be expensive if dst_me, or dst_xfer
+     * not compile time constants */
+    addr = ((dst_me & 0x3F0)<<20 | (dst_me & 15)<<9 | (ctx & 7) << 6 |
+            (sig_no & 15)<<2);
+
+    // REMOVE ME
+    local_csr_write(local_csr_mailbox_0, addr);
+    __asm ct[interthread_signal, --, addr, 0, --];
+}
+
+
 mem_ring_addr_t in_ring_addr;
 unsigned int in_ring_num;
-unsigned int credit_addr;
 
 
 unsigned int dbg_rnum;
@@ -110,6 +130,7 @@ __xwrite struct nfp_pcie_dma_cmd descr;
 SIGNAL dma_compl;
 
 __shared __gpr unsigned int credits_to_return = 0;
+__remote SIGNAL nfd_credit_sig_sb;
 
 unsigned int dma_done_hi;
 
@@ -175,7 +196,6 @@ main(void)
     in_ring_addr = (unsigned long long) NFD_EMEM_LINK(PCIE_ISL) >> 8;
 
     /* Credit access */
-    credit_addr = (unsigned long long) (LINK_SB_CREDITS(PCIE_ISL) >> 8);
     dma_done_hi = (unsigned long long) (LINK_DMA_DONE(PCIE_ISL) >> 8);
 
     /* Debug journal */
@@ -278,5 +298,17 @@ main(void)
             __asm mem[packet_free, --, ctm_hi, <<8, pktnum];
         }
 
+
+        /* Return credits to stage batch if GE watermark */
+        if (credits_to_return >= NFD_PCI_OUT_SB_CREDIT_WM) {
+            /* Add back the credits atomically */
+            mem_add32_imm(credits_to_return, LINK_SB_CREDITS(PCIE_ISL));
+            credits_to_return = 0;
+
+            /* Notify stage batch to check the credits */
+            send_interthread_sig(NFD_OUT_STAGE_ME, 0,
+                                 __signal_number(&nfd_credit_sig_sb,
+                                                 NFD_OUT_STAGE_ME));
+        }
     }
 }
