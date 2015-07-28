@@ -51,7 +51,6 @@ struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt3;
 };
 
-
 NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 
 
@@ -92,8 +91,8 @@ static __xwrite struct _dma_desc_batch dma_out;
 static __xwrite struct _issued_pkt_batch batch_out;
 
 /* Signalling */
-static SIGNAL tx_desc_sig, msg_sig, desc_order_sig, dma_order_sig;
-static SIGNAL dma_sig0, dma_sig1, dma_sig2, dma_sig3;
+static SIGNAL tx_desc_sig, msg_sig0, desc_order_sig, dma_order_sig;
+static SIGNAL last_of_batch_dma_sig;
 static SIGNAL_MASK wait_msk;
 
 static SIGNAL jumbo0, jumbo1;
@@ -309,14 +308,14 @@ issue_dma_gather_seq_recv()
 
 #define _ISSUE_PROC_JUMBO(_pkt, _sig)                                   \
 do {                                                                    \
+    SIGNAL jumbo_sig;                                                   \
     /* Issue DMA for 4k of segment, updating processing state */        \
     pcie_dma_set_sig(&descr_tmp, __MEID, ctx(),                         \
                      __signal_number(&_sig));                           \
     dma_out.pkt##_pkt## = descr_tmp;                                    \
                                                                         \
     __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                      \
-                   NFD_IN_DATA_DMA_QUEUE,                               \
-                   ctx_swap, &dma_sig##_pkt##);                         \
+                   NFD_IN_DATA_DMA_QUEUE,  ctx_swap, &jumbo_sig);       \
     __implicit_write(&_sig);                                            \
                                                                         \
     descr_tmp.pcie_addr_lo += PCIE_DMA_MAX_SZ;                          \
@@ -386,7 +385,7 @@ do {                                                                    \
             /* data_dma_seq_issued was pre-incremented once we could */ \
             /* process batch.  Since we are going to swap, we */        \
             /* decrement it temporarily to ensure */                    \
-            /* precache_bufs_compute_seq_safe will give a pessimistic */ \
+            /* precache_bufs_compute_seq_safe will give a pessimistic */\
             /* safe count. */                                           \
             data_dma_seq_issued--;                                      \
                                                                         \
@@ -420,10 +419,14 @@ do {                                                                    \
         descr_tmp.length = dma_len - 1;                                 \
         dma_out.pkt##_pkt## = descr_tmp;                                \
                                                                         \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                  \
+        if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                      \
+            pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
+                           NFD_IN_DATA_DMA_QUEUE);                      \
+        } else {                                                        \
+             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,             \
                        NFD_IN_DATA_DMA_QUEUE,                           \
-                       sig_done, &dma_sig##_pkt##);                     \
-                                                                        \
+                       sig_done, &last_of_batch_dma_sig);               \
+        }                                                               \
     } else if (!queue_data[queue].up) {                                 \
         /* Handle down queues off the fast path. */                     \
         /* As all packets in a batch come from one queue and are */     \
@@ -464,10 +467,10 @@ do {                                                                    \
             descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG;              \
             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                \
                            NFD_IN_DATA_DMA_QUEUE,                       \
-                           sig_done, &dma_sig##_pkt);                   \
+                           sig_done, &last_of_batch_dma_sig);           \
                                                                         \
         } else {                                                        \
-            wait_msk &= ~__signals(&dma_sig##_pkt##);                   \
+            wait_msk &= ~__signals(&last_of_batch_dma_sig);             \
         }                                                               \
                                                                         \
     } else {                                                            \
@@ -524,7 +527,7 @@ do {                                                                    \
             /* data_dma_seq_issued was pre-incremented once we could */ \
             /* process batch.  Since we are going to swap, we */        \
             /* decrement it temporarily to ensure */                    \
-            /* precache_bufs_compute_seq_safe will give a pessimistic */ \
+            /* precache_bufs_compute_seq_safe will give a pessimistic */\
             /* safe count. */                                           \
             data_dma_seq_issued--;                                      \
                                                                         \
@@ -558,9 +561,14 @@ do {                                                                    \
         descr_tmp.length = dma_len - 1;                                 \
         dma_out.pkt##_pkt## = descr_tmp;                                \
                                                                         \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                  \
+        if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                      \
+            pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
+                           NFD_IN_DATA_DMA_QUEUE);                      \
+        } else {                                                        \
+             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,             \
                        NFD_IN_DATA_DMA_QUEUE,                           \
-                       sig_done, &dma_sig##_pkt##);                     \
+                       sig_done, &last_of_batch_dma_sig);               \
+        }                                                               \
     }                                                                   \
                                                                         \
 } while (0)
@@ -571,7 +579,6 @@ do {                                                                    \
     /* Do minimal clean up so local signalling works and */             \
     /* notify block ignores the message */                              \
     batch_out.pkt##_pkt##.__raw[0] = 0;                                 \
-    wait_msk &= ~__signals(&dma_sig##_pkt##);                           \
 } while (0)
 
 
@@ -637,15 +644,13 @@ issue_dma()
         local_csr_wr[local_csr_active_ctx_wakeup_events, wait_msk];
     }
 
-    wait_msk = __signals(&dma_sig0, &dma_sig1, &dma_sig2, &dma_sig3,
-                         &tx_desc_sig, &msg_sig, &dma_order_sig);
-    __implicit_read(&dma_sig0);
-    __implicit_read(&dma_sig1);
-    __implicit_read(&dma_sig2);
-    __implicit_read(&dma_sig3);
-    __implicit_read(&msg_sig);
+    wait_msk = __signals(&last_of_batch_dma_sig, &tx_desc_sig, &msg_sig0,
+                         &dma_order_sig);
+    __implicit_read(&last_of_batch_dma_sig);
+    __implicit_read(&msg_sig0);
     __implicit_read(&tx_desc_sig);
     __implicit_read(&dma_order_sig);
+    __implicit_read(&dma_out, sizeof dma_out);
 
     while ((int)(data_dma_seq_issued - data_dma_seq_safe) >= 0) {
         /* We can't process this batch yet.
@@ -667,6 +672,7 @@ issue_dma()
     issued_tmp.num_batch = num;   /* Only needed in pkt0 */
     issued_tmp.sp1 = 0;
     issued_tmp.q_num = queue;
+
 
     /* Maybe add "full" bit */
     if (num == 4) {
@@ -706,5 +712,5 @@ issue_dma()
     /* XXX THS-50 workaround */
     /* cls_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, */
     /*              &msg_sig); */
-    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, &msg_sig);
+    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, &msg_sig0);
 }
