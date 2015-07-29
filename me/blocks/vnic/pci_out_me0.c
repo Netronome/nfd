@@ -14,7 +14,6 @@
 
 #include <vnic/pci_out/cache_desc.c>
 #include <vnic/pci_out/cache_desc_status.c>
-#include <vnic/pci_out/stage_batch.c>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_cfg_internal.c>
 

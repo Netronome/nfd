@@ -138,9 +138,6 @@ unsigned int dma_done_hi;
 void
 issue_dma_setup_shared()
 {
-    /* Don't initialise the NFD_OUT_DATA_CFG_REG while the legacy
-     * issue_dma() is still linked in the FW. */
-#if 0
     struct pcie_dma_cfg_one cfg;
 
     /*
@@ -160,7 +157,6 @@ issue_dma_setup_shared()
     cfg.target_64   = 1;
     cfg.cpp_target  = 7;
     pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DATA_CFG_REG, cfg);
-#endif
 
     /*
      * Initialise a DMA descriptor template
