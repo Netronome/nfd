@@ -39,7 +39,7 @@ NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
 static struct precache_bufs_state state = {0, 0, 0};
-static SIGNAL_PAIR precache_sig;
+static SIGNAL_PAIR precache_sig0;
 
 static __xread unsigned int bufs_rd[NFD_IN_BUF_RECACHE_WM];
 static unsigned int blm_queue_addr;
@@ -80,7 +80,7 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
     /* Generic address computation.
      * Could be expensive if dst_me, or dst_xfer
      * not compile time constants */
-    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 0xF)<<10 | (dst_xfer & 0x3F)<<2));
 
     indirect.__raw = 0;
     indirect.signal_num = sig_no;
@@ -132,7 +132,6 @@ _precache_bufs_copy(unsigned int num)
 {
     ctassert(__is_ct_const(num));
     ctassert((num == 16) || (num == 8) || (num == 4));
-
     /* Move to empty slot */
     __asm alu[--, --, b, NFD_IN_BUF_STORE_PTR++];
 
@@ -197,7 +196,7 @@ precache_bufs()
     /* NB: Ordering of if clauses allows back to back fetches,
      *     if buf_store is sufficiently empty */
 
-    if (signal_test(&precache_sig.even)) {
+    if (signal_test(&precache_sig0.even)) {
         /* Process the fetch */
         unsigned int bufs_rd_off;
 
@@ -206,7 +205,7 @@ precache_bufs()
         local_csr_write(local_csr_t_index, bufs_rd_off);
         state.pending_fetch = 0;
 
-        if (!signal_test(&precache_sig.odd)) {
+        if (!signal_test(&precache_sig0.odd)) {
             /* Fetch succeeded */
             _precache_bufs_copy(NFD_IN_BUF_RECACHE_WM);
             __implicit_read(bufs_rd, sizeof bufs_rd);
@@ -220,8 +219,8 @@ precache_bufs()
             (sizeof (unsigned int) * NFD_IN_BUF_RECACHE_WM)) {
             /* Issue the fetch */
             __mem_ring_pop(blm_queue_num, blm_queue_addr, bufs_rd,
-                           sizeof bufs_rd, sizeof bufs_rd,
-                           sig_done, &precache_sig);
+                           sizeof(bufs_rd), sizeof(bufs_rd),
+                           sig_done, &precache_sig0);
             state.pending_fetch = 1;
         }
     }

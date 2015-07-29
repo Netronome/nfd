@@ -41,7 +41,8 @@
 
 #define NFD_IN_TX_QUEUE         1
 
-#define NFD_IN_ISSUE_START_CTX  1
+
+#define NFD_IN_ISSUE_START_CTX  2
 #define NFD_IN_NOTIFY_START_CTX 2
 
 #define NFD_IN_DSTQ_MSK         0x7

@@ -40,7 +40,13 @@ reorder_done(unsigned int start_ctx, SIGNAL *sig)
     ctassert(__is_ct_const(start_ctx));
 
     /* XXX Might be necessary to avoid testing ctx() each time. */
+#ifdef CTX_MODE_4
+    /* 0,2,4,6 */
+    if (ctx() != 6) {
+#else
+    /* 0,1,2,3,4,5,6,7 */
     if (ctx() != 7) {
+#endif
         __critical_path(); /* Optimise for majority of contexts */
 
         val = (NFP_MECSR_SAME_ME_SIGNAL_SIG_NO(__signal_number(sig)) |
@@ -64,7 +70,13 @@ reorder_get_next_ctx(unsigned int start_ctx)
 {
     unsigned int val;
 
+#ifdef CTX_MODE_4
+    /* 0,2,4,6 */
+    if (ctx() != 6) {
+#else
+    /* 0,1,2,3,4,5,6,7 */
     if (ctx() != 7) {
+#endif
         val = NFP_MECSR_SAME_ME_SIGNAL_NEXT_CTX;
     } else {
         val= NFP_MECSR_SAME_ME_SIGNAL_CTX(start_ctx);

@@ -29,7 +29,6 @@
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
 
-
 struct _tx_desc_batch {
     struct nfd_in_tx_desc pkt0;
     struct nfd_in_tx_desc pkt1;
@@ -637,7 +636,6 @@ issue_dma()
     __cls_read(&tx_desc, desc_ring_addr, sizeof tx_desc, sizeof tx_desc,
                sig_done, &tx_desc_sig);
 
-
     /* Start of dma_order_sig reorder stage */
     __asm {
         ctx_arb[--], defer[1];
@@ -672,7 +670,6 @@ issue_dma()
     issued_tmp.num_batch = num;   /* Only needed in pkt0 */
     issued_tmp.sp1 = 0;
     issued_tmp.q_num = queue;
-
 
     /* Maybe add "full" bit */
     if (num == 4) {
@@ -712,5 +709,5 @@ issue_dma()
     /* XXX THS-50 workaround */
     /* cls_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, */
     /*              &msg_sig); */
-    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, &msg_sig0);
+    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
 }

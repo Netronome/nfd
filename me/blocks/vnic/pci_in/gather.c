@@ -69,7 +69,7 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
     /* Generic address computation.
      * Could be expensive if dst_me, or dst_xfer
      * not compile time constants */
-    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 0xF)<<10 | (dst_xfer & 0x3F)<<2));
 
     indirect.__raw = 0;
     indirect.signal_num = sig_no;
