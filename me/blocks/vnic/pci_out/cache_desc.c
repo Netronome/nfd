@@ -51,10 +51,11 @@
  * Forcing this to zero on all PCIe islands makes code to access credits
  * simpler and more efficient throughout the system.
  */
-#define NFD_ATOMICS_ALLOC_IND(_off)                                    \
-    ASM(.alloc_mem nfd_out_atomics ctm+##_off island                   \
+#define NFD_ATOMICS_ALLOC_IND(_isl, _off)                                    \
+    ASM(.alloc_mem nfd_out_atomics##_isl pcie##_isl##.ctm+##_off global      \
         (NFD_OUT_ATOMICS_SZ * NFD_OUT_MAX_QUEUES))
-#define NFD_ATOMICS_ALLOC(_off) NFD_ATOMICS_ALLOC_IND(_off)
+#define NFD_ATOMICS_ALLOC(_isl, _off) NFD_ATOMICS_ALLOC_IND(_isl, _off)
+
 
 
 __shared __gpr struct qc_bitmask active_bmsk;
@@ -88,7 +89,7 @@ __shared __lmem struct nfd_out_queue_info *queue_data;
 __shared __lmem unsigned int fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
 
 /* NFD credits are fixed at offset zero in CTM */
-NFD_ATOMICS_ALLOC(NFD_OUT_CREDITS_BASE);
+NFD_ATOMICS_ALLOC(PCIE_ISL, NFD_OUT_CREDITS_BASE);
 
 
 #if 0

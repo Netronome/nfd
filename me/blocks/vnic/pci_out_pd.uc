@@ -14,8 +14,11 @@
 #error "NFD_OUT_MAX_QUEUES must be >= 64 for nfd_out_send_cntrs optimization to work"
 #endif
 #define_eval PCIE_ISL_NUM (NFD_PCIE_ISL_BASE + PCIE_ISL)
-.alloc_mem nfd_out_send_cntrs/**/PCIE_ISL i/**/PCIE_ISL_NUM/**/.ctm \
-    global (NFD_OUT_MAX_QUEUES * 4) (NFD_OUT_MAX_QUEUES * 4)
+
+#define NFD_OUT_CREDITS_BASE            0
+.alloc_mem nfd_out_atomics/**/PCIE_ISL \
+    i/**/PCIE_ISL_NUM/**/.ctm+NFD_OUT_CREDITS_BASE \
+    global (NFD_OUT_MAX_QUEUES * NFD_OUT_ATOMICS_SZ)
 
 /* XXX TODO: Need to get the emem resource from elsewhere! */
 .declare_resource BLQ_EMU_RINGS global 8 emem1_queues+4
@@ -46,9 +49,10 @@
 
 /* REMOVE ME */
 /* These are in here only because nfd_internal.h is not microcode safe */
+#define NFD_OUT_DATA_CFG_REG            6
 #define NFD_OUT_DATA_CFG_REG_SIG_ONLY   7
 #define NFD_OUT_DATA_DMA_TOKEN          2
-
+#define NFD_OUT_ATOMICS_DMA_DONE        8
 
 /*
  * DMA Descriptor
@@ -81,72 +85,72 @@
  */
 
 // Word 0
-#define PCIE_DMA_CPPA_LO_bf	0, 31, 0
-#define PCIE_DMA_CPPA_LO_wrd	0
-#define PCIE_DMA_CPPA_LO_shf	0
-#define PCIE_DMA_CPPA_LO_msk	0xFFFFFFFF
+#define PCIE_DMA_CPPA_LO_bf     0, 31, 0
+#define PCIE_DMA_CPPA_LO_wrd    0
+#define PCIE_DMA_CPPA_LO_shf    0
+#define PCIE_DMA_CPPA_LO_msk    0xFFFFFFFF
 
 // Word 1
-#define PCIE_DMA_MODE_SEL_bf	1, 31, 30
-#define PCIE_DMA_MODE_SEL_wrd	1
-#define PCIE_DMA_MODE_SEL_shf	30
-#define PCIE_DMA_MODE_SEL_msk	0x3
-#define PCIE_DMA_MASTER_ID_bf	1, 30, 27
-#define PCIE_DMA_MASTER_ID_wrd	1
-#define PCIE_DMA_MASTER_ID_shf	27
-#define PCIE_DMA_MASTER_ID_msk	0xF
-#define PCIE_DMA_MASTER_ISL_bf	1, 26, 21
-#define PCIE_DMA_MASTER_ISL_wrd	1
-#define PCIE_DMA_MASTER_ISL_shf	21
-#define PCIE_DMA_MASTER_ISL_msk	0x3F
-#define PCIE_DMA_SIGCTX_bf	1, 20, 18
-#define PCIE_DMA_SIGCTX_wrd	1
-#define PCIE_DMA_SIGCTX_shf	18
-#define PCIE_DMA_SIGCTX_msk	0x3
-#define PCIE_DMA_SIGNUM_bf	1, 17, 14
-#define PCIE_DMA_SIGNUM_wrd	1
-#define PCIE_DMA_SIGNUM_shf	14
-#define PCIE_DMA_SIGNUM_msk	0xF
-#define PCIE_DMA_TOKEN_bf	1, 13, 12
-#define PCIE_DMA_TOKEN_wrd	1
-#define PCIE_DMA_TOKEN_shf	12
-#define PCIE_DMA_TOKEN_msk	0x3
-#define PCIE_DMA_CFG_IDX_bf	1, 11, 8
-#define PCIE_DMA_CFG_IDX_wrd	1
-#define PCIE_DMA_CFG_IDX_shf	8
-#define PCIE_DMA_CFG_IDX_msk	0xF
-#define PCIE_DMA_CPPA_HI_bf	1, 7, 0
-#define PCIE_DMA_CPPA_HI_wrd	1
-#define PCIE_DMA_CPPA_HI_shf	0
-#define PCIE_DMA_CPPA_HI_msk	0xFF
+#define PCIE_DMA_MODE_SEL_bf    1, 31, 30
+#define PCIE_DMA_MODE_SEL_wrd   1
+#define PCIE_DMA_MODE_SEL_shf   30
+#define PCIE_DMA_MODE_SEL_msk   0x3
+#define PCIE_DMA_MASTER_ID_bf   1, 30, 27
+#define PCIE_DMA_MASTER_ID_wrd  1
+#define PCIE_DMA_MASTER_ID_shf  27
+#define PCIE_DMA_MASTER_ID_msk  0xF
+#define PCIE_DMA_MASTER_ISL_bf  1, 26, 21
+#define PCIE_DMA_MASTER_ISL_wrd 1
+#define PCIE_DMA_MASTER_ISL_shf 21
+#define PCIE_DMA_MASTER_ISL_msk 0x3F
+#define PCIE_DMA_SIGCTX_bf      1, 20, 18
+#define PCIE_DMA_SIGCTX_wrd     1
+#define PCIE_DMA_SIGCTX_shf     18
+#define PCIE_DMA_SIGCTX_msk     0x3
+#define PCIE_DMA_SIGNUM_bf      1, 17, 14
+#define PCIE_DMA_SIGNUM_wrd     1
+#define PCIE_DMA_SIGNUM_shf     14
+#define PCIE_DMA_SIGNUM_msk     0xF
+#define PCIE_DMA_TOKEN_bf       1, 13, 12
+#define PCIE_DMA_TOKEN_wrd      1
+#define PCIE_DMA_TOKEN_shf      12
+#define PCIE_DMA_TOKEN_msk      0x3
+#define PCIE_DMA_CFG_IDX_bf     1, 11, 8
+#define PCIE_DMA_CFG_IDX_wrd    1
+#define PCIE_DMA_CFG_IDX_shf    8
+#define PCIE_DMA_CFG_IDX_msk    0xF
+#define PCIE_DMA_CPPA_HI_bf     1, 7, 0
+#define PCIE_DMA_CPPA_HI_wrd    1
+#define PCIE_DMA_CPPA_HI_shf    0
+#define PCIE_DMA_CPPA_HI_msk    0xFF
 
 // Word 2
-#define PCIE_DMA_PCIEA_LO_bf	2, 31, 0
-#define PCIE_DMA_PCIEA_LO_wrd	2
-#define PCIE_DMA_PCIEA_LO_shf	0
-#define PCIE_DMA_PCIEA_LO_msk	0xFFFFFFFF
+#define PCIE_DMA_PCIEA_LO_bf    2, 31, 0
+#define PCIE_DMA_PCIEA_LO_wrd   2
+#define PCIE_DMA_PCIEA_LO_shf   0
+#define PCIE_DMA_PCIEA_LO_msk   0xFFFFFFFF
 
 // Word 3
-#define PCIE_DMA_XLEN_bf	3, 31, 20
-#define PCIE_DMA_XLEN_wrd	3
-#define PCIE_DMA_XLEN_shf	20
-#define PCIE_DMA_XLEN_msk	0xFFF
-#define PCIE_DMA_RID_bf		3, 19, 12
-#define PCIE_DMA_RID_wrd	3
-#define PCIE_DMA_RID_shf	12
-#define PCIE_DMA_RID_msk	0xFF
-#define PCIE_DMA_OVDRID_bf	3, 11, 11
-#define PCIE_DMA_OVDRID_wrd	3
-#define PCIE_DMA_OVDRID_shf	11
-#define PCIE_DMA_OVDRID_msk	0x1
-#define PCIE_DMA_XCLASS_bf	3, 10, 8
-#define PCIE_DMA_XCLASS_wrd	3
-#define PCIE_DMA_XCLASS_shf	8
-#define PCIE_DMA_XCLASS_msk	0x7
-#define PCIE_DMA_PCIEA_HI_bf	3, 7, 0
-#define PCIE_DMA_PCIEA_HI_wrd	3
-#define PCIE_DMA_PCIEA_HI_shf	0
-#define PCIE_DMA_PCIEA_HI_msk	0xFF
+#define PCIE_DMA_XLEN_bf        3, 31, 20
+#define PCIE_DMA_XLEN_wrd       3
+#define PCIE_DMA_XLEN_shf       20
+#define PCIE_DMA_XLEN_msk       0xFFF
+#define PCIE_DMA_RID_bf         3, 19, 12
+#define PCIE_DMA_RID_wrd        3
+#define PCIE_DMA_RID_shf        12
+#define PCIE_DMA_RID_msk        0xFF
+#define PCIE_DMA_OVDRID_bf      3, 11, 11
+#define PCIE_DMA_OVDRID_wrd     3
+#define PCIE_DMA_OVDRID_shf     11
+#define PCIE_DMA_OVDRID_msk     0x1
+#define PCIE_DMA_XCLASS_bf      3, 10, 8
+#define PCIE_DMA_XCLASS_wrd     3
+#define PCIE_DMA_XCLASS_shf     8
+#define PCIE_DMA_XCLASS_msk     0x7
+#define PCIE_DMA_PCIEA_HI_bf    3, 7, 0
+#define PCIE_DMA_PCIEA_HI_wrd   3
+#define PCIE_DMA_PCIEA_HI_shf   0
+#define PCIE_DMA_PCIEA_HI_msk   0xFF
 
 #define PCIE_DMA_SIZE_LW        4
 
@@ -202,7 +206,7 @@
  * in_wait_sig1), branching to LABEL on completion.  This scheme allows
  * filling defer slots on these state transitions with instructions required
  * to issue DMAs.
- * 
+ *
  * @param in_work       Read-only work queue entry from stage batch used
  *                      to tell how and where to issue the DMAs.
  *                      (see: pci_out_sb.h)
@@ -210,7 +214,7 @@
  *                      DMAs.
  * @param out_sig0      First signal to use for DMAs
  * @param out_dma1      Second block of write transfer registers to use for
- *                      DMAs.  
+ *                      DMAs.
  * @param out_sig1      Second signal to use for DMAs.  Must be used for
  *                      the final DMA and not waited on.
  * @param LABEL         LABEL to branch to after getting state transition
@@ -220,7 +224,7 @@
  *                      not used.
  */
 #macro _issue_packet_dma(in_work, out_dma0, out_sig0, out_dma1, out_sig1, \
-			 LABEL, in_wait_sig0, in_wait_sig1)
+                         LABEL, in_wait_sig0, in_wait_sig1)
 .begin
 
     .reg word
@@ -249,18 +253,18 @@
     beq[add_wq_credits#]
 
 start_packet_dma#:
-    wsm_test_bit_set(in_work, SB_WQ_ENABLED, no_dma#)
+    wsm_test_bit_clr(in_work, SB_WQ_ENABLED, no_dma#)
     wsm_test_bit_clr(in_work, SB_WQ_CTM_ONLY, not_ctm_only#)
 
     // Super fast path
 ctm_only#:
     // Word 0
     // XXX Optimization: packet number is already in place
-    alu[word, in_work[0], AND, g_dma_word0_mask]
+    alu[word, in_work[2], AND, g_dma_word0_mask]
     alu[out_dma0[0], word, OR, 1, <<31] // Packet format bit
 
     // Word 1
-    wsm_extract(tmp, in_work, SB_WQ_CTM_ISL)
+    wsm_extract(word, in_work, SB_WQ_CTM_ISL)
     alu[word, word, OR, g_dma_word1_vals]
     alu[out_dma0[1], word, OR, (&out_sig0), <<PCIE_DMA_SIGNUM_shf]
 
@@ -272,7 +276,7 @@ ctm_only#:
     // Word 3
     alu[word, g_dma_word3_vals, +8, in_work[SB_WQ_HOST_ADDR_HI_wrd]], no_cc
     // XXX Uncomment if buffers can cross a 4G boundary
-    // alu[word, word, +carry, 0] 
+    // alu[word, word, +carry, 0]
     wsm_extract(tmp, in_work,  SB_WQ_RID)
     sm_set_noclr(word, PCIE_DMA_RID, tmp)
     wsm_extract(len, in_work, SB_WQ_DATALEN)
@@ -289,9 +293,9 @@ ctm_only#:
     sm_set_noclr_to(out_dma0[3], word, PCIE_DMA_XLEN, len, 1)
     #pragma warning(default:4701)
     #pragma warning(default:5009)
-    
-    
+
 not_ctm_only#:
+    ctx_arb[bpt] // XXX REMOVE ME
     wsm_extract(isl, in_work, SB_WQ_CTM_ISL)
     beq[mu_only_dma#]
 
@@ -304,6 +308,7 @@ mu_only_dma#:
     // wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
 
 no_dma#:
+    ctx_arb[bpt] // XXX REMOVE ME
     // signal self w/ output signal:  "DMA" is completed
     local_csr_rd[ACTIVE_CTX_STS]
     immed[tmp, 0]
@@ -373,7 +378,7 @@ add_wq_credits#:
  *                      indicating no signal.
  */
 #macro _complete_packet_dma(io_work, in_wq_sig, LABEL, in_wait_sig0, \
-			    in_wait_sig1)
+                            in_wait_sig1)
 .begin
 
     .reg isl
@@ -422,6 +427,7 @@ ticket_ready#:
     br=byte[$ticket, 0, 0, complete_done#]
     br=byte[$ticket, 0, TICKET_ERROR, ticket_error#]
 
+    alu[cntr_addr_lo, cntr_addr_lo, +, NFD_OUT_ATOMICS_DMA_DONE]
     alu[--, g_add_imm_iref, OR, $ticket, <<16]
     mem[add_imm, --, g_send_cntrs_addr_hi, <<8, cntr_addr_lo], indirect_ref
 
@@ -451,7 +457,7 @@ ticket_error#:
                       LABEL,
                       wsig0,
                       wsig1)
-    
+
 #endm
 
 
@@ -530,7 +536,7 @@ main#:
     .reg write $dma_out0x[PCIE_DMA_SIZE_LW]
     .xfer_order $dma_out0x
     .sig volatile dma_sig0x
-    
+
     // XFER and signals for work/DMA block 1
     .reg $work_in1[SB_WQ_SIZE_LW]
     .xfer_order $work_in1
@@ -572,8 +578,9 @@ main#:
     /*
      * Values to OR into word 1 of a DMA descriptor
      */
-    move(g_dma_word1_vals, 0)
-    sm_set_noclr(g_dma_word1_vals, PCIE_DMA_CFG_IDX, NFD_OUT_DATA_CFG_REG_SIG_ONLY)
+    /* Valid only for CTM addresses! */
+    move(g_dma_word1_vals, 0x80)
+    sm_set_noclr(g_dma_word1_vals, PCIE_DMA_CFG_IDX, NFD_OUT_DATA_CFG_REG)
     sm_set_noclr(g_dma_word1_vals,  PCIE_DMA_TOKEN, NFD_OUT_DATA_DMA_TOKEN)
     local_csr_rd[ACTIVE_CTX_STS]
     immed[tmp, 0]
@@ -581,22 +588,20 @@ main#:
     sm_set_noclr(g_dma_word1_vals,  PCIE_DMA_SIGCTX, tmp)
     move(tmp, __ISLAND)
     sm_set_noclr(g_dma_word1_vals,  PCIE_DMA_MASTER_ISL, tmp)
-    move(tmp, __MEID)
+    move(tmp, (__MEID & 0xf))
     sm_set_noclr(g_dma_word1_vals,  PCIE_DMA_MASTER_ID, tmp)
 
     /*
      * Fixed bits to OR into word 3 of a DMA descriptor
-     * Bit 7 fixes direct access mode in an MU address.
      */
-    move(g_dma_word3_vals, ((1 << 7) |
-                            (0 << PCIE_DMA_XCLASS_shf) |
+    move(g_dma_word3_vals, ((0 << PCIE_DMA_XCLASS_shf) |
                             (1 << PCIE_DMA_OVDRID_shf)))
 
     // Base address in local island of release bitmap
     move(g_bitmap_base, nfd_out_sb_release/**/PCIE_ISL)
 
     // Base address of send_desc release counters
-    move(g_send_cntrs_addr_hi, (nfd_out_send_cntrs/**/PCIE_ISL >> 8))
+    move(g_send_cntrs_addr_hi, (nfd_out_atomics/**/PCIE_ISL >> 8))
 
     // (1 << 3) == OVE_DATA == 1 -> override full dataref with iref[31:16]
     move(g_blm_iref, (1 << 3))
@@ -610,7 +615,7 @@ main#:
     /*
      * Indirect reference to perform 32-bit add_imm from
      * the data16 field of an indirect reference.
-     * 
+     *
      * override length  = (1 << 7)
      * override dataref = (2 << 3)
      * length[2] = 0 for 32-bit operations = (0 << 10)
