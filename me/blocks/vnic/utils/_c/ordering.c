@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2015,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/utils/_c/ordering.c
  * @brief         NFP next neighbour ring interface
@@ -33,20 +33,16 @@ reorder_start(unsigned int start_ctx, SIGNAL *sig)
 
 
 __intrinsic void
-reorder_done(unsigned int start_ctx, SIGNAL *sig)
+reorder_done(unsigned int start_ctx, unsigned int end_ctx, SIGNAL *sig)
 {
     unsigned int val;
 
     ctassert(__is_ct_const(start_ctx));
+    ctassert(__is_ct_const(end_ctx));
 
     /* XXX Might be necessary to avoid testing ctx() each time. */
-#ifdef CTX_MODE_4
-    /* 0,2,4,6 */
-    if (ctx() != 6) {
-#else
-    /* 0,1,2,3,4,5,6,7 */
-    if (ctx() != 7) {
-#endif
+
+    if (ctx() != end_ctx) {
         __critical_path(); /* Optimise for majority of contexts */
 
         val = (NFP_MECSR_SAME_ME_SIGNAL_SIG_NO(__signal_number(sig)) |
@@ -66,17 +62,11 @@ reorder_done(unsigned int start_ctx, SIGNAL *sig)
 
 
 __intrinsic unsigned int
-reorder_get_next_ctx(unsigned int start_ctx)
+reorder_get_next_ctx(unsigned int start_ctx, unsigned int end_ctx)
 {
     unsigned int val;
 
-#ifdef CTX_MODE_4
-    /* 0,2,4,6 */
-    if (ctx() != 6) {
-#else
-    /* 0,1,2,3,4,5,6,7 */
-    if (ctx() != 7) {
-#endif
+    if (ctx() != end_ctx) {
         val = NFP_MECSR_SAME_ME_SIGNAL_NEXT_CTX;
     } else {
         val= NFP_MECSR_SAME_ME_SIGNAL_CTX(start_ctx);

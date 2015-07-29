@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2015 Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/shared/nfd_internal.h
  * @brief         An API to manage access to NFD configuration data
@@ -43,7 +43,9 @@
 
 
 #define NFD_IN_ISSUE_START_CTX  2
+#define NFD_IN_ISSUE_END_CTX    6
 #define NFD_IN_NOTIFY_START_CTX 2
+#define NFD_IN_NOTIFY_END_CTX   7
 
 #define NFD_IN_DSTQ_MSK         0x7
 

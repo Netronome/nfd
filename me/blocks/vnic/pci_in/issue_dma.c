@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2015 Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/pci_in/issue_dma.c
  * @brief         Code to DMA packet data to the NFP
@@ -267,7 +267,8 @@ issue_dma_setup()
     /* wait_msk initially only needs tx_desc_sig and dma_order_sig
      * No DMAs or messages have been issued at this stage */
     wait_msk = __signals(&tx_desc_sig, &dma_order_sig);
-    next_ctx = reorder_get_next_ctx(NFD_IN_ISSUE_START_CTX);
+    next_ctx = reorder_get_next_ctx(NFD_IN_ISSUE_START_CTX,
+                                    NFD_IN_ISSUE_END_CTX);
 }
 
 

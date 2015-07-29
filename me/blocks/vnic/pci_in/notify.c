@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2015 Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/pci_in/notify.c
  * @brief         Code to notify host and app that packet was transmitted
@@ -208,7 +208,8 @@ notify_setup()
 {
     if (ctx() != 0) {
         wait_msk = __signals(&msg_sig, &msg_order_sig);
-        next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX);
+        next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX,
+                                        NFD_IN_NOTIFY_END_CTX);
     }
 }
 
