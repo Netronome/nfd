@@ -66,7 +66,7 @@
 #define NFD_OUT_DESC_SIZE_LW    4
 #define NFD_OUT_XFER_SIZE_LW    4
 
-#define NFD_OUT_ATOMICS_SZ      8
+#define NFD_OUT_ATOMICS_SZ      16
 
 
 #macro nfd_out_ring_declare()
