@@ -14,7 +14,6 @@
 
 #include <vnic/pci_in/gather.c>
 #include <vnic/pci_in/gather_status.c>
-#include <vnic/pci_in/notify.c>
 #include <vnic/pci_in/service_qc.c>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_cfg_internal.c>
@@ -72,8 +71,6 @@ main(void)
         distr_gather_setup_shared();
         nfd_cfg_setup();
 
-        notify_setup_shared();
-
         /* TEMP: Mark initialisation complete */
         status |= (1<<STATUS_INIT_DONE_BIT);
 
@@ -85,7 +82,6 @@ main(void)
     } else {
         gather_setup();
 
-        notify_setup();
     }
 
     /* Perform general initialisation */
@@ -112,7 +108,6 @@ main(void)
             service_qc();
 
             distr_gather();
-            distr_notify();
 
             gather_status();
 
@@ -160,10 +155,8 @@ main(void)
         for (;;) {
             gather();
 
-            notify();
-
             /* Yield thread */
-            /* ctx_swap(); */
+            ctx_swap();
         }
     }
 }

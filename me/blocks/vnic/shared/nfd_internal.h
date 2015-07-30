@@ -82,7 +82,7 @@
 /* Debug defines */
 #define NFD_IN_DBG_GATHER_INTVL     1000000
 #define NFD_IN_DBG_ISSUE_DMA_INTVL  1000000
-
+#define NFD_IN_DBG_NOTIFY_INTVL     1000000
 
 /* nfd_out */
 #define NFD_OUT_MAX_BATCH_SZ            4

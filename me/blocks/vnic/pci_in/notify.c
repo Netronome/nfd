@@ -17,10 +17,13 @@
 
 #include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
+#include <vnic/pci_in/notify_status.c>
 #include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_cfg_internal.c>
 #include <vnic/shared/nfd_internal.h>
 /*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
 #include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
+#include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 
@@ -39,6 +42,10 @@ struct _pkt_desc_batch {
     struct nfd_in_pkt_desc pkt2;
     struct nfd_in_pkt_desc pkt3;
 };
+
+
+NFD_INIT_DONE_DECLARE;
+
 
 __shared __gpr unsigned int data_dma_seq_served = 0;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
@@ -175,9 +182,37 @@ do {                                                                    \
 #endif
 
 
-/*
- * reflect_data() available from gather.c, imported before this file.
- */
+/* XXX Move to some sort of CT reflect library */
+__intrinsic void
+reflect_data(unsigned int dst_me, unsigned int dst_xfer,
+             unsigned int sig_no, volatile __xwrite void *src_xfer,
+             size_t size)
+{
+    #define OV_SIG_NUM 13
+
+    unsigned int addr;
+    unsigned int count = (size >> 2);
+    struct nfp_mecsr_cmd_indirect_ref_0 indirect;
+
+    /* ctassert(__is_write_reg(src_xfer)); */ /* TEMP, avoid volatile warnings */
+    ctassert(__is_ct_const(size));
+
+    /* Generic address computation.
+     * Could be expensive if dst_me, or dst_xfer
+     * not compile time constants */
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
+
+    indirect.__raw = 0;
+    indirect.signal_num = sig_no;
+    local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
+
+    /* Currently just support reflect_write_sig_remote */
+    __asm {
+        alu[--, --, b, 1, <<OV_SIG_NUM];
+        ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
+           __ct_const_val(count)], indirect_ref;
+    };
+}
 
 
 /**
@@ -389,5 +424,48 @@ distr_notify()
                                      NFD_IN_DATA_DMA_ME),
                      &nfd_in_data_served_refl_out,
                      sizeof nfd_in_data_served_refl_out);
+    }
+}
+
+
+int
+main(void)
+{
+    /* Perform per ME initialisation  */
+    if (ctx() == 0) {
+
+        nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
+
+        notify_setup_shared();
+        notify_status_setup();
+
+        NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
+
+    } else {
+        notify_setup();
+    }
+
+
+    /*
+     * Work loop
+     */
+    if (ctx() == 0) {
+        /* CTX0 main loop */
+        for (;;) {
+            distr_notify();
+
+            notify_status();
+
+            /* Yield thread */
+            ctx_swap();
+        }
+    } else {
+        /* Worker main loop */
+        for (;;) {
+            notify();
+
+            /* Yield thread */
+            /* ctx_swap(); */
+        }
     }
 }
