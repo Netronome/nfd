@@ -194,6 +194,24 @@
 #endm
 
 
+#macro signal_sb_credits_update()
+.begin
+    .reg addr
+
+    #define_eval SB_SIG_ADDR (((NFD_OUT_STAGE_ME & 0x3F0)  << 20) | \
+                             ((NFD_OUT_STAGE_ME & 0xF)     << 9)  | \
+                             (STAGE_BATCH_MANAGER_CTX      << 6)  | \
+                             (PCI_OUT_SB_WQ_CREDIT_SIG_NUM << 2))
+    move(addr, SB_SIG_ADDR)
+
+    ct[interthread_signal, --, 0, addr]
+
+    #undef SB_SIG_ADDR
+
+.end
+#endm
+
+
 /**
  * Issue the DMAs required to send a packet to a host buffer.  The parameters
  * for transmission are specified in 'in_work'.  The macro is given two
@@ -250,7 +268,7 @@
     .io_completed out_dma1[3]
 
     alu[@ndequeued, @ndequeued, -, 1]
-    beq[add_wq_credits#]
+    blt[add_wq_credits#]
 
 start_packet_dma#:
     wsm_test_bit_clr(in_work, SB_WQ_ENABLED, no_dma#)
@@ -285,7 +303,9 @@ ctm_only#:
     #pragma warning(disable:5117)
     #pragma warning(disable:4701)
     #pragma warning(disable:5009)
+
     pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+
     #pragma warning(default:5117)
     // This wait() always has 2 defer slots following it
     wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL, defer[2])
@@ -321,8 +341,11 @@ add_wq_credits#:
     move(addr_lo, nfd_out_sb_wq_credits/**/PCIE_ISL)
     alu[--, g_add_imm_iref, OR, SB_WQ_CREDIT_BATCH, <<16]
     mem[add_imm, --, 0, addr_lo], indirect_ref
+
+    signal_sb_credits_update()
+
     br[start_packet_dma#], defer[1]
-    move(@ndequeued, SB_WQ_CREDIT_BATCH)
+    move(@ndequeued, (SB_WQ_CREDIT_BATCH - 1))
 
 .end
 #endm

@@ -8,6 +8,9 @@
 #define SB_USE_MU_WORK_QUEUES 1
 
 
+#define PCI_OUT_SB_WQ_CREDIT_SIG_NUM       13
+
+
 #macro pci_out_sb_declare()
 
     // Ticket release bitmaps

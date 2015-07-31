@@ -61,10 +61,10 @@ __asm .init_mu_ring nfd_out_issue_dbg_num nfd_out_issue_dbg_journal;
 struct nfd_out_wq_msg {
     union {
         struct {
-            unsigned int up:1;          /* The queue is up */
-            unsigned int rid:8;         /* Requester ID for the queue */
-            unsigned int spare:7;       /* Unused */
-            unsigned int seqn:8;        /* Packet sequence number, per queue */
+            unsigned int up:1;           /* The queue is up */
+            unsigned int rid:8;          /* Requester ID for the queue */
+            unsigned int spare:5;        /* Unused */
+            unsigned int seqn:10;        /* Packet sequence number, per queue */
             unsigned int pcie_addr_hi:8; /* High bits of the PCIe address */
 
             unsigned int pcie_addr_lo;  /* Low bits of the PCIe address */

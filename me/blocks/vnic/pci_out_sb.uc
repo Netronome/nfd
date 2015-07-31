@@ -35,7 +35,7 @@
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+---------------+-------------+---------------+---------------+
- *    0  |E| Requester ID  |   Unused    | Sequence Num  | HostBuf[39:32]|
+ *    0  |E| Requester ID  |  Unused |   Sequence Num    | HostBuf[39:32]|
  *       +-+---------------+-------------+---------------+---------------+
  *    1  |                       Host Buffer [31:0]                      |
  *       +---------------------------------------------------------------+
@@ -66,7 +66,7 @@
 
 
 #define NUM_IO_BLOCKS           5
-#define PCI_OUT_SB_WQ_CREDIT_SIG_NUM       13
+//#define PCI_OUT_SB_WQ_CREDIT_SIG_NUM       13
 #define PCI_OUT_SB_CFG_SIG_NUM  14
 #define ORDER_SIG_NUM           15
 
@@ -266,7 +266,7 @@
         move(up, 0)
         move(q, 0)
         .while (q < maxqs)
-            
+
             _set_queue_state(in_vnic, q, up)
             alu[q, q, +, 1]
 
@@ -297,7 +297,7 @@
     .endif
 
     local_csr_wr[MAILBOX3, maxqs]
-    
+
 .end
 #endm
 
@@ -454,10 +454,7 @@
     // Shared ME initialization finished: kickstart workers
     signal_ctx(STAGE_BATCH_FIRST_WORKER, ORDER_SIG_NUM)
 
-    // REMOVE ME
-    local_csr_wr[MAILBOX0, 0xFF]
-
-    .while (1) 
+    .while (1)
 
         .set_sig _nfd_credit_sig_sb
         .set_sig _nfd_cfg_sig_sb
@@ -521,7 +518,7 @@
  *  - g_out_wq_lo and g_out_wq_hi contains the address for sending to the
  *    output work queue.
  *
- * This function should consume exactly 19 cycles of processing per
+ * This function should consume exactly 20 cycles of processing per
  * invocation with zero cycles lost to defer slots as long as there are
  * work queue credits available to send (and if we are backed up due
  * to lack of credits, we have spare cycles to lose).  If one chains
@@ -536,6 +533,7 @@
     .reg lma
     .reg credits
     .reg addr_lo
+    .reg addr_lo_10bit_seq
 
     .reg read $buf_desc[2]
     .xfer_order $buf_desc
@@ -557,8 +555,8 @@ test_ready_to_send#:
 
     // Copy descriptor. Put at the end so last word can be ommitted in WQ
     move(out_xfer[2], in_xfer[0])               // lm addr cycle 0
-    move(out_xfer[3], in_xfer[1])		// lm addr cycle 1
-    move(out_xfer[4], in_xfer[2])		// lm addr cycle 2
+    move(out_xfer[3], in_xfer[1])       // lm addr cycle 1
+    move(out_xfer[4], in_xfer[2])       // lm addr cycle 2
     move(out_xfer[5], in_xfer[3])
 
     /*
@@ -566,6 +564,7 @@ test_ready_to_send#:
      * - get next addr_lo from sequence number
      * - issue read then write
      */
+    alu[addr_lo_10bit_seq, g_cache_addr_lo_10bit_seq_mask, AND, LM_SEQ, <<NFD_OUT_FL_DESC_SIZE_lg2]
     alu[addr_lo, g_cache_addr_lo_mask, AND, LM_SEQ, <<NFD_OUT_FL_DESC_SIZE_lg2]
     mem[read, $buf_desc[0], LM_CACHE_ADDR_RS8, <<8, addr_lo, 1], sig_done[fl_read_sig]
     mem[write, out_xfer[4], LM_CACHE_ADDR_RS8, <<8, addr_lo, 1], sig_done[cur_outsig]
@@ -584,7 +583,8 @@ test_ready_to_send#:
      */
     ctx_arb[fl_read_sig, cur_outsig], defer[2]
     alu[LM_SEQ, LM_SEQ, +, 1]
-    alu[addr_lo, addr_lo, OR, LM_STATUS, <<(F_L(SB_WQ_RID_bf) - (F_L(SB_WQ_SEQ_bf) - NFD_OUT_FL_DESC_SIZE_lg2))]
+    alu[addr_lo_10bit_seq, addr_lo_10bit_seq, OR, LM_STATUS, <<(F_L(SB_WQ_RID_bf) - (F_L(SB_WQ_SEQ_bf) - NFD_OUT_FL_DESC_SIZE_lg2))]
+
 
     // Start sending the work to issue DMA, but see below: we're not quite done
     #if SB_USE_MU_WORK_QUEUES
@@ -611,7 +611,7 @@ test_ready_to_send#:
     .set_sig ordersig
     #pragma warning(disable:5009)
     ctx_arb[nxt_insig, nxt_outsig, ordersig], defer[2], br[DONE_LABEL]
-    alu[out_xfer[0], $buf_desc[0], OR, addr_lo, <<(F_L(SB_WQ_SEQ_bf) - NFD_OUT_FL_DESC_SIZE_lg2)]
+    alu[out_xfer[0], $buf_desc[0], OR, addr_lo_10bit_seq, <<(F_L(SB_WQ_SEQ_bf) - NFD_OUT_FL_DESC_SIZE_lg2)]
     move(out_xfer[1], $buf_desc[1])
     #pragma warning(default:5009)
 
@@ -648,6 +648,7 @@ flow_controlled#:
     .reg volatile g_sig_next_worker
     .reg volatile g_lm_qstate_mask
     .reg volatile g_cache_addr_lo_mask
+    .reg volatile g_cache_addr_lo_10bit_seq_mask
     .reg volatile g_in_wq_hi
     .reg volatile g_in_wq_lo
     .reg volatile g_out_wq_hi
@@ -686,6 +687,10 @@ flow_controlled#:
 
     move(g_lm_qstate_mask, ((NFD_OUT_MAX_QUEUES - 1) << LM_QSTATE_SIZE_lg2))
     move(g_cache_addr_lo_mask, ((NFD_OUT_FL_DESC_PER_QUEUE - 1) << NFD_OUT_FL_DESC_SIZE_lg2))
+
+    /* Mask 10 bits for the sequence number */
+    move(g_cache_addr_lo_10bit_seq_mask, (SB_WQ_SEQ_msk << NFD_OUT_FL_DESC_SIZE_lg2))
+
     move(g_in_wq_hi, ((nfd_out_ring_mem/**/PCIE_ISL >> 8) & 0xFF000000))
     move(g_in_wq_lo, nfd_out_ring_num/**/PCIE_ISL/**/0)
     move(lma, sb_wq_credits)
