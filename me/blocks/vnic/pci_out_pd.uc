@@ -737,7 +737,7 @@ main#:
 
     state_e1n2#:
         br_signal[dma_sig1, transition_e1n2_e0n2#]
-        br_!signal[work_sig1, unreached#]
+        br_!signal[work_sig2, unreached#]
         // fall through
 
     transition_e1n2_e2n0#:
@@ -745,7 +745,7 @@ main#:
 
     state_e2n0#:
         br_signal[dma_sig1, transition_e2n0_e1n0#]
-        br_!signal[work_sig1, unreached#]
+        br_!signal[work_sig0, unreached#]
         // fall through
 
     transition_e2n0_e3n1#:
@@ -774,7 +774,7 @@ main#:
 
     state_e1n0#:
         br_signal[dma_sig2, transition_e1n0_e0n0#]
-        br_!signal[work_sig1, unreached#]
+        br_!signal[work_sig0, unreached#]
         // fall through
 
     transition_e1n0_e2n1#:
