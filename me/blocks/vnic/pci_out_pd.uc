@@ -520,9 +520,109 @@ skip_second_dma#:
 
 
 mu_only_dma#:
-    ctx_arb[bpt] // XXX REMOVE ME
-    // TODO: implement and end with wait_br_next_state()
-    // wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
+    // Compute the MU start address
+    wsm_extract(tmp, in_work,  SB_WQ_OFFSET)
+    alu[mu_lo_start, --, b, in_work[3], <<11]
+    alu[mu_lo_start, mu_lo_start, +, tmp]
+
+    // DMA0 MU address hi and signal
+    alu[word, --, b, g_dma_word1_vals]
+    ld_field[word, 0001, in_work[3], >>21]
+    // XXX the ld_field op deliberately over writes the "0x80" in
+    // g_dma_word1_vals from the CTM addressing
+    alu[out_dma0[1], word, OR, (&out_sig0), <<PCIE_DMA_SIGNUM_shf]
+
+    // Branch to only handling the first DMA if the packet
+    // will fit entirely in one DMA.
+    // XXX the branch could be avoided if necessary, but this
+    // isn't the super fast path so fewer branch targets is preferred.
+    alu[--, --, b, len, >>(log2(PCIE_DMA_MAX_LEN))]
+    beq[mu_only_first_bytes#]
+
+    // DMA1 MU address hi and signal
+    alu[out_dma1[1], word, OR, (&out_sig1), <<PCIE_DMA_SIGNUM_shf]
+
+    // Branch to handling the last bytes of the packet
+    // for packets >2 DMAs
+    alu[--, --, b, len, >>(log2(2 * PCIE_DMA_MAX_LEN))]
+    bne[mu_only_end_bytes#]
+
+mu_only_cont#:
+    // XXX mu_only_end_bytes updates len such that it is <= 8k
+    // We now have to handle the middle section of the packet, that
+    // starts at 4k and may be up to 4k long.
+    // We already have the hi addresses setup, so only need to setup
+    // the start and length.
+    move(tmp, PCIE_DMA_MAX_LEN)
+    alu[out_dma1[0], mu_lo_start, +, tmp]
+    alu[out_dma1[2], pcie_lo_start, +, tmp]
+
+    // Use a temporary variable for this DMA length, and update len
+    // for the final DMA
+    alu[tmp, len, -, tmp]
+    alu[tmp, tmp, -, 1]
+    sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+    #pragma warning(disable:5117)
+    pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+    #pragma warning(default:5117)
+
+    // After this section, the len must be exactly PCIE_DMA_MAX_LEN
+    move(len, PCIE_DMA_MAX_LEN)
+
+mu_only_first_bytes#:
+    // Word 0
+    alu[out_dma0[0], --, b, mu_lo_start]
+
+    // Word 1 handled above
+
+    // Word 2
+    alu[out_dma0[2], --, b, pcie_lo_start]
+
+    // Word 3 and issue
+    #pragma warning(disable:5117)
+    #pragma warning(disable:4701)
+    #pragma warning(disable:5009)
+    pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+    // This wait() always has 2 defer slots following it
+    wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL, defer[2])
+    alu[len, len, -, 1]
+    sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, len, 1)
+    #pragma warning(default:5117)
+    #pragma warning(default:4701)
+    #pragma warning(default:5009)
+
+mu_only_end_bytes#:
+    // We now have to handle the end of the packet that is >8k.
+    // It starts at 8k and may be up to 4k long.
+    // We already have the hi addresses setup, so only need to setup
+    // the start and length.
+    move(tmp, (2 * PCIE_DMA_MAX_LEN))
+    alu[out_dma1[0], mu_lo_start, +, tmp]
+    alu[out_dma1[2], pcie_lo_start, +, tmp]
+
+    // Use a temporary variable for this DMA length, and update len
+    // for the final DMA
+    alu[tmp, len, -, tmp]
+    alu[tmp, tmp, -, 1]
+    sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+    #pragma warning(disable:5117)
+    pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+    #pragma warning(default:5117)
+
+    // After this section, the len must be exactly 2 * PCIE_DMA_MAX_LEN
+    move(len, (2 * PCIE_DMA_MAX_LEN))
+
+    // Swap on the DMA completion, which implicitly signals the xfers
+    // are free again
+    ctx_arb[out_sig1]
+    .io_completed out_dma1[0]
+    .io_completed out_dma1[1]
+    .io_completed out_dma1[2]
+    .io_completed out_dma1[3]
+    // TODO move this branch onto the ctx_arb above
+    br[mu_only_cont#]
+    // mu_only_dma# completed
+
 
 no_dma#:
     ctx_arb[bpt] // XXX REMOVE ME
@@ -534,12 +634,15 @@ no_dma#:
     local_csr_wr[SAME_ME_SIGNAL, tmp]
     wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
 
+
+    // Exception targets
 ctm_only_not_flagged#:
     // We should only reach this point if the user did not flag
     // a packet as "ctm_only" correctly, or the input descriptor
     // was corrupt.  Either way, stop the ME.
     ctx_arb[bpt]
     br[ctm_only_not_flagged#]
+
 
 add_wq_credits#:
     move(addr_lo, nfd_out_sb_wq_credits/**/PCIE_ISL)
