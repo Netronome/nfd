@@ -34,6 +34,10 @@ struct _issued_pkt_batch {
     struct nfd_in_issued_desc pkt1;
     struct nfd_in_issued_desc pkt2;
     struct nfd_in_issued_desc pkt3;
+    struct nfd_in_issued_desc pkt4;
+    struct nfd_in_issued_desc pkt5;
+    struct nfd_in_issued_desc pkt6;
+    struct nfd_in_issued_desc pkt7;
 };
 
 struct _pkt_desc_batch {
@@ -41,6 +45,10 @@ struct _pkt_desc_batch {
     struct nfd_in_pkt_desc pkt1;
     struct nfd_in_pkt_desc pkt2;
     struct nfd_in_pkt_desc pkt3;
+    struct nfd_in_pkt_desc pkt4;
+    struct nfd_in_pkt_desc pkt5;
+    struct nfd_in_pkt_desc pkt6;
+    struct nfd_in_pkt_desc pkt7;
 };
 
 
@@ -60,7 +68,8 @@ static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
 
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
-static SIGNAL msg_sig, qc_sig;
+static SIGNAL wq_sig4, wq_sig5, wq_sig6, wq_sig7;
+static SIGNAL msg_sig0, msg_sig1, qc_sig;
 static SIGNAL get_order_sig;    /* Signal for reordering before issuing get */
 static SIGNAL msg_order_sig;    /* Signal for reordering on message return */
 static SIGNAL_MASK wait_msk;
@@ -200,7 +209,7 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
     /* Generic address computation.
      * Could be expensive if dst_me, or dst_xfer
      * not compile time constants */
-    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 15)<<10 | (dst_xfer & 31)<<2));
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 0xF)<<10 | (dst_xfer & 0x3F)<<2));
 
     indirect.__raw = 0;
     indirect.signal_num = sig_no;
@@ -213,6 +222,7 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
            __ct_const_val(count)], indirect_ref;
     };
 }
+
 
 
 /**
@@ -242,7 +252,7 @@ void
 notify_setup()
 {
     if (ctx() != 0) {
-        wait_msk = __signals(&msg_sig, &msg_order_sig);
+        wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
         next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX,
                                         NFD_IN_NOTIFY_END_CTX);
     }
@@ -328,8 +338,10 @@ notify()
         /* XXX THS-50 workaround */
         /* cls_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in, sizeof batch_in, */
         /*              &msg_sig); */
-        ctm_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in, sizeof batch_in,
-                     &msg_sig);
+        ctm_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in.pkt0,
+                     (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
+        ctm_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in.pkt4,
+                     (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
 
         __asm {
             ctx_arb[--], defer[1];
@@ -337,13 +349,19 @@ notify()
         }
 
         wait_msk = __signals(&wq_sig0, &wq_sig1, &wq_sig2, &wq_sig3,
-                             &qc_sig, &msg_sig, &msg_order_sig);
+                             &wq_sig4, &wq_sig5, &wq_sig6, &wq_sig7,
+                             &qc_sig, &msg_sig0, &msg_sig1, &msg_order_sig);
         __implicit_read(&wq_sig0);
         __implicit_read(&wq_sig1);
         __implicit_read(&wq_sig2);
         __implicit_read(&wq_sig3);
+        __implicit_read(&wq_sig4);
+        __implicit_read(&wq_sig5);
+        __implicit_read(&wq_sig6);
+        __implicit_read(&wq_sig7);
         __implicit_read(&qc_sig);
-        __implicit_read(&msg_sig);
+        __implicit_read(&msg_sig0);
+        __implicit_read(&msg_sig1);
         __implicit_read(&msg_order_sig);
 
         reorder_done_opt(&next_ctx, &msg_order_sig);
@@ -373,6 +391,10 @@ notify()
         _NOTIFY_PROC(1);
         _NOTIFY_PROC(2);
         _NOTIFY_PROC(3);
+        _NOTIFY_PROC(4);
+        _NOTIFY_PROC(5);
+        _NOTIFY_PROC(6);
+        _NOTIFY_PROC(7);
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */

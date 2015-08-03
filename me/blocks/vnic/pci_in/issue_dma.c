@@ -34,6 +34,10 @@ struct _tx_desc_batch {
     struct nfd_in_tx_desc pkt1;
     struct nfd_in_tx_desc pkt2;
     struct nfd_in_tx_desc pkt3;
+    struct nfd_in_tx_desc pkt4;
+    struct nfd_in_tx_desc pkt5;
+    struct nfd_in_tx_desc pkt6;
+    struct nfd_in_tx_desc pkt7;
 };
 
 struct _issued_pkt_batch {
@@ -41,6 +45,10 @@ struct _issued_pkt_batch {
     struct nfd_in_issued_desc pkt1;
     struct nfd_in_issued_desc pkt2;
     struct nfd_in_issued_desc pkt3;
+    struct nfd_in_issued_desc pkt4;
+    struct nfd_in_issued_desc pkt5;
+    struct nfd_in_issued_desc pkt6;
+    struct nfd_in_issued_desc pkt7;
 };
 
 struct _dma_desc_batch {
@@ -48,6 +56,10 @@ struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt1;
     struct nfp_pcie_dma_cmd pkt2;
     struct nfp_pcie_dma_cmd pkt3;
+    struct nfp_pcie_dma_cmd pkt4;
+    struct nfp_pcie_dma_cmd pkt5;
+    struct nfp_pcie_dma_cmd pkt6;
+    struct nfp_pcie_dma_cmd pkt7;
 };
 
 NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
@@ -92,6 +104,7 @@ static __xwrite struct _issued_pkt_batch batch_out;
 /* Signalling */
 static SIGNAL tx_desc_sig, msg_sig0, desc_order_sig, dma_order_sig;
 static SIGNAL last_of_batch_dma_sig;
+static SIGNAL msg_sig1;
 static SIGNAL_MASK wait_msk;
 
 static SIGNAL jumbo0, jumbo1;
@@ -644,8 +657,9 @@ issue_dma()
     }
 
     wait_msk = __signals(&last_of_batch_dma_sig, &tx_desc_sig, &msg_sig0,
-                         &dma_order_sig);
+                         &msg_sig1, &dma_order_sig);
     __implicit_read(&last_of_batch_dma_sig);
+    __implicit_read(&msg_sig1);
     __implicit_read(&msg_sig0);
     __implicit_read(&tx_desc_sig);
     __implicit_read(&dma_order_sig);
@@ -673,7 +687,7 @@ issue_dma()
     issued_tmp.q_num = queue;
 
     /* Maybe add "full" bit */
-    if (num == 4) {
+    if (num == 8) {
         /* Full batches are the critical path */
         /* XXX maybe tricks with an extra nfd_in_dma_state
          * struct would convince nfcc to use one set LM index? */
@@ -681,25 +695,51 @@ issue_dma()
         _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(3, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(4, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(5, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(6, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(7, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+    } else if (num == 4) {
+        _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+        _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(3, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+        _ISSUE_CLR(4);
+        _ISSUE_CLR(5);
+        _ISSUE_CLR(6);
+        _ISSUE_CLR(7);
     } else if (num == 3) {
         _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(2, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
 
         _ISSUE_CLR(3);
+        _ISSUE_CLR(4);
+        _ISSUE_CLR(5);
+        _ISSUE_CLR(6);
+        _ISSUE_CLR(7);
     } else if (num == 2) {
         _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
         _ISSUE_PROC(1, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
 
         _ISSUE_CLR(2);
         _ISSUE_CLR(3);
+        _ISSUE_CLR(4);
+        _ISSUE_CLR(5);
+        _ISSUE_CLR(6);
+        _ISSUE_CLR(7);
     } else if (num == 1) {
         _ISSUE_PROC(0, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
 
         _ISSUE_CLR(1);
         _ISSUE_CLR(2);
         _ISSUE_CLR(3);
+        _ISSUE_CLR(4);
+        _ISSUE_CLR(5);
+        _ISSUE_CLR(6);
+        _ISSUE_CLR(7);
     } else {
         halt();
     }
@@ -710,5 +750,8 @@ issue_dma()
     /* XXX THS-50 workaround */
     /* cls_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, */
     /*              &msg_sig); */
-    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
+    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out.pkt0,
+                 (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
+    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out.pkt4,
+                 (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
 }

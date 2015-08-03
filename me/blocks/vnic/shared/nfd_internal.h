@@ -26,7 +26,9 @@
 
 
 /* nfd_in */
-#define NFD_IN_MAX_BATCH_SZ     4
+#define NFD_IN_MAX_BATCH_SZ     8
+#define NFD_IN_FAST_PATH_BATCH_SZ 8
+#define NFD_IN_MAX_NON_FAST_PATH_BATCH_SZ 4
 #define NFD_IN_DESC_BATCH_Q_SZ  128
 #define NFD_IN_ISSUED_RING_SZ   128
 #define NFD_IN_ISSUED_RING_RES  32
@@ -45,7 +47,7 @@
 #define NFD_IN_ISSUE_START_CTX  2
 #define NFD_IN_ISSUE_END_CTX    6
 #define NFD_IN_NOTIFY_START_CTX 2
-#define NFD_IN_NOTIFY_END_CTX   7
+#define NFD_IN_NOTIFY_END_CTX   6
 
 #define NFD_IN_DSTQ_MSK         0x7
 

@@ -244,7 +244,7 @@ gather()
         /*
          * Check if there is a batch to handle
          */
-        if(tx_r_update_tmp != 0) {
+        if (tx_r_update_tmp != 0) {
             /*
              * There is. Put a message on the work_ring.
              */
@@ -253,6 +253,14 @@ gather()
             unsigned int pcie_addr_off;
             unsigned int desc_ring_off;
             __xwrite struct nfp_pcie_dma_cmd descr;
+
+            /* logic to only send batches of 8, 4, 3, 2, 1 */
+            /* batches of 7, 6, 5 will turn in to batches of 4 */
+            if (tx_r_update_tmp != NFD_IN_FAST_PATH_BATCH_SZ) {
+                if (tx_r_update_tmp > NFD_IN_MAX_NON_FAST_PATH_BATCH_SZ) {
+                    tx_r_update_tmp = NFD_IN_MAX_NON_FAST_PATH_BATCH_SZ;
+                }
+            }
 
             /*
              * Increment dma_seq_issued upfront to avoid ambiguity
