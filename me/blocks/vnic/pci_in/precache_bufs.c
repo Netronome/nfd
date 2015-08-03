@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2015 Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/pci_in/precache_bufs.c
  * @brief         Fill the local (LM) cache of MU buffers
@@ -28,9 +28,9 @@ _init_csr("mecsr:CtxEnables.LMAddr3Global 1");
 
 
 struct precache_bufs_state {
-    unsigned int pending_fetch:1;       /* A  buffers "get" has been issued */
-    unsigned int recompute_seq_safe:1;  /* The safe seqn must be recomputed */
-    unsigned int spare:30;
+    unsigned int sigs_even_compl:2; /* bits for completed on mem_pop sigs */
+    unsigned int recompute_seq_safe:1; /* The safe seqn must be recomputed */
+    unsigned int spare:29;
 };
 
 
@@ -38,8 +38,9 @@ NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
-static struct precache_bufs_state state = {0, 0, 0};
-static SIGNAL_PAIR precache_sig0;
+static struct precache_bufs_state state = {0x3, 0, 0};
+static volatile SIGNAL_PAIR precache_sig0;
+static volatile SIGNAL_PAIR precache_sig1;
 
 static __xread unsigned int bufs_rd[NFD_IN_BUF_RECACHE_WM];
 static unsigned int blm_queue_addr;
@@ -127,37 +128,55 @@ _precache_buf_bytes_used()
 }
 
 
-__intrinsic void
-_precache_bufs_copy(unsigned int num)
-{
-    ctassert(__is_ct_const(num));
-    ctassert((num == 16) || (num == 8) || (num == 4));
-    /* Move to empty slot */
-    __asm alu[--, --, b, NFD_IN_BUF_STORE_PTR++];
-
-    /* Perform bulk copy */
-    switch(num) {
-    case 16:
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-    case 8:
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-    case 4:
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR++, --, b, *$index++];
-        __asm alu[NFD_IN_BUF_STORE_PTR, --, b, *$index];
-    }
-}
+#define _PRECACHE_BUFS_COPY(_num, _start)                                    \
+do {                                                                         \
+    ctassert(__is_ct_const(_num));                                           \
+    ctassert(__is_ct_const(_start));                                         \
+    ctassert((_num == 24) || (_num == 16) || (_num == 12) || (_num == 8));   \
+    ctassert((_start == _num) || (_start == 0));                             \
+                                                                             \
+    /* Move to empty slot */                                                 \
+    __asm { alu[--, --, b, NFD_IN_BUF_STORE_PTR++] }                         \
+                                                                             \
+    /* Perform bulk copy */                                                  \
+    switch(_num) {                                                           \
+    case 16:                                                                 \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 60] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 56] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 52] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 48] }                           \
+    case 12:                                                                 \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 44] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 40] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 36] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 32] }                           \
+    case 8:                                                                  \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 28] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 24] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 20] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 16] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 12] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 8] }                            \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
+                    bufs_rd + (4 * _start) + 4] }                            \
+        __asm { alu[NFD_IN_BUF_STORE_PTR, --, b,                             \
+                    bufs_rd + (4 * _start) + 0] }                            \
+    }                                                                        \
+} while (0)
 
 
 /**
@@ -196,35 +215,41 @@ precache_bufs_setup()
 void
 precache_bufs()
 {
-    /* NB: Ordering of if clauses allows back to back fetches,
-     *     if buf_store is sufficiently empty */
-
+    /* test completion signal for mem_ring_pops */
     if (signal_test(&precache_sig0.even)) {
-        /* Process the fetch */
-        unsigned int bufs_rd_off;
-
-        /* Prepare T-INDEX early so usage shadow is filled easily */
-        bufs_rd_off = MECSR_XFER_INDEX(__xfer_reg_number(bufs_rd));
-        local_csr_write(local_csr_t_index, bufs_rd_off);
-        state.pending_fetch = 0;
-
+        state.sigs_even_compl |= 0x1;
         if (!signal_test(&precache_sig0.odd)) {
-            /* Fetch succeeded */
-            _precache_bufs_copy(NFD_IN_BUF_RECACHE_WM);
-            __implicit_read(bufs_rd, sizeof bufs_rd);
-
+            _PRECACHE_BUFS_COPY(NFD_IN_BUF_RING_POP_SZ, 0);
+            __implicit_read(bufs_rd, (NFD_IN_BUF_RING_POP_SZ << 2));
             precache_bufs_compute_seq_safe();
         }
     }
 
-    if (!state.pending_fetch) {
+    if (signal_test(&precache_sig1.even)) {
+        state.sigs_even_compl |= 0x2;
+        if (!signal_test(&precache_sig1.odd)) {
+            _PRECACHE_BUFS_COPY(NFD_IN_BUF_RING_POP_SZ,
+                                NFD_IN_BUF_RING_POP_SZ);
+            __implicit_read(&bufs_rd[NFD_IN_BUF_RING_POP_SZ],
+                            (NFD_IN_BUF_RING_POP_SZ << 2));
+            precache_bufs_compute_seq_safe();
+        }
+    }
+
+
+    if (state.sigs_even_compl == 0x3) {
         if (_precache_buf_bytes_used() >
             (sizeof (unsigned int) * NFD_IN_BUF_RECACHE_WM)) {
-            /* Issue the fetch */
-            __mem_ring_pop(blm_queue_num, blm_queue_addr, bufs_rd,
-                           sizeof(bufs_rd), sizeof(bufs_rd),
+            /* issue first pop with sig1 hoping it finished before sig0 */
+            __mem_ring_pop(blm_queue_num, blm_queue_addr,
+                           &bufs_rd[NFD_IN_BUF_RING_POP_SZ],
+                           (NFD_IN_BUF_RING_POP_SZ << 2), 64,
+                           sig_done, &precache_sig1);
+            __mem_ring_pop(blm_queue_num, blm_queue_addr,
+                           &bufs_rd[0],
+                           (NFD_IN_BUF_RING_POP_SZ << 2), 64,
                            sig_done, &precache_sig0);
-            state.pending_fetch = 1;
+            state.sigs_even_compl = 0;
         }
     }
 }
