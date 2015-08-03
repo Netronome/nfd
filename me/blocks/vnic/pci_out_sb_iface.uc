@@ -39,15 +39,18 @@
         #define NFD_OUT_SB_WQ_SIZE_LW  1024
         #define NFD_OUT_SB_WQ_OFF 0
         #define NFD_OUT_SB_WQ_NUM 15
+        #define_eval __THIS_ISL (PCIE_ISL + NFD_PCIE_ISL_BASE) 
 
         .alloc_mem nfd_out_sb_wq_mem/**/PCIE_ISL cls+NFD_OUT_SB_WQ_OFF \
             island (NFD_OUT_SB_WQ_SIZE_LW * 4) (NFD_OUT_SB_WQ_SIZE_LW * 4)
         .alloc_resource nfd_out_sb_ring_num/**/PCIE_ISL \
             cls_rings+NFD_OUT_SB_WQ_NUM island 1 1
-        .init_csr cls:i/**/THIS_ISL/**/.Rings.RingBase/**/NFD_OUT_SB_WQ_NUM \
+        .init_csr cls:i/**/__THIS_ISL/**/.Rings.RingBase/**/NFD_OUT_SB_WQ_NUM \
             (((NFD_OUT_SB_WQ_OFF >> 7) << 0) | \
              ((log2(NFD_OUT_SB_WQ_SIZE_LW) - 5) << 16))
-        .init_csr cls:i/**/THIS_ISL/**/.Rings.RingPtrs/**/NFD_OUT_SB_WQ_NUM 0
+        .init_csr cls:i/**/__THIS_ISL/**/.Rings.RingPtrs/**/NFD_OUT_SB_WQ_NUM 0
+
+        #undef __THIS_ISL
 
     #endif /* SB_USE_MU_WORK_QUEUES */
 

@@ -115,10 +115,21 @@
 #define LM_WQ_CREDITS           LM_WQ_CREDIT_PTR
 #define LM_CACHE_ADDR_RS8       LM_QSTATE_PTR[LM_CACHE_ADDR_RS8_wrd]
 
+#define LM_DEBUG_CSR            ACTIVE_LM_ADDR_2
+#define LM_DEBUG_PTR            *l$index2
+
 
 // LMEM data structures
 .alloc_mem sb_ctx_base lmem+0 me (LM_QSTATE_SIZE * NFD_OUT_MAX_QUEUES)
 .alloc_mem sb_wq_credits lmem me 4
+.alloc_mem sb_debug_snapshot lmem me (LM_QSTATE_SIZE * NFD_OUT_MAX_QUEUES)
+
+#define_eval __LOOP 0
+#while (__LOOP < (LM_QSTATE_SIZE * NFD_OUT_MAX_QUEUES))
+    .init sb_ctx_base+__LOOP 0
+    #define_eval __LOOP (__LOOP + 4)
+#endloop
+
 
 // Input ring
 #define_eval __EMEM 'NFD_PCIE/**/PCIE_ISL/**/_EMEM'
@@ -139,6 +150,10 @@
 .alloc_resource nfd_cfg_ring_num/**/PCIE_ISL/**/2 nfd_cfg_ring_nums/**/PCIE_ISL global 1
 .alloc_resource nfd_cfg_ring_num/**/PCIE_ISL/**/3 nfd_cfg_ring_nums/**/PCIE_ISL global 1
 .alloc_resource nfd_cfg_ring_num/**/PCIE_ISL/**/4 nfd_cfg_ring_nums/**/PCIE_ISL global 1
+
+// Debug state
+.alloc_mem nfd_out_sb_debug_state/**/PCIE_ISL emem0 global \
+    (LM_QSTATE_SIZE * NFD_OUT_MAX_QUEUES + 16)
 
 // Config message field declarations
 #define NFD_CFG_MSG_VALID_bf            0, 31, 31
@@ -296,8 +311,6 @@
 
     .endif
 
-    local_csr_wr[MAILBOX3, maxqs]
-
 .end
 #endm
 
@@ -427,6 +440,108 @@
 #endm
 
 
+#macro set_alarm(in_sig, in_nticks)
+.begin
+
+    .reg count
+    .reg amt
+
+    move(amt, in_nticks)
+    local_csr_rd[TIMESTAMP_LOW]
+    immed[count, 0]
+    alu[count, count, +, amt]
+    immed_w1[count, 0]
+    local_csr_wr[ACTIVE_FUTURE_COUNT_SIGNAL, (&in_sig)]
+    local_csr_wr[ACTIVE_CTX_FUTURE_COUNT, count]
+    .set_sig in_sig
+
+.end
+#endm
+
+
+#macro dump_state(io_version)
+.begin
+    .reg addr_hi
+    .reg addr_lo
+    .reg lma
+    .reg i
+
+    .reg $out[(LM_QSTATE_SIZE_LW * 4)]
+    .xfer_order $out
+
+    .sig out_sig
+
+    local_csr_wr[MAILBOX3, io_version]
+
+    move(lma, sb_ctx_base)
+    local_csr_wr[LM_QSTATE_CSR, lma]
+
+    move(lma, sb_debug_snapshot)
+    local_csr_wr[LM_DEBUG_CSR, lma]
+
+    move(i, (LM_QSTATE_SIZE_LW * NFD_OUT_MAX_QUEUES))
+    move(addr_hi, ((nfd_out_sb_debug_state/**/PCIE_ISL >> 8) & 0xFF000000))
+    move(addr_lo, (nfd_out_sb_debug_state/**/PCIE_ISL & 0xFFFFFFFF))
+
+    /* copy state out so it is an atomic snapshot */
+copy_loop#:
+    move(LM_DEBUG_PTR++, LM_QSTATE_PTR++)
+    alu[i, i, -, 4]
+    bgt[copy_loop#], defer[3]
+    move(LM_DEBUG_PTR++, LM_QSTATE_PTR++)
+    move(LM_DEBUG_PTR++, LM_QSTATE_PTR++)
+    move(LM_DEBUG_PTR++, LM_QSTATE_PTR++)
+
+    /* dump out the header */
+    move($out[0], io_version)
+    move($out[1], LM_WQ_CREDITS)
+    move($out[2], 0)
+    move($out[3], 0)
+    mem[write, $out[0], addr_hi, <<8, addr_lo, 2], ctx_swap[out_sig]
+
+    move(lma, sb_debug_snapshot)
+    local_csr_wr[LM_DEBUG_CSR, lma]
+    alu[addr_lo, addr_lo, +, 16]
+
+    move(i, NFD_OUT_MAX_QUEUES)
+    .while (i > 0)
+
+        /* queue 0 */
+        move($out[0], LM_DEBUG_PTR++)
+        move($out[1], LM_DEBUG_PTR++)
+        move($out[2], LM_DEBUG_PTR++)
+        move($out[3], LM_DEBUG_PTR++)
+
+        /* queue 1 */
+        move($out[4], LM_DEBUG_PTR++)
+        move($out[5], LM_DEBUG_PTR++)
+        move($out[6], LM_DEBUG_PTR++)
+        move($out[7], LM_DEBUG_PTR++)
+
+        /* queue 2 */
+        move($out[8], LM_DEBUG_PTR++)
+        move($out[9], LM_DEBUG_PTR++)
+        move($out[10], LM_DEBUG_PTR++)
+        move($out[11], LM_DEBUG_PTR++)
+
+        /* queue 3 */
+        move($out[12], LM_DEBUG_PTR++)
+        move($out[13], LM_DEBUG_PTR++)
+        move($out[14], LM_DEBUG_PTR++)
+        move($out[15], LM_DEBUG_PTR++)
+
+        mem[write, $out[0], addr_hi, <<8, addr_lo, 8], ctx_swap[out_sig]
+
+        alu[addr_lo, addr_lo, +, (16 * 4)]
+        alu[i, i, -, 4]
+
+    .endw
+
+    alu[io_version, io_version, +, 1]
+.end
+#endm
+
+
 /**
  * Main processing loop for the manager context.  This context is responsible
  * for updating work queue credits and for processing configuration messages.
@@ -436,14 +551,19 @@
 
     .reg lma
 
+    .reg state_version
+
     .sig volatile visible _nfd_credit_sig_sb
     .addr _nfd_credit_sig_sb PCI_OUT_SB_WQ_CREDIT_SIG_NUM
 
     .sig volatile visible _nfd_cfg_sig_sb
     .addr _nfd_cfg_sig_sb PCI_OUT_SB_CFG_SIG_NUM
 
+    .sig volatile state_alarm_sig
+
 
     // Shared ME initialization
+    move(state_version, 0)
     move(lma, sb_wq_credits)
     local_csr_wr[LM_WQ_CREDIT_CSR, lma]
     nop
@@ -454,16 +574,19 @@
     // Shared ME initialization finished: kickstart workers
     signal_ctx(STAGE_BATCH_FIRST_WORKER, ORDER_SIG_NUM)
 
+    set_alarm(state_alarm_sig, 16384)
+
     .while (1)
 
         .set_sig _nfd_credit_sig_sb
         .set_sig _nfd_cfg_sig_sb
 
-        ctx_arb[_nfd_credit_sig_sb, _nfd_cfg_sig_sb], ANY
+        ctx_arb[_nfd_credit_sig_sb, _nfd_cfg_sig_sb, state_alarm_sig], ANY
 
         .if (SIGNAL(_nfd_credit_sig_sb))
 
             update_wq_credits()
+            .continue
 
         .endif
 
@@ -473,6 +596,15 @@
             local_csr_wr[MAILBOX0, @CONFIGS]
 
             process_reconfig()
+            .continue
+
+        .endif
+
+        .if (SIGNAL(state_alarm_sig))
+
+            dump_state(state_version)
+            set_alarm(state_alarm_sig, 16384)
+            .continue
 
         .endif
 
