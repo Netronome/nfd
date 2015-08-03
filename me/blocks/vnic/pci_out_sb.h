@@ -7,8 +7,8 @@
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+---------------+---------+-------------------+---------------+
- *    0  |E| Requester ID  |  Unused |   Sequence Num    | HostBuf[39:32]|
- *       +-+---------------+---------|-------------------+---------------+
+ *    0  |E| Requester ID  | Unused  |   Sequence Num    | HostBuf[39:32]|
+ *       +-+---------------+---------+-------------------+---------------+
  *    1  |                       Host Buffer [31:0]                      |
  *       +-----------+-+-----------------+---+-+-------------------------+
  *    2  |  CTM ISL  |C|  Packet Number  |SPL|0|     Starting Offset     |
@@ -21,17 +21,17 @@
 
 // Word 0
 #define SB_WQ_ENABLED_bf        0, 31, 31
-#define SB_WQ_ENABLED_wrd   0
-#define SB_WQ_ENABLED_shf   31
-#define SB_WQ_ENABLED_msk   1
+#define SB_WQ_ENABLED_wrd       0
+#define SB_WQ_ENABLED_shf       31
+#define SB_WQ_ENABLED_msk       1
 #define SB_WQ_RID_bf            0, 30, 23
-#define SB_WQ_RID_wrd       0
-#define SB_WQ_RID_shf       23
-#define SB_WQ_RID_msk       0xFF
+#define SB_WQ_RID_wrd           0
+#define SB_WQ_RID_shf           23
+#define SB_WQ_RID_msk           0xFF
 #define SB_WQ_SEQ_bf            0, 17, 8
-#define SB_WQ_SEQ_wrd       0
-#define SB_WQ_SEQ_shf       8
-#define SB_WQ_SEQ_msk       0x3FF
+#define SB_WQ_SEQ_wrd           0
+#define SB_WQ_SEQ_shf           8
+#define SB_WQ_SEQ_msk           0x3FF
 #define SB_WQ_HOST_ADDR_HI_bf   0, 7, 0
 #define SB_WQ_HOST_ADDR_HI_wrd  0
 #define SB_WQ_HOST_ADDR_HI_shf  0
@@ -44,26 +44,26 @@
 #define SB_WQ_HOST_ADDR_LO_msk  0xFFFFFFFF
 
 // Word 2
-#define SB_WQ_CTM_ISL_bf    2, 31, 26
-#define SB_WQ_CTM_ISL_wrd   2
-#define SB_WQ_CTM_ISL_shf   26
-#define SB_WQ_CTM_ISL_msk   0x3F
+#define SB_WQ_CTM_ISL_bf        2, 31, 26
+#define SB_WQ_CTM_ISL_wrd       2
+#define SB_WQ_CTM_ISL_shf       26
+#define SB_WQ_CTM_ISL_msk       0x3F
 #define SB_WQ_CTM_ONLY_bf       2, 25, 25
-#define SB_WQ_CTM_ONLY_wrd  2
-#define SB_WQ_CTM_ONLY_shf  25
-#define SB_WQ_CTM_ONLY_msk  0x1
-#define SB_WQ_PKT_NUM_bf    2, 24, 16
-#define SB_WQ_PKT_NUM_wrd   2
-#define SB_WQ_PKT_NUM_shf   16
-#define SB_WQ_PKT_NUM_msk   0x1FF
+#define SB_WQ_CTM_ONLY_wrd      2
+#define SB_WQ_CTM_ONLY_shf      25
+#define SB_WQ_CTM_ONLY_msk      0x1
+#define SB_WQ_PKT_NUM_bf        2, 24, 16
+#define SB_WQ_PKT_NUM_wrd       2
+#define SB_WQ_PKT_NUM_shf       16
+#define SB_WQ_PKT_NUM_msk       0x1FF
 #define SB_WQ_CTM_SPLIT_bf      2, 15, 14
-#define SB_WQ_CTM_SPLIT_wrd 2
-#define SB_WQ_CTM_SPLIT_shf 14
-#define SB_WQ_CTM_SPLIT_msk 0x3
-#define SB_WQ_OFFSET_bf     2, 12, 0
-#define SB_WQ_OFFSET_wrd    2
-#define SB_WQ_OFFSET_shf    0
-#define SB_WQ_OFFSET_msk    0x7FF
+#define SB_WQ_CTM_SPLIT_wrd     2
+#define SB_WQ_CTM_SPLIT_shf     14
+#define SB_WQ_CTM_SPLIT_msk     0x3
+#define SB_WQ_OFFSET_bf         2, 12, 0
+#define SB_WQ_OFFSET_wrd        2
+#define SB_WQ_OFFSET_shf        0
+#define SB_WQ_OFFSET_msk        0x7FF
 
 // Word 3
 #define SB_WQ_NBI_bf            3, 31, 31
