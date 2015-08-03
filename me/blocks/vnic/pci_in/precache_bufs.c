@@ -168,6 +168,9 @@ precache_bufs_setup()
 {
     struct nfp_mecsr_ctx_enables cfg;
 
+    __assign_relative_register(&nfd_in_data_event_xfer,
+                               NFD_IN_DATA_EVENT_XFER_ASSIGN);
+
     /* XXX Replace with _init_csr command, once query resolved */
     cfg.__raw = local_csr_read(local_csr_ctx_enables);
     cfg.lm_addr_3_glob = 1;

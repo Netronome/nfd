@@ -37,6 +37,7 @@
 #define NFD_IN_BUF_STORE_SZ     64
 #define NFD_IN_BUF_RECACHE_WM   16
 
+#define NFD_IN_DATA_EVENT_XFER_ASSIGN 0
 /* #define NFD_IN_Q_EVENT_START    0 */
 /* #define NFD_IN_Q_START          0 */
 /* #define NFD_IN_Q_EVENT_DATA     (1<<4) */
