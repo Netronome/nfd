@@ -154,6 +154,8 @@
 
 #define PCIE_DMA_SIZE_LW        4
 
+#define PCIE_DMA_MAX_LEN        4096
+
 #define NFP_PCIE_DMA_TOPCI_LO   0x40040
 
 #macro wait_br_next_state(in_sig0, in_sig1, LABEL)
@@ -253,6 +255,11 @@
     .reg len
     .reg addr_lo
 
+    .reg pcie_hi_word
+    .reg pcie_lo_start
+    .reg ctm_bytes
+    .reg split_len
+
     .io_completed in_work[0]
     .io_completed in_work[1]
     .io_completed in_work[2]
@@ -315,15 +322,121 @@ ctm_only#:
     #pragma warning(default:5009)
 
 not_ctm_only#:
-    ctx_arb[bpt] // XXX REMOVE ME
+    // Prepare data that is required for all further branches:
+    // (1) the start address in host mem
+    wsm_extract(tmp2, in_work, SB_WQ_METALEN)
+    alu[tmp, NFP_NET_RX_OFFSET, -, tmp2]
+    alu[pcie_lo_start, tmp, +, in_work[SB_WQ_HOST_ADDR_LO_wrd]]
+
+    // (2) the partial word 3 (pcie_hi_word).  Aside from the DMA length,
+    // it is constant for all DMAs
+    alu[pcie_hi_word, g_dma_word3_vals, +8, in_work[SB_WQ_HOST_ADDR_HI_wrd]], no_cc
+    // XXX Uncomment if buffers can cross a 4G boundary
+    // alu[pcie_hi_word, pcie_hi_word, +carry, 0]
+    wsm_extract(tmp, in_work,  SB_WQ_RID)
+    sm_set_noclr(pcie_hi_word, PCIE_DMA_RID, tmp)
+
+    // (3) the total data length to send
+    wsm_extract(len, in_work, SB_WQ_DATALEN)
+
+    // Knock MU only packets off the fall through path
     wsm_extract(isl, in_work, SB_WQ_CTM_ISL)
     beq[mu_only_dma#]
 
 ctm_and_mu_dma#:
-    // TODO: implement and end with wait_br_next_state()
-    // wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
+    // The priority at this point are packets which have only just
+    // spilled over into MU.  Cycle budget on this path is still
+    // critical, so we start with the work that is a priority for
+    // those packets.
+
+    // Compute how many bytes are in CTM from the split length
+    // and starting offset
+    // TODO replace with standard ASM macros?
+    move(tmp, 256)
+    wsm_extract(tmp2, in_work,  SB_WQ_CTM_SPLIT)
+    alu[--, tmp2, or, 0]
+    alu_shf[split_len, --, B, tmp, <<indirect]
+    wsm_extract(tmp, in_work,  SB_WQ_OFFSET)
+    alu[ctm_bytes, split_len, -, tmp]
+    // TODO: address the fact that offset can put us past the end of CTM
+    // TODO: pass on the restriction to the user, or burn cycles handling?
+
+    // Compute the length remaining in MU
+    // It must be greater than zero or else we have bad input
+    alu[len, len, -, ctm_bytes]
+    ble[ctm_only_not_flagged#]
+
+    // Knock large packets off the fall through path
+    alu[--, --, b, len, >>(log2(PCIE_DMA_MAX_LEN))]
+    bne[ctm_and_mu_jumbo#]
+
+    // We can finish this packet with one CTM DMA and one MU DMA
+    // Populate the descriptors and send them
+
+    // Word 0
+    // CTM address low, computation as for ctm_only
+    // XXX Optimization: packet number is already in place
+    alu[word, in_work[2], AND, g_dma_word0_mask]
+    alu[out_dma0[0], word, OR, 1, <<31] // Packet format bit
+
+    // MU address low, data starts split_len into the MU buffer
+    alu[word, --, b, in_work[3], <<11]
+    alu[out_dma1[0], word, +, split_len]
+
+
+    // Word 1
+    // CTM address hi and signals, computation as for ctm_only
+    wsm_extract(word, in_work, SB_WQ_CTM_ISL)
+    alu[word, word, OR, g_dma_word1_vals]
+    alu[out_dma0[1], word, OR, (&out_sig0), <<PCIE_DMA_SIGNUM_shf]
+
+    // MU address hi and signals
+    alu[word, --, b, g_dma_word1_vals]
+    ld_field[word, 0001, in_work[3], >>21]
+    // XXX the ld_field op deliberately over writes the "0x80" in
+    // g_dma_word1_vals from the CTM addressing
+    alu[out_dma1[1], word, OR, (&out_sig1), <<PCIE_DMA_SIGNUM_shf]
+
+    // Word 2
+    // PCIe addresses
+    alu[out_dma0[2], --, b, pcie_lo_start]
+    alu[out_dma1[2], pcie_lo_start, +, ctm_bytes]
+
+    // Word 3 and issue
+
+    // Gambling on being fast enough to beat the DMA pull from these registers
+    #pragma warning(disable:5117)
+    #pragma warning(disable:4701)
+    #pragma warning(disable:5009)
+
+    // MU DMA, using out_dma1 and out_sig1 first
+    pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+    alu[len, len, -, 1]
+    sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, len, 1)
+    // TODO: offer option for buffers that cross 4G boundaries?
+
+    // Now the CTM DMA, so that out_dma0 and out_sig0 are used last
+    pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+    // This wait() always has 2 defer slots following it
+    wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL, defer[2])
+    alu[ctm_bytes, ctm_bytes, -, 1]
+    sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, ctm_bytes, 1)
+
+    #pragma warning(default:5117)
+    #pragma warning(default:4701)
+    #pragma warning(default:5009)
+
+
+ctm_and_mu_jumbo#:
+    ctx_arb[bpt] // XXX REMOVE ME
+
+    // This code will context swap to wait on up to two DMAs
+    // without leaving the section.  The final two DMAs are
+    // issued and left to complete during the wait_br_next_state()
+    // transition.
 
 mu_only_dma#:
+    ctx_arb[bpt] // XXX REMOVE ME
     // TODO: implement and end with wait_br_next_state()
     // wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
 
@@ -336,6 +449,13 @@ no_dma#:
     alu[tmp, tmp, OR, (&out_sig0), <<3]
     local_csr_wr[SAME_ME_SIGNAL, tmp]
     wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
+
+ctm_only_not_flagged#:
+    // We should only reach this point if the user did not flag
+    // a packet as "ctm_only" correctly, or the input descriptor
+    // was corrupt.  Either way, stop the ME.
+    ctx_arb[bpt]
+    br[ctm_only_not_flagged#]
 
 add_wq_credits#:
     move(addr_lo, nfd_out_sb_wq_credits/**/PCIE_ISL)
