@@ -54,6 +54,8 @@
 #define NFD_OUT_DATA_DMA_TOKEN          2
 #define NFD_OUT_ATOMICS_DMA_DONE        8
 
+#define NFD_OUT_MAX_PKT_BYTES           (10 * 1024)
+
 /*
  * DMA Descriptor
  *
@@ -432,6 +434,13 @@ ctm_and_mu_dma#:
 
 
 ctm_and_mu_jumbo#:
+    // Check for oversize packets off the fast path.
+    // len no longer holds the full packet length, so we re-extract
+    // it to a temporary variable
+    move(tmp, NFD_OUT_MAX_PKT_BYTES)
+    wsm_extract(tmp2, in_work, SB_WQ_DATALEN)
+    alu[--, tmp2, -, tmp]
+    bgt[pkt_too_large#]
 
     // This code will context swap to wait on up to two DMAs
     // without leaving the section.  The final two DMAs are
@@ -592,6 +601,12 @@ mu_only_first_bytes#:
     #pragma warning(default:5009)
 
 mu_only_end_bytes#:
+    // Check for oversize packets off the fast path.
+    // len still holds the full packet length
+    move(tmp, NFD_OUT_MAX_PKT_BYTES)
+    alu[--, len, -, tmp]
+    bgt[pkt_too_large#]
+
     // We now have to handle the end of the packet that is >8k.
     // It starts at 8k and may be up to 4k long.
     // We already have the hi addresses setup, so only need to setup
@@ -642,6 +657,13 @@ ctm_only_not_flagged#:
     // was corrupt.  Either way, stop the ME.
     ctx_arb[bpt]
     br[ctm_only_not_flagged#]
+
+pkt_too_large#:
+    // We should only reach this point if the packet is larger than
+    // 10kB.  This would seem to imply the input descriptor was corrupt.
+    // Stop the ME.
+    ctx_arb[bpt]
+    br[pkt_too_large#]
 
 
 add_wq_credits#:
