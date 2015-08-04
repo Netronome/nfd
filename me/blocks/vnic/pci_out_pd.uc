@@ -9,6 +9,8 @@
 #include <pci_out_sb_iface.uc>
 #include <nfd_common.h>
 
+#include <nfp6000/nfp_pcie.h>
+
 // Send sequence numbers for send_desc
 #if (NFD_OUT_MAX_QUEUES < 64)
 #error "NFD_OUT_MAX_QUEUES must be >= 64 for nfd_out_send_cntrs optimization to work"
@@ -836,7 +838,7 @@ ticket_error#:
 
 #macro die_if_debug()
 
-    #if 1 /* XXX REMOVE ME when really integrated */
+    #if 0 /* XXX REMOVE ME when really integrated */
 
         // Fake out the assembler
         alu[--, --, B, 0]
@@ -851,6 +853,57 @@ ticket_error#:
         // not reached
     #endif
 
+#endm
+
+#macro issue_dma_setup_shared()
+.begin
+    .if (ctx() == 0)
+
+        .reg $cfg
+        .sig pcie_sig
+        .reg addr_lo
+        .reg addr_hi
+        .reg new_cfg
+        .reg tmp
+        .reg odd
+
+        move(odd, NFD_OUT_DATA_CFG_REG & 1)
+        move(addr_lo, NFP_PCIE_DMA_CFG0 + (((NFD_OUT_DATA_CFG_REG >> 1) & 0x7) << 2))
+        move(addr_hi, (PCIE_ISL << 30))
+
+        pcie[read_pci, $cfg, addr_hi, <<8, addr_lo, 1], ctx_swap[pcie_sig]
+
+        #define_eval CPP_TARGET     NFP_PCIE_DMA_CFG_CPP_TARGET_EVEN(7)
+        #define_eval SIGNAL_ONLY    NFP_PCIE_DMA_CFG_SIGNAL_ONLY_EVEN
+        #define_eval TARGET_64      NFP_PCIE_DMA_CFG_TARGET_64_EVEN
+    #ifdef NFD_VNIC_NO_HOST
+        #define_eval DMA_CFG ( SIGNAL_ONLY | TARGET_64 | CPP_TARGET )
+    #else
+        #define_eval DMA_CFG ( TARGET_64 | CPP_TARGET )
+    #endif
+
+        move(tmp, DMA_CFG)
+
+    .if (odd)
+        ld_field_w_clr[new_cfg, 0011, $cfg]
+        alu_shf[new_cfg, new_cfg, OR, tmp, <<16]
+    .else
+        ld_field_w_clr[new_cfg, 1100, $cfg]
+        alu[new_cfg, new_cfg, OR, tmp]
+    .endif
+
+        alu[$cfg, --, B, new_cfg]
+
+        pcie[write_pci, $cfg, addr_hi, <<8, addr_lo, 1], ctx_swap[pcie_sig]
+
+    .endif
+
+    #undef DMA_CFG
+    #undef CPP_TARGET
+    #undef SIGNAL_ONLY
+    #undef TARGET_64
+
+.end
 #endm
 
 
@@ -913,6 +966,9 @@ main#:
 
     // General GPRs for initialization
     .reg tmp
+
+    /* Global initialization */
+    issue_dma_setup_shared()
 
 
     /*

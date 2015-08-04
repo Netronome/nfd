@@ -178,10 +178,10 @@ main(void)
     unsigned int ctx;
     unsigned int meid;
 
-    if (ctx() != 0) {
+    //if (ctx() != 0) {
         /* We just use CTX0 to avoid any ordering issues */
         ctx_wait(kill);
-    }
+    //}
 
     /* Extract thread data */
     ctx = ctx();
