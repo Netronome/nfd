@@ -392,8 +392,6 @@ do {                                                                    \
         descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;       \
         descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;       \
                                                                         \
-        descr_tmp.rid = queue_data[queue].rid;                          \
-                                                                        \
         if (dma_len > PCIE_DMA_MAX_SZ) {                                \
             /* data_dma_seq_issued was pre-incremented once we could */ \
             /* process batch.  Since we are going to swap, we */        \
@@ -533,8 +531,6 @@ do {                                                                    \
                                                                         \
         descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;       \
         descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;       \
-                                                                        \
-        descr_tmp.rid = queue_data[queue].rid;                          \
                                                                         \
         if (dma_len > PCIE_DMA_MAX_SZ) {                                \
             /* data_dma_seq_issued was pre-incremented once we could */ \
@@ -685,6 +681,7 @@ issue_dma()
     issued_tmp.num_batch = num;   /* Only needed in pkt0 */
     issued_tmp.sp1 = 0;
     issued_tmp.q_num = queue;
+    descr_tmp.rid = queue_data[queue].rid;
 
     /* Maybe add "full" bit */
     if (num == 8) {
