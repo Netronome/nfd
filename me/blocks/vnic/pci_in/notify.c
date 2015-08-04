@@ -258,22 +258,30 @@ notify_setup()
     }
 }
 
+#ifndef NFD_MU_PTR_DBG_MSK
+#define NFD_MU_PTR_DBG_MSK 0x1f000000
+#endif
 
-#ifdef NFD_VNIC_DBG_CHKS
-#define _NOTIFY_MU_CHK                                                  \
+#ifdef NFD_IN_NOTIFY_DBG_CHKS
+#define _NOTIFY_MU_CHK(_pkt)                                            \
     if ((batch_in.pkt##_pkt##.__raw[1] & NFD_MU_PTR_DBG_MSK) == 0) {    \
+        /* Write the error we read to Mailboxes for debug purposes */   \
+        local_csr_write(local_csr_mailbox_0,                            \
+                        NFD_IN_NOTIFY_MU_PTR_INVALID);                  \
+        local_csr_write(local_csr_mailbox_1,                            \
+                        batch_in.pkt##_pkt##.__raw[1]);                 \
+                                                                        \
         halt();                                                         \
     }
 #else
-#define _NOTIFY_MU_CHK
+#define _NOTIFY_MU_CHK(_pkt)
 #endif
-
-//        _NOTIFY_MU_CHK;                       \
 
 #define _NOTIFY_PROC(_pkt)                                              \
 do {                                                                    \
     if (batch_in.pkt##_pkt##.eop) {                                     \
         __critical_path();                                              \
+        _NOTIFY_MU_CHK(_pkt)                                            \
         pkt_desc_tmp.sp0 = 0;                                           \
         pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;              \
         dst_q = (batch_in.pkt##_pkt##.lso & NFD_IN_DSTQ_MSK);           \

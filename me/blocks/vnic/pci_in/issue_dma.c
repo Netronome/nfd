@@ -309,14 +309,22 @@ issue_dma_gather_seq_recv()
 #define NFD_MU_PTR_DBG_MSK 0x1f000000
 #endif
 
-/* #ifdef NFD_VNIC_DBG_CHKS */
+/* performance hit if NFD_IN_ISSUE_DMA_DBG_CHKS is enabled in makefile.
+ * The MU_PTR check done in notify by default which hides the cost of the
+ * check. */
+#ifdef NFD_IN_ISSUE_DMA_DBG_CHKS
 #define _ISSUE_PROC_MU_CHK(_val)                                        \
     if ((_val & NFD_MU_PTR_DBG_MSK) == 0) {                             \
+        /* Write the error we read to Mailboxes for debug purposes */   \
+        local_csr_write(local_csr_mailbox_0,                            \
+                        NFD_IN_ISSUE_DMA_MU_PTR_INVALID);               \
+        local_csr_write(local_csr_mailbox_1, _val);                     \
+                                                                        \
         halt();                                                         \
     }
-/* #else */
-/* #define _ISSUE_PROC_MU_CHK(_val) */
-/* #endif */
+#else
+#define _ISSUE_PROC_MU_CHK(_val)
+#endif
 
 
 #define _ISSUE_PROC_JUMBO(_pkt, _sig)                                   \

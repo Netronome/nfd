@@ -321,6 +321,8 @@ struct nfd_out_send_desc_msg {
 /* NFD halt error codes */
 #define NFD_CFG_PCIE_LINK_DOWN          0x800
 #define NFD_CFG_PCIE_MON_ABI_MISMATCH   0x801
+#define NFD_IN_NOTIFY_MU_PTR_INVALID    0x802
+#define NFD_IN_ISSUE_DMA_MU_PTR_INVALID 0x803
 
 #endif /* __NFP_LANG_MICROC */
 
