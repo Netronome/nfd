@@ -51,19 +51,20 @@ main(void)
      * Work loop
      */
     if (ctx() == 0) {
+        SIGNAL distr0;
+        SIGNAL_MASK distr_wait_msk = 0;
+
         /* CTX0 main loop */
         for (;;) {
-            issue_dma_gather_seq_recv();
-
-            distr_precache_bufs();
-
-            precache_bufs();
-
-            issue_dma_status();
+            /* This loop may only swap once, at the end to ensure that
+             * the service tasks are not starved out.  Actually processing
+             * a ring configuration message is the one exception as they
+             * should arrive infrequently. */
 
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
+                /* XXX extract ring number once and save aside */
                 nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_in1,
                                       NFD_CFG_RING_NUM(PCIE_ISL, 0));
 
@@ -82,8 +83,26 @@ main(void)
                 }
             }
 
-            /* Yield thread */
-            ctx_swap();
+
+            /* XXX Make this sig test fall through on no set */
+            issue_dma_status();
+
+            /* Service tasks
+             * These must run through without swapping as they
+             * will refill exactly the amount of resources as
+             * are consumed for minimum sized packets each time
+             * a set of full batches is processed. */
+            issue_dma_gather_seq_recv(); /* sig test and copy */
+
+            precache_bufs();
+
+            distr_precache_bufs(&distr_wait_msk, &distr0);
+
+            precache_bufs_compute_seq_safe();
+
+            wait_sig_mask(distr_wait_msk);
+            distr_wait_msk = 0;
+            __implicit_read(&distr0);
         }
     } else {
         /* Worker main loop */

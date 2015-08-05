@@ -29,8 +29,7 @@ _init_csr("mecsr:CtxEnables.LMAddr3Global 1");
 
 struct precache_bufs_state {
     unsigned int sigs_even_compl:2; /* bits for completed on mem_pop sigs */
-    unsigned int recompute_seq_safe:1; /* The safe seqn must be recomputed */
-    unsigned int spare:29;
+    unsigned int spare:30;
 };
 
 
@@ -38,7 +37,7 @@ NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
-static struct precache_bufs_state state = {0x3, 0, 0};
+static struct precache_bufs_state state = {0x3, 0};
 static volatile SIGNAL_PAIR precache_sig0;
 static volatile SIGNAL_PAIR precache_sig1;
 
@@ -117,7 +116,7 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
  */
 
 
-__inline unsigned int
+__intrinsic unsigned int
 _precache_buf_bytes_used()
 {
     unsigned int ret;
@@ -212,7 +211,7 @@ precache_bufs_setup()
  * a batch of TX_BUF_RECACHE_WM buffers from the specified BLM queue.  If
  * there is a request outstanding check whether it returned and was filled.
  * Copy the buffers into the cache if the request succeeded. */
-void
+__intrinsic void
 precache_bufs()
 {
     /* test completion signal for mem_ring_pops */
@@ -221,7 +220,6 @@ precache_bufs()
         if (!signal_test(&precache_sig0.odd)) {
             _PRECACHE_BUFS_COPY(NFD_IN_BUF_RING_POP_SZ, 0);
             __implicit_read(bufs_rd, (NFD_IN_BUF_RING_POP_SZ << 2));
-            precache_bufs_compute_seq_safe();
         }
     }
 
@@ -232,7 +230,6 @@ precache_bufs()
                                 NFD_IN_BUF_RING_POP_SZ);
             __implicit_read(&bufs_rd[NFD_IN_BUF_RING_POP_SZ],
                             (NFD_IN_BUF_RING_POP_SZ << 2));
-            precache_bufs_compute_seq_safe();
         }
     }
 
@@ -347,28 +344,18 @@ distr_precache_bufs_setup_shared()
  *
  * precache_bufs owns and updates data_dma_seq_safe, which requires these
  * sequence numbers, so the distribution code lives in precache_bufs.c.
- * If either sequence number has been advanced,
- * "precache_bufs_compute_seq_safe()" must be called.  "data_dma_seq_compl"
- * tracks in flight DMAs and is the priority, so it causes the safe sequence
- * to be updated immediately (before swapping).  If just "data_dma_seq_served"
- * has advanced, then the safe sequence will only be updated after the swap,
- * or on demand from the worker threads.
  */
 __intrinsic void
-distr_precache_bufs()
+distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *sig)
 {
     if (signal_test(&nfd_in_data_served_refl_sig)) {
         data_dma_seq_served = nfd_in_data_served_refl_in;
-
-        state.recompute_seq_safe = 1;
     }
 
     if (signal_test(&nfd_in_data_event_sig)) {
         __implicit_read(&nfd_in_data_compl_refl_out);
 
         dma_seqn_advance(&nfd_in_data_event_xfer, &data_dma_seq_compl);
-        precache_bufs_compute_seq_safe();
-        state.recompute_seq_safe = 0;
 
         /* Mirror to remote ME */
         nfd_in_data_compl_refl_out = data_dma_seq_compl;
@@ -381,18 +368,12 @@ distr_precache_bufs()
                      sizeof nfd_in_data_compl_refl_out);
 
         __implicit_write(&nfd_in_data_event_sig);
-        event_cls_autopush_filter_reset(
+        __event_cls_autopush_filter_reset(
             NFD_IN_DATA_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            NFD_IN_DATA_EVENT_FILTER);
+            NFD_IN_DATA_EVENT_FILTER,
+            sig_done, sig);
+        *wait_msk |= __signals(sig);
 
-    } else {
-        /* Swap to give other threads a chance to run */
-        ctx_swap();
-    }
-
-    if (state.recompute_seq_safe == 1) {
-        precache_bufs_compute_seq_safe();
-        state.recompute_seq_safe = 0;
     }
 }
