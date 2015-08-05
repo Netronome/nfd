@@ -335,8 +335,6 @@
     move(tmp, (&remote(NFD_CFG_SIG_NEXT_ME, NFD_CFG_NEXT_ME)))
     alu[addr, addr, OR, tmp, <<2]
 
-    local_csr_wr[MAILBOX1, addr]
-
     ct[interthread_signal, --, 0, addr]
 
 .end
@@ -358,10 +356,6 @@
 .end
 #endm
 
-
-// REMOVE ME
-.reg @CONFIGS
-.init @CONFIGS 0
 
 /**
  * Process reconfiguation messages.
@@ -396,8 +390,6 @@
         .if (BIT($cmsg[0], NFD_CFG_MSG_VALID_bit) == 0)
             .break
         .endif
-
-        local_csr_wr[MAILBOX2, $cmsg[0]]
 
         // Extract the queue ID that is going up or down
         bitfield_extract__sz1(vnic, F_AML($cmsg, NFD_CFG_MSG_VNIC_bf))
@@ -470,8 +462,6 @@
     .xfer_order $out
 
     .sig out_sig
-
-    local_csr_wr[MAILBOX3, io_version]
 
     move(lma, sb_ctx_base)
     local_csr_wr[LM_QSTATE_CSR, lma]
@@ -592,8 +582,8 @@ copy_loop#:
 
         .if (SIGNAL(_nfd_cfg_sig_sb))
 
-            alu[@CONFIGS, @CONFIGS, +, 1]
-            local_csr_wr[MAILBOX0, @CONFIGS]
+            alu[@nconfigs, @nconfigs, +, 1]
+            local_csr_wr[MAILBOX0, @nconfigs]
 
             process_reconfig()
             .continue
@@ -749,8 +739,9 @@ test_ready_to_send#:
 
     // No credits, yield and then branch back to the test
 flow_controlled#:
-    ctx_arb[voluntary], defer[1], br[test_ready_to_send#]
+    ctx_arb[voluntary], defer[2], br[test_ready_to_send#]
     alu[LM_WQ_CREDITS, LM_WQ_CREDITS, +, 1]
+    nop
 
 .end
 #endm
@@ -918,6 +909,9 @@ worker_loop#:
 
 
 main#:
+    .reg @nconfigs
+    .init @nconfigs 0
+
     pci_out_sb_declare()
 
     .if (ctx() == STAGE_BATCH_MANAGER_CTX)
