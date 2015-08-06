@@ -50,6 +50,23 @@ cls_ring_setup(unsigned int rnum, __cls void *base, size_t size)
 }
 
 
+__intrinsic int
+cls_state_test(int rstate)
+{
+    __gpr int full = 1;
+
+    ctassert(__is_ct_const(rstate));
+
+    __asm {
+        br_cls_state[__ct_const_val(rstate), match];
+        alu[full, --, B, 0];
+        match:
+    }
+
+    return full;
+}
+
+
 __intrinsic void
 cls_ring_put(unsigned int rnum, __xwrite void *data, size_t size,
              SIGNAL *put_sig)

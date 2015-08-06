@@ -11,8 +11,33 @@
 #include <types.h>
 
 
+enum cls_state_e {
+    cls_ring0_status = 0,
+    cls_ring1_status = 1,
+    cls_ring2_status = 2,
+    cls_ring3_status = 3,
+    cls_ring4_status = 4,
+    cls_ring5_status = 5,
+    cls_ring6_status = 6,
+    cls_ring7_status = 7,
+    cls_ring8_status = 8,
+    cls_ring9_status = 9,
+    cls_ring10_status = 10,
+    cls_ring11_status = 11,
+    cls_ring12_status = 12,
+    cls_ring13_status = 13,
+    cls_ring14_status = 14,
+    cls_ring15_status = 15
+};
+
+
 __intrinsic void cls_ring_setup(unsigned int rnum, __cls void *base,
                                 size_t size);
+
+__intrinsic int cls_state_test(int state);
+
+#define CLS_RING_FULL_IND(x) cls_state_test(cls_ring##x##_status)
+#define CLS_RING_FULL(x) CLS_RING_FULL_IND(x)
 
 __intrinsic void cls_ring_put(unsigned int rnum, __xwrite void *data,
                               size_t size, SIGNAL *put_sig);
