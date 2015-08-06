@@ -706,17 +706,7 @@ test_ready_to_send#:
 
 
     // Start sending the work to issue DMA, but see below: we're not quite done
-    #if SB_USE_MU_WORK_QUEUES
-
-        mem[qadd_work, out_xfer[0], g_out_wq_hi, <<8, g_out_wq_lo, SB_WQ_SIZE_LW],
-            sig_done[cur_outsig]
-
-    #else /* SB_USE_MU_WORK_QUEUES */
-
-        cls[ring_workq_add_work, out_xfer[0], g_out_wq_hi, <<8, g_out_wq_lo, SB_WQ_SIZE_LW],
-            sig_done[cur_outsig]
-
-    #endif /* SB_USE_MU_WORK_QUEUES */
+    pci_out_sb_add_work(out_xfer[0], cur_outsig)
 
     /*
      * Wait for least recent I/Os to complete.
@@ -788,6 +778,8 @@ flow_controlled#:
      * PER CONTEXT INITIALIZATION
      */
 
+    pci_out_sb_iface_init()
+
     // Get current context
     local_csr_rd[ACTIVE_CTX_STS]
     immed[ctx, 0]
@@ -816,17 +808,6 @@ flow_controlled#:
     move(lma, sb_wq_credits)
     local_csr_wr[LM_WQ_CREDIT_CSR, lma]
 
-    #if SB_USE_MU_WORK_QUEUES
-
-        move(g_out_wq_hi, ((nfd_out_sb_ring_mem/**/PCIE_ISL >> 8) & 0xFF000000))
-        move(g_out_wq_lo, nfd_out_sb_ring_num/**/PCIE_ISL)
-
-    #else /* SB_USE_MU_WORK_QUEUES */
-
-        move(g_out_wq_hi, 0)
-        move(g_out_wq_lo, ((nfd_out_sb_ring_num/**/PCIE_ISL) << 2))
-
-    #endif /* SB_USE_MU_WORK_QUEUES */
 
     /*
      * ORDERED ADD TO THE WORK QUEUE
@@ -909,7 +890,7 @@ main#:
     .reg @nconfigs
     .init @nconfigs 0
 
-    pci_out_sb_declare()
+    pci_out_sb_iface_declare()
 
     .if (ctx() == STAGE_BATCH_MANAGER_CTX)
 

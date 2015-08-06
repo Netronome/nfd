@@ -699,26 +699,6 @@ add_wq_credits#:
 #endm
 
 
-/*
- * Request more work from the ingress work queue
- */
-#macro request_work(in_xfer, in_sig)
-
-    #if SB_USE_MU_WORK_QUEUES
-
-        mem[qadd_thread, in_xfer[0], g_in_wq_hi, <<8, g_in_wq_lo, SB_WQ_SIZE_LW],
-            sig_done[in_sig]
-
-    #else /* SB_USE_MU_WORK_QUEUES */
-
-        cls[ring_workq_add_thread, in_xfer[0], g_in_wq_hi, <<8, g_in_wq_lo, SB_WQ_SIZE_LW],
-            sig_done[in_sig]
-
-    #endif /* SB_USE_MU_WORK_QUEUES */
-
-#endm
-
-
 /**
  * Process the completion of the last DMA for a packet.  This entails:
  *  * freeing the packet's CTM and MU buffers
@@ -781,7 +761,7 @@ no_ctm_buffer#:
 
     wsm_extract(addr_lo, io_work, SB_WQ_MUBUF)
 
-    request_work(io_work, in_wq_sig)
+    pci_out_pd_request_work(io_work[0], in_wq_sig)
 
     // Cheat and pull from the read xfers before they get clobbered
     #pragma warning(disable:5009)
@@ -928,7 +908,7 @@ main#:
     /*
      * DECLARATIONS
      */
-    pci_out_sb_declare()
+    pci_out_sb_iface_declare()
 
     // Global per-context constants
     .reg volatile g_dma_word0_mask
@@ -989,6 +969,8 @@ main#:
      * PER CONTEXT INITIALIZATION
      */
 
+    pci_out_sb_iface_init()
+
     /*
      * Maps SB_WQ_PKT_NUM and SB_WQ_OFFSET into CPP address low bits.
      * These fields are at the right place so we only need to mask out
@@ -1046,18 +1028,6 @@ main#:
     move(g_add_imm_iref, ((2 << 3) | (1 << 7) | (0 << 10) | (1 << 11)))
 
 
-    #if SB_USE_MU_WORK_QUEUES
-
-        move(g_in_wq_hi, ((nfd_out_sb_ring_mem/**/PCIE_ISL >> 8) & 0xFF000000))
-        move(g_in_wq_lo, nfd_out_sb_ring_num/**/PCIE_ISL)
-
-    #else /* SB_USE_MU_WORK_QUEUES */
-
-        move(g_in_wq_hi, 0)
-        move(g_in_wq_lo, ((nfd_out_sb_ring_num/**/PCIE_ISL) << 2))
-
-    #endif /* SB_USE_MU_WORK_QUEUES */
-
     move(g_pcie_addr_lo, NFP_PCIE_DMA_TOPCI_LO)
     move(g_pcie_addr_hi, (PCIE_ISL << 30))
     move(g_dma_max, PCIE_DMA_MAX_LEN)
@@ -1075,7 +1045,7 @@ main#:
 #if ONE_PKT_AT_A_TIME
 
     kickstart#:
-        request_work($work_in0, work_sig0)
+        pci_out_pd_request_work($work_in0[0], work_sig0)
         ctx_arb[work_sig0]
 
     one_packet_issue_dma#:
@@ -1086,9 +1056,9 @@ main#:
 #else /* ONE_PACKET_AT_A_TIME */
 
     kickstart#:
-        request_work($work_in0, work_sig0)
-        request_work($work_in1, work_sig1)
-        request_work($work_in2, work_sig2)
+        pci_out_pd_request_work($work_in0[0], work_sig0)
+        pci_out_pd_request_work($work_in1[0], work_sig1)
+        pci_out_pd_request_work($work_in2[0], work_sig2)
         ctx_arb[work_sig0], br[state_e0n0#]
 
     /* ------------------------------ COLUMN #1 ------------------------------ */
