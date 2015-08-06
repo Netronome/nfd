@@ -206,6 +206,9 @@ main(void)
     /* Setup DMA CFG and template */
     issue_dma_setup_shared();
 
+#if 1 /* XXX kill all contexts */
+    ctx_wait(kill);
+#endif
 
     for (;;) {
         unsigned int queue;

@@ -47,7 +47,7 @@
 
 
 /* REMOVE ME */
-#define ONE_PKT_AT_A_TIME 1
+/* #define ONE_PKT_AT_A_TIME 1 */
 
 /* REMOVE ME */
 /* These are in here only because nfd_internal.h is not microcode safe */
@@ -160,6 +160,10 @@
 
 #define PCIE_DMA_MAX_LEN        4096
 
+#define PCIE_DMA_WORD1_NOSIG_val \
+    (NFD_OUT_DATA_CFG_REG | (NFD_OUT_DATA_DMA_TOKEN << 4))
+#define PCIE_DMA_WORD1_NOSIG_shf 8
+
 #define NFP_PCIE_DMA_TOPCI_LO   0x40040
 
 #macro wait_br_next_state(in_sig0, in_sig1, LABEL)
@@ -213,6 +217,30 @@
     ct[interthread_signal, --, 0, addr]
 
     #undef SB_SIG_ADDR
+
+.end
+#endm
+
+
+#macro _build_mu_dma_word1(out_dma, in_work, in_sig)
+.begin
+
+    .reg word
+
+    #if (streq('in_sig', 'NOSIG'))
+
+        ld_field_w_clr[word, 0001, in_work[3], >>21]
+        alu[out_dma[1], word, OR, PCIE_DMA_WORD1_NOSIG_val, <<PCIE_DMA_WORD1_NOSIG_shf]
+
+    #else
+
+        // XXX the ld_field op deliberately over writes the "0x80" in
+        // g_dma_word1_vals from the CTM addressing
+        alu[word, --, b, g_dma_word1_vals]
+        ld_field[word, 0001, in_work[3], >>21]
+        alu[out_dma[1], word, OR, (&in_sig), <<PCIE_DMA_SIGNUM_shf]
+
+    #endif
 
 .end
 #endm
@@ -348,6 +376,7 @@ not_ctm_only#:
     wsm_extract(isl, in_work, SB_WQ_CTM_ISL)
     beq[mu_only_dma#]
 
+
 ctm_and_mu_dma#:
     // The priority at this point are packets which have only just
     // spilled over into MU.  Cycle budget on this path is still
@@ -356,293 +385,286 @@ ctm_and_mu_dma#:
 
     // Compute how many bytes are in CTM from the split length
     // and starting offset
-    // TODO replace with standard ASM macros?
     move(tmp, 256)
-    wsm_extract(tmp2, in_work,  SB_WQ_CTM_SPLIT)
+    wsm_extract(tmp2, in_work, SB_WQ_CTM_SPLIT)
     alu[--, tmp2, or, 0]
     alu_shf[split_len, --, B, tmp, <<indirect]
-    wsm_extract(tmp, in_work,  SB_WQ_OFFSET)
+    wsm_extract(tmp, in_work, SB_WQ_OFFSET)
     alu[ctm_bytes, split_len, -, tmp]
-    // TODO: address the fact that offset can put us past the end of CTM
-    // TODO: pass on the restriction to the user, or burn cycles handling?
+    ble[mu_only_dma#]
+
+    // DMA0 Word 0: CPP address low
+    // CTM address low, computation as for ctm_only
+    // XXX Optimization: packet number is already in place
+    alu[word, in_work[2], AND, g_dma_word0_mask]
+    alu[out_dma0[0], word, OR, 1, <<31] // Packet format bit
+
+    // DMA0 Word 1: CTM address hi and signals, computation as for ctm_only
+    wsm_extract(word, in_work, SB_WQ_CTM_ISL)
+    alu[word, word, OR, 0x80]                   ; Direct access
+    alu[out_dma0[1], word, OR, PCIE_DMA_WORD1_NOSIG_val, <<PCIE_DMA_WORD1_NOSIG_shf]
+
+    // DMA0 Word 2: PCIe addresses
+    alu[out_dma0[2], --, b, pcie_lo_start]
+
+    // DMA0 Word 3: length, RID, PCIE address HI
+    // TODO: offer option for buffers that cross 4G boundaries?
+    alu[tmp, ctm_bytes, -, 1]
+    sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp)
+
+    // Issue the CTM DMA
+    #pragma warning(disable:5117)
+    pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+    #pragma warning(default:5117)
 
     // Compute the length remaining in MU
     // It must be greater than zero or else we have bad input
     alu[len, len, -, ctm_bytes]
     ble[ctm_only_not_flagged#]
 
+    // DMA1 Word 0: MU address low, data starts split_len into the MU buffer
+    alu[mu_lo_start, --, b, in_work[3], <<11]
+    alu[mu_lo_start, mu_lo_start, +, split_len]
+    move(out_dma1[0], mu_lo_start)
 
-    // Word 0
-    // CTM address low, computation as for ctm_only
-    // XXX Optimization: packet number is already in place
-    alu[word, in_work[2], AND, g_dma_word0_mask]
-    alu[out_dma0[0], word, OR, 1, <<31] // Packet format bit
+    // DMA1 Word 1: MU address hi and signals
+    _build_mu_dma_word1(out_dma1, in_work, out_sig0)
 
-    // Word 1: CTM address hi and signals, computation as for ctm_only
-    wsm_extract(word, in_work, SB_WQ_CTM_ISL)
-    alu[word, word, OR, g_dma_word1_vals]
-    alu[out_dma0[1], word, OR, (&out_sig0), <<PCIE_DMA_SIGNUM_shf]
-
-    // MU address hi and signals
-    alu[word, --, b, g_dma_word1_vals]
-    ld_field[word, 0001, in_work[3], >>21]
-    // XXX the ld_field op deliberately over writes the "0x80" in
-    // g_dma_word1_vals from the CTM addressing
-    alu[out_dma1[1], word, OR, (&out_sig1), <<PCIE_DMA_SIGNUM_shf]
-
-    // Word 2: PCIe addresses
-    alu[out_dma0[2], --, b, pcie_lo_start]
-
-
-    // Knock large packets off the fall through path
-    // as late as possible so that we can share computation
-    // with regular packets.
-    alu[--, --, b, len, >>(log2(PCIE_DMA_MAX_LEN))]
-    bne[ctm_and_mu_jumbo#]
-
-    // We can finish this packet with one CTM DMA and one MU DMA
-    // Populate the descriptors and send them
-
-    // Word 0: MU address low, data starts split_len into the MU buffer
-    alu[word, --, b, in_work[3], <<11]
-    alu[out_dma1[0], word, +, split_len]
-
-    // Word 2: PCIe addresses
-    alu[out_dma1[2], pcie_lo_start, +, ctm_bytes]
-
-    // Word 3 and issue
-
-    // Gambling on being fast enough to beat the DMA pull from these registers
-    #pragma warning(disable:5117)
-    #pragma warning(disable:4701)
-    #pragma warning(disable:5009)
-
-    // MU DMA, using out_dma1 and out_sig1 first
-    pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    alu[len, len, -, 1]
-    sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, len, 1)
-    // TODO: offer option for buffers that cross 4G boundaries?
-
-    // Now the CTM DMA, so that out_dma0 and out_sig0 are used last
-    pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    // This wait() always has 2 defer slots following it
-    wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL, defer[2])
-    alu[ctm_bytes, ctm_bytes, -, 1]
-    sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, ctm_bytes, 1)
-
-    #pragma warning(default:5117)
-    #pragma warning(default:4701)
-    #pragma warning(default:5009)
-
-
-ctm_and_mu_jumbo#:
-    // Check for oversize packets off the fast path.
-    // len no longer holds the full packet length, so we re-extract
-    // it to a temporary variable
-    move(tmp, NFD_OUT_MAX_PKT_BYTES)
-    wsm_extract(tmp2, in_work, SB_WQ_DATALEN)
-    alu[--, tmp2, -, tmp]
-    bgt[pkt_too_large#]
-
-    // This code will context swap to wait on up to two DMAs
-    // without leaving the section.  The final two DMAs are
-    // issued and left to complete during the wait_br_next_state()
-    // transition.
-
-    // The previous section already populated the CTM descriptor and
-    // part of the MU descriptors.  We now have to populate the rest
-    // of the MU descriptors and issue the DMAs.
-
-    // Start addresses for the MU DMAs
-    alu[word, --, b, in_work[3], <<11]
-    alu[mu_lo_start, word, +, split_len]
+    // DMA1 Word 2: PCIe addresses
     alu[pcie_lo_start, pcie_lo_start, +, ctm_bytes]
+    move(out_dma1[2], pcie_lo_start)
 
-    // We first DMA the shortest MU section, the end of the packet
-    move(tmp, (PCIE_DMA_MAX_LEN - 1))
-    alu[tmp2, tmp, and, len]            // tmp2 holds the final bytes to DMA
-    alu[len, len, and~, tmp]            // len holds remaining length
+    .if (len <= g_dma_max)
 
-    alu[out_dma1[0], mu_lo_start, +, len]
-    alu[out_dma1[2], pcie_lo_start, +, len]
+        // We can finish this packet with one CTM DMA and one MU DMA
 
+        // Word 3: length, RID, PCIE address HI
+        // TODO: offer option for buffers that cross 4G boundaries?
+        alu[tmp, len, -, 1]
+        sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
 
-    // We aren't on the fast path anymore, so no need for gambles on
-    // beating the xfer pulls
-    #pragma warning(disable:5117)
-    // MU DMA, using out_dma1 and out_sig1 first
-    alu[tmp2, tmp2, -, 1]
-    sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp2, 1)
-    pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    // TODO: offer option for buffers that cross 4G boundaries?
+        #pragma warning(disable:5117)
+        pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+        #pragma warning(default:5117)
 
-    // Now the CTM DMA, so that out_dma0 and dma_sig0 are used last
-    alu[ctm_bytes, ctm_bytes, -, 1]
-    sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, ctm_bytes, 1)
-    pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    #pragma warning(default:5117)
+    .else /* CTM+MU Jumbo */
 
-    // Swap on the DMA completion, which implicitly signals the xfers
-    // are free again
-    ctx_arb[out_sig0, out_sig1], all
-    .io_completed out_dma0[0]
-    .io_completed out_dma0[1]
-    .io_completed out_dma0[2]
-    .io_completed out_dma0[3]
-    .io_completed out_dma1[0]
-    .io_completed out_dma1[1]
-    .io_completed out_dma1[2]
-    .io_completed out_dma1[3]
+        // Check for oversize packets off the fast path.
+        // len no longer holds the full packet length, so we re-extract
+        // it to a temporary variable
+        wsm_extract(tmp, in_work, SB_WQ_DATALEN)
+        .if (tmp > NFD_OUT_MAX_PKT_BYTES)
+            .while (1)
+                ctx_arb[bpt]
+            .endw
+        .endif
 
-    // Finish the jumbo frame with one or two PCIE_DMA_MAX_LEN DMAs
-    move(tmp, PCIE_DMA_MAX_LEN)
-    alu[--, len, -, tmp]
-    ble[skip_second_dma#]
+        // Finish second DMA which must be 4096 bytes long
 
-    // out_dma1 was setup for MU DMAs previously, just need the new address
-    // and length values
-    alu[tmp2, --, b, tmp] // Break odd loop
-    alu[out_dma1[0], mu_lo_start, +, tmp2]
-    alu[out_dma1[2], pcie_lo_start, +, tmp2]
-    alu[tmp2, tmp2, -, 1]
-    sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp2, 1)
-    #pragma warning(disable:5117)
-    pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    #pragma warning(default:5117)
+        // Word 3: length, RID, PCIE address HI
+        // TODO: offer option for buffers that cross 4G boundaries?
+        alu[tmp, g_dma_max, -, 1]
+        sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
 
-skip_second_dma#:
-    // out_dma0 was setup for CTM DMAs previously, need the MU CPP HI
-    // value as well as the new address and length values
-    alu[word, --, b, g_dma_word1_vals]
-    ld_field[word, 0001, in_work[3], >>21]
-    // XXX the ld_field op deliberately over writes the "0x80" in
-    // g_dma_word1_vals from the CTM addressing
-    alu[out_dma0[1], word, OR, (&out_sig0), <<PCIE_DMA_SIGNUM_shf]
+        // MU DMA, using out_dma1 and out_sig1 first
+        #pragma warning(disable:5117)
+        pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+        #pragma warning(default:5117)
 
-    alu[out_dma0[0], --, b, mu_lo_start]
-    alu[out_dma0[2], --, b, pcie_lo_start]
-    alu[tmp, tmp, -, 1]
-    sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
-    #pragma warning(disable:5117)
-    pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    #pragma warning(default:5117)
+        // Swap on the DMA completion, which implicitly signals the xfers
+        // are free again
+        ctx_arb[out_sig0]
+        .io_completed out_dma0[0]
+        .io_completed out_dma0[1]
+        .io_completed out_dma0[2]
+        .io_completed out_dma0[3]
+        .io_completed out_dma1[0]
+        .io_completed out_dma1[1]
+        .io_completed out_dma1[2]
+        .io_completed out_dma1[3]
+
+        // Now start the remaining 1 or 2 DMAs
+
+        // Adjust lengths and starting offsets to account for first 2 DMAs
+        alu[len, len, -, g_dma_max]
+        alu[mu_lo_start, word, +, g_dma_max]
+        alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
+
+        // out_dma0: word0
+        alu[out_dma0[0], --, B, mu_lo_start]
+
+        // out_dma0: word1
+        alu[out_dma0[0], --, B, pcie_lo_start]
+
+        .if (len <= g_dma_max)
+
+            // DMA0 Word 1 
+            _build_mu_dma_word1(out_dma0, in_work, out_sig0)
+
+            // DMA0 Word 3
+            // TODO: offer option for buffers that cross 4G boundaries?
+            alu[tmp, len, -, 1]
+            sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+
+            #pragma warning(disable:5117)
+            pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+            #pragma warning(default:5117)
+
+        .else
+
+            // DMA0 Word 1 
+            _build_mu_dma_word1(out_dma0, in_work, NOSIG)
+
+            // DMA0 Word 3
+            alu[tmp, g_dma_max, -, 1]
+            sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+
+            #pragma warning(disable:5117)
+            pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+            #pragma warning(default:5117)
+
+            // DMA1 Word 0
+            alu[out_dma1[0], mu_lo_start, +, g_dma_max]
+
+            // DMA1 Word 1
+            _build_mu_dma_word1(out_dma1, in_work, out_sig0)
+
+            // DMA1 Word 2
+            alu[out_dma1[2], pcie_lo_start, +, g_dma_max]
+
+            // DMA1 Word 3
+            alu[len, len, -, g_dma_max]
+            alu[tmp, len, -, 1]
+            sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+
+            #pragma warning(disable:5117)
+            pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+            #pragma warning(default:5117)
+
+        .endif
+
+    .endif
+
     wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
-    // ctm_and_mu_jumbo# completed
 
 
 mu_only_dma#:
     // Compute the MU start address
-    wsm_extract(tmp, in_work,  SB_WQ_OFFSET)
     alu[mu_lo_start, --, b, in_work[3], <<11]
+    wsm_extract(tmp, in_work,  SB_WQ_OFFSET)
     alu[mu_lo_start, mu_lo_start, +, tmp]
 
-    // DMA0 MU address hi and signal
-    alu[word, --, b, g_dma_word1_vals]
-    ld_field[word, 0001, in_work[3], >>21]
-    // XXX the ld_field op deliberately over writes the "0x80" in
-    // g_dma_word1_vals from the CTM addressing
-    alu[out_dma0[1], word, OR, (&out_sig0), <<PCIE_DMA_SIGNUM_shf]
+    // DMA0 Word 0
+    move(out_dma0[0], mu_lo_start)
 
-    // Branch to only handling the first DMA if the packet
-    // will fit entirely in one DMA.
-    // XXX the branch could be avoided if necessary, but this
-    // isn't the super fast path so fewer branch targets is preferred.
-    alu[--, --, b, len, >>(log2(PCIE_DMA_MAX_LEN))]
-    beq[mu_only_first_bytes#]
+    // DMA0 Word 2: PCIE address low
+    move(out_dma0[2], pcie_lo_start)
 
-    // DMA1 MU address hi and signal
-    alu[out_dma1[1], word, OR, (&out_sig1), <<PCIE_DMA_SIGNUM_shf]
+    .if (len <= g_dma_max)
 
-    // Branch to handling the last bytes of the packet
-    // for packets >2 DMAs
-    alu[--, --, b, len, >>(log2(2 * PCIE_DMA_MAX_LEN))]
-    bne[mu_only_end_bytes#]
+        // DMA0 Word 1: MU address hi and signal
+        _build_mu_dma_word1(out_dma0, in_work, out_sig0)
 
-mu_only_cont#:
-    // XXX mu_only_end_bytes updates len such that it is <= 8k
-    // We now have to handle the middle section of the packet, that
-    // starts at 4k and may be up to 4k long.
-    // We already have the hi addresses setup, so only need to setup
-    // the start and length.
-    move(tmp, PCIE_DMA_MAX_LEN)
-    alu[out_dma1[0], mu_lo_start, +, tmp]
-    alu[out_dma1[2], pcie_lo_start, +, tmp]
+        // DMA0 Word 3: PCIE address high + data length
+        alu[tmp, len, -, 1]
+        sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
 
-    // Use a temporary variable for this DMA length, and update len
-    // for the final DMA
-    alu[tmp, len, -, tmp]
-    alu[tmp, tmp, -, 1]
-    sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
-    #pragma warning(disable:5117)
-    pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    #pragma warning(default:5117)
+        #pragma warning(disable:5117)
+        pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+        #pragma warning(default:5117)
 
-    // After this section, the len must be exactly PCIE_DMA_MAX_LEN
-    move(len, PCIE_DMA_MAX_LEN)
+    .else
 
-mu_only_first_bytes#:
-    // Word 0
-    alu[out_dma0[0], --, b, mu_lo_start]
+        // Check for oversize packets off the fast path.
+        // len still holds the full packet length
+        .if (len > NFD_OUT_MAX_PKT_BYTES)
+            .while (1)
+                ctx_arb[bpt]
+            .endw
+        .endif
 
-    // Word 1 handled above
+        // Fire off DMA0 with no signal
 
-    // Word 2
-    alu[out_dma0[2], --, b, pcie_lo_start]
+        // DMA0 Word 1: MU address hi and NO signal
+        _build_mu_dma_word1(out_dma0, in_work, NOSIG)
 
-    // Word 3 and issue
-    #pragma warning(disable:5117)
-    #pragma warning(disable:4701)
-    #pragma warning(disable:5009)
-    pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    // This wait() always has 2 defer slots following it
-    wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL, defer[2])
-    alu[len, len, -, 1]
-    sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, len, 1)
-    #pragma warning(default:5117)
-    #pragma warning(default:4701)
-    #pragma warning(default:5009)
+        // DMA0 Word 3: PCIE address high + data length
+        alu[tmp, g_dma_max, -, 1]
+        sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
 
-mu_only_end_bytes#:
-    // Check for oversize packets off the fast path.
-    // len still holds the full packet length
-    move(tmp, NFD_OUT_MAX_PKT_BYTES)
-    alu[--, len, -, tmp]
-    bgt[pkt_too_large#]
+        #pragma warning(disable:5117)
+        pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+        #pragma warning(default:5117)
 
-    // We now have to handle the end of the packet that is >8k.
-    // It starts at 8k and may be up to 4k long.
-    // We already have the hi addresses setup, so only need to setup
-    // the start and length.
-    move(tmp, (2 * PCIE_DMA_MAX_LEN))
-    alu[out_dma1[0], mu_lo_start, +, tmp]
-    alu[out_dma1[2], pcie_lo_start, +, tmp]
+        alu[len, len, -, g_dma_max]
+        alu[mu_lo_start, mu_lo_start, +, g_dma_max]
+        alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
 
-    // Use a temporary variable for this DMA length, and update len
-    // for the final DMA
-    alu[tmp, len, -, tmp]
-    alu[tmp, tmp, -, 1]
-    sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
-    #pragma warning(disable:5117)
-    pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-    #pragma warning(default:5117)
+        // DMA1 Word 0
+        move(out_dma1[0], mu_lo_start)
 
-    // After this section, the len must be exactly 2 * PCIE_DMA_MAX_LEN
-    move(len, (2 * PCIE_DMA_MAX_LEN))
+        // DMA1 Word 1: MU address hi and signal
+        _build_mu_dma_word1(out_dma1, in_work, out_sig0)
 
-    // Swap on the DMA completion, which implicitly signals the xfers
-    // are free again
-    ctx_arb[out_sig1]
-    .io_completed out_dma1[0]
-    .io_completed out_dma1[1]
-    .io_completed out_dma1[2]
-    .io_completed out_dma1[3]
-    // TODO move this branch onto the ctx_arb above
-    br[mu_only_cont#]
-    // mu_only_dma# completed
+        // DMA0 Word 2: PCIE address low
+        move(out_dma1[2], pcie_lo_start)
+
+        .if (len <= g_dma_max)
+
+            // DMA1 Word 3: PCIE address high + data length
+            alu[tmp, len, -, 1]
+            sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+
+            #pragma warning(disable:5117)
+            pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+            #pragma warning(default:5117)
+
+        .else   /* 3 DMAs needed */
+
+            // DMA1 Word 3: PCIE address high + data length
+            alu[tmp, g_dma_max, -, 1]
+            sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+
+            #pragma warning(disable:5117)
+            pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+            #pragma warning(default:5117)
+
+            ctx_arb[out_sig0]
+            .io_completed out_dma0[0]
+            .io_completed out_dma0[1]
+            .io_completed out_dma0[2]
+            .io_completed out_dma0[3]
+            .io_completed out_dma1[0]
+            .io_completed out_dma1[1]
+            .io_completed out_dma1[2]
+            .io_completed out_dma1[3]
+
+            // DMA0 Word 0
+            alu[out_dma0[0], mu_lo_start, +, g_dma_max]
+
+            // DMA0 Word 1: MU address hi and signal
+            _build_mu_dma_word1(out_dma0, in_work, out_sig0)
+
+            // DMA0 Word 2: PCIE address low
+            alu[out_dma0[2], pcie_lo_start, +, g_dma_max]
+
+            // DMA1 Word 3: PCIE address high + data length
+            alu[len, len, -, g_dma_max]
+            alu[tmp, len, -, 1]
+            sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+
+            #pragma warning(disable:5117)
+            pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
+            #pragma warning(default:5117)
+
+        .endif
+
+    .endif
+
+    wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
 
 
 no_dma#:
-    ctx_arb[bpt] // XXX REMOVE ME
     // signal self w/ output signal:  "DMA" is completed
     local_csr_rd[ACTIVE_CTX_STS]
     immed[tmp, 0]
@@ -659,13 +681,6 @@ ctm_only_not_flagged#:
     // was corrupt.  Either way, stop the ME.
     ctx_arb[bpt]
     br[ctm_only_not_flagged#]
-
-pkt_too_large#:
-    // We should only reach this point if the packet is larger than
-    // 10kB.  This would seem to imply the input descriptor was corrupt.
-    // Stop the ME.
-    ctx_arb[bpt]
-    br[pkt_too_large#]
 
 
 add_wq_credits#:
@@ -927,6 +942,7 @@ main#:
     .reg volatile g_in_wq_lo
     .reg volatile g_pcie_addr_lo
     .reg volatile g_pcie_addr_hi
+    .reg volatile g_dma_max
 
     .reg @ndequeued
     .init @ndequeued SB_WQ_CREDIT_BATCH
@@ -1046,6 +1062,8 @@ main#:
 
     move(g_pcie_addr_lo, NFP_PCIE_DMA_TOPCI_LO)
     move(g_pcie_addr_hi, (PCIE_ISL << 30))
+    move(g_dma_max, PCIE_DMA_MAX_LEN)
+
 
 
     /*
