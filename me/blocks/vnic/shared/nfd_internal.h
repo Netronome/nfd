@@ -142,6 +142,8 @@
 #define NFD_OUT_DBG_CACHE_DESC_INTVL    1000000
 
 
+#if !defined(__NFP_LANG_ASM)
+
 /* nfd_cfg internal structures */
 enum nfd_cfg_component {
     NFD_CFG_PCI_IN0,
@@ -325,5 +327,7 @@ struct nfd_out_send_desc_msg {
 #define NFD_IN_ISSUE_DMA_MU_PTR_INVALID 0x803
 
 #endif /* __NFP_LANG_MICROC */
+
+#endif /* !__NFP_LANG_ASM */
 
 #endif /* !_BLOCKS__SHARED_NFD_INTERNAL_H_ */

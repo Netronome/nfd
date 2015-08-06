@@ -6,6 +6,7 @@
 #include <aggregate.uc>
 
 #include <nfd_common.h>
+#include <nfd_internal.h>
 #include <nfd_cfg_pf_bars.uc>
 #include <nfd_out.uc>   /* for definitions only */
 #include <pci_out_sb.h>
@@ -74,12 +75,8 @@
                        (streq('_x','emem1') ? __ADDR_EMEM1 : \
                        (streq('_x','emem2') ? __ADDR_EMEM2 : NOEMEM)))
 
-/* REMOVE ME:  in nfd_internal.h ... but this is not uc-safe */
-#define NFD_CFG_VF_OFFSET               64
-#define NFD_OUT_FL_DESC_PER_QUEUE       256
-
 #define NFD_OUT_FL_CACHE_SIZE_PER_QUEUE \
-    (NFD_OUT_FL_DESC_PER_QUEUE * NFD_OUT_FL_DESC_SIZE)
+    (NFD_OUT_FL_BUFS_PER_QUEUE * NFD_OUT_FL_DESC_SIZE)
 #define NFD_OUT_FL_CACHE_SIZE_PER_QUEUE_lg2 \
     (log2(NFD_OUT_FL_CACHE_SIZE_PER_QUEUE))
 
@@ -809,7 +806,7 @@ flow_controlled#:
     alu[g_sig_next_worker, next_ctx, OR, (&ordersig), <<3]
 
     move(g_lm_qstate_mask, ((NFD_OUT_MAX_QUEUES - 1) << LM_QSTATE_SIZE_lg2))
-    move(g_cache_addr_lo_mask, ((NFD_OUT_FL_DESC_PER_QUEUE - 1) << NFD_OUT_FL_DESC_SIZE_lg2))
+    move(g_cache_addr_lo_mask, ((NFD_OUT_FL_BUFS_PER_QUEUE - 1) << NFD_OUT_FL_DESC_SIZE_lg2))
 
     /* Mask 10 bits for the sequence number */
     move(g_cache_addr_lo_10bit_seq_mask, (SB_WQ_SEQ_msk << NFD_OUT_FL_DESC_SIZE_lg2))
