@@ -49,10 +49,14 @@ extern __shared __gpr unsigned int data_dma_seq_issued;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
 __shared __gpr unsigned int data_dma_seq_safe = 0;
+__shared __gpr unsigned int jumbo_dma_seq_issued = 0;
+__shared __gpr unsigned int jumbo_dma_seq_compl = 0;
 
 /* Signals and transfer registers for receiving DMA events */
 static volatile __xread unsigned int nfd_in_data_event_xfer;
-static volatile SIGNAL nfd_in_data_event_sig;
+static SIGNAL nfd_in_data_event_sig;
+static volatile __xread unsigned int nfd_in_jumbo_event_xfer;
+static SIGNAL nfd_in_jumbo_event_sig;
 
 /* Signals and transfer registers for sequence number reflects */
 static __xwrite unsigned int nfd_in_data_compl_refl_out = 0;
@@ -326,6 +330,10 @@ distr_precache_bufs_setup_shared()
     dma_seqn_ap_setup(NFD_IN_DATA_EVENT_FILTER, NFD_IN_DATA_EVENT_FILTER,
                       NFD_IN_DATA_EVENT_TYPE, &nfd_in_data_event_xfer,
                       &nfd_in_data_event_sig);
+
+    dma_seqn_ap_setup(NFD_IN_JUMBO_EVENT_FILTER, NFD_IN_JUMBO_EVENT_FILTER,
+                      NFD_IN_JUMBO_EVENT_TYPE, &nfd_in_jumbo_event_xfer,
+                      &nfd_in_jumbo_event_sig);
 }
 
 
@@ -344,9 +352,13 @@ distr_precache_bufs_setup_shared()
  *
  * precache_bufs owns and updates data_dma_seq_safe, which requires these
  * sequence numbers, so the distribution code lives in precache_bufs.c.
+ *
+ * jumbo_dma_seq_compl tracks the number of reserve DMAs completed.  These
+ * reserve DMAs are used if the packets exceeds NFD_IN_DMA_SPLIT_LEN.
  */
 __intrinsic void
-distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *sig)
+distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *data_sig,
+                    SIGNAL *jumbo_sig)
 {
     if (signal_test(&nfd_in_data_served_refl_sig)) {
         data_dma_seq_served = nfd_in_data_served_refl_in;
@@ -372,8 +384,21 @@ distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *sig)
             NFD_IN_DATA_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_IN_DATA_EVENT_FILTER,
-            sig_done, sig);
-        *wait_msk |= __signals(sig);
+            sig_done, data_sig);
+        *wait_msk |= __signals(data_sig);
+
+    }
+
+    if (signal_test(&nfd_in_jumbo_event_sig)) {
+        dma_seqn_advance(&nfd_in_jumbo_event_xfer, &jumbo_dma_seq_compl);
+
+        __implicit_write(&nfd_in_jumbo_event_sig);
+        __event_cls_autopush_filter_reset(
+            NFD_IN_JUMBO_EVENT_FILTER,
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+            NFD_IN_JUMBO_EVENT_FILTER,
+            sig_done, jumbo_sig);
+        *wait_msk |= __signals(jumbo_sig);
 
     }
 }

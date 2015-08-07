@@ -26,6 +26,8 @@ extern __shared __gpr unsigned int data_dma_seq_issued;
 extern __shared __gpr unsigned int data_dma_seq_compl;
 extern __shared __gpr unsigned int data_dma_seq_served;
 extern __shared __gpr unsigned int data_dma_seq_safe;
+extern __shared __gpr unsigned int jumbo_dma_seq_issued;
+extern __shared __gpr unsigned int jumbo_dma_seq_compl;
 
 
 /**
@@ -67,6 +69,8 @@ issue_dma_status()
 
     if (signal_test(&status_throttle))
     {
+        unsigned int resv_dma_avail;
+
         __implicit_read(&status_queue_info, sizeof status_queue_info);
         __implicit_read(&status_issued, sizeof status_issued);
 
@@ -83,6 +87,9 @@ issue_dma_status()
         status_issued.gather_dma_seq_compl = gather_dma_seq_compl;
         status_issued.gather_dma_seq_serv = gather_dma_seq_serv;
         status_issued.bufs_avail = precache_bufs_avail();
+        resv_dma_avail = (NFD_IN_JUMBO_MAX_IN_FLIGHT + jumbo_dma_seq_compl -
+                          jumbo_dma_seq_issued);
+        status_issued.resv_dma_avail = resv_dma_avail;
         status_issued.data_dma_seq_issued = data_dma_seq_issued;
         status_issued.data_dma_seq_compl = data_dma_seq_compl;
         status_issued.data_dma_seq_served = data_dma_seq_served;

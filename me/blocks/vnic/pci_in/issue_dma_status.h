@@ -14,8 +14,8 @@
 struct nfd_in_issue_dma_status {
     unsigned int gather_dma_seq_compl;
     unsigned int gather_dma_seq_serv;
-    unsigned int spare;
     unsigned int bufs_avail;
+    unsigned int resv_dma_avail;
     unsigned int data_dma_seq_issued;
     unsigned int data_dma_seq_compl;
     unsigned int data_dma_seq_served;

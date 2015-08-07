@@ -51,7 +51,7 @@ main(void)
      * Work loop
      */
     if (ctx() == 0) {
-        SIGNAL distr0;
+        SIGNAL distr0, distr1;
         SIGNAL_MASK distr_wait_msk = 0;
 
         /* CTX0 main loop */
@@ -96,7 +96,7 @@ main(void)
 
             precache_bufs();
 
-            distr_precache_bufs(&distr_wait_msk, &distr0);
+            distr_precache_bufs(&distr_wait_msk, &distr0, &distr1);
 
             precache_bufs_compute_seq_safe();
 
