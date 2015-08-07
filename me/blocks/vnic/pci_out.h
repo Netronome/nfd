@@ -94,6 +94,7 @@ struct nfd_out_input {
 #include "nfd_user_cfg.h"
 
 #include <vnic/shared/nfcc_chipres.h>
+#include "shared/nfd_api_common.h"
 
 
 #define NFD_OUT_RINGS_DECL_IND2(_isl, _emem)                            \

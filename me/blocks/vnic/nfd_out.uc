@@ -2,6 +2,7 @@
 #define __NFD_OUT_UC
 
 #include <nfd_net.h>
+#include "shared/nfd_api_common.h"
 #include <nfd_common.uc>
 #include <nfd_stats.uc>
 #include <nfp_chipres.h>
@@ -304,9 +305,9 @@ not_ctm_only#:
     move(io_xnfd[3], io_desc[3])
 
     #if (streq('SIGTYPE', 'SIG_DONE'))
-        mem[journal, io_xnfd[0], addr_hi, <<8, addr_lo, 4], sig_done[SIG]
+        mem[qadd_work, io_xnfd[0], addr_hi, <<8, addr_lo, 4], sig_done[SIG]
     #elif (streq('SIGTYPE', 'SIG_WAIT'))
-        mem[journal, io_xnfd[0], addr_hi, <<8, addr_lo, 4], ctx_swap[SIG]
+        mem[qadd_work, io_xnfd[0], addr_hi, <<8, addr_lo, 4], ctx_swap[SIG]
     #else
         #error "Unknown signal handling type"
     #endif

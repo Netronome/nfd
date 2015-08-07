@@ -2,6 +2,7 @@
 #define __NFD_IN_UC
 
 #include <nfd_net.h>
+#include "shared/nfd_api_common.h"
 #include <nfd_common.uc>
 #include <nfd_stats.uc>
 #include <nfp_chipres.h>

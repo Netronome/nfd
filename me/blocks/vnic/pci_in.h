@@ -13,6 +13,7 @@
 
 #include <vnic/shared/nfcc_chipres.h>
 #include <vnic/shared/nfd_net.h>
+#include "shared/nfd_api_common.h"
 
 #ifndef NFD_IN_DATA_OFFSET
 #define NFD_IN_DATA_OFFSET          64
