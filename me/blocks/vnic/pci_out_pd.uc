@@ -456,7 +456,7 @@ ctm_and_mu_dma#:
         alu[tmp, g_dma_max, -, 1]
         sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
 
-        // MU DMA, using out_dma1 
+        // MU DMA, using out_dma1
         #pragma warning(disable:5117)
         pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
         #pragma warning(default:5117)
@@ -477,19 +477,19 @@ ctm_and_mu_dma#:
 
         // Adjust offsets and lengths
         alu[len, len, -, g_dma_max]
-        alu[mu_lo_start, word, +, g_dma_max]
+        alu[mu_lo_start, mu_lo_start, +, g_dma_max]
         alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
         alu[pcie_hi_word, pcie_hi_word, +carry, 0]
 
         // out_dma0: word0
         alu[out_dma0[0], --, B, mu_lo_start]
 
-        // out_dma0: word1
-        alu[out_dma0[0], --, B, pcie_lo_start]
+        // out_dma0: word2
+        alu[out_dma0[2], --, B, pcie_lo_start]
 
         .if (len <= g_dma_max)
 
-            // DMA0 Word 1 
+            // DMA0 Word 1
             _build_mu_dma_word1(out_dma0, in_work, dma_sig)
 
             // DMA0 Word 3
@@ -502,7 +502,7 @@ ctm_and_mu_dma#:
 
         .else
 
-            // DMA0 Word 1 
+            // DMA0 Word 1
             _build_mu_dma_word1(out_dma0, in_work, NOSIG)
 
             // DMA0 Word 3
