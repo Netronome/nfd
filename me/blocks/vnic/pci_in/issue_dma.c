@@ -223,6 +223,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
         /* Initialise queue state */
         queue_data[bmsk_queue].sp0 = 0;
+        queue_data[bmsk_queue].zero = 0;
         queue_data[bmsk_queue].rid = 0;
         if (cfg_msg->vnic != NFD_MAX_VFS) {
             queue_data[bmsk_queue].rid = cfg_msg->vnic + NFD_CFG_VF_OFFSET;
@@ -231,7 +232,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].up = 1;
         queue_data[bmsk_queue].curr_buf = 0;
         queue_data[bmsk_queue].offset = 0;
-        queue_data[bmsk_queue].sp2 = 0;
+        queue_data[bmsk_queue].sp1 = 0;
 
     } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* Free the MU buffer */
@@ -250,6 +251,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 
         /* Clear queue state */
         queue_data[bmsk_queue].sp0 = 0;
+        queue_data[bmsk_queue].zero = 0;
         /* Leave RID configured after first set */
         /* "cont" is used as part of the "up" signalling,
          * to move the "up" test off the fast path. */
@@ -257,7 +259,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].up = 0;
         queue_data[bmsk_queue].curr_buf = 0;
         queue_data[bmsk_queue].offset = 0;
-        queue_data[bmsk_queue].sp2 = 0;
+        queue_data[bmsk_queue].sp1 = 0;
 
     }
 }
@@ -525,7 +527,6 @@ do {                                                                    \
                                                                         \
             /* XXX check this is done in two cycles */                  \
             queue_data[queue].cont = 0;                                 \
-            queue_data[queue].sp1 = 0;                                  \
             queue_data[queue].curr_buf = 0;                             \
             queue_data[queue].offset = 0;                               \
         }                                                               \

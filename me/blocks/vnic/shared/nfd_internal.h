@@ -169,14 +169,19 @@ struct nfd_in_queue_info {
 
 
 struct nfd_in_dma_state {
-    unsigned int sp0:24;
-    unsigned int rid:8;
-    unsigned int cont:1;
-    unsigned int up:1;
-    unsigned int sp1:1;
-    unsigned int curr_buf:29;
-    unsigned int offset;
-    unsigned int sp2;
+    union {
+        struct {
+            unsigned int up:1;
+            unsigned int cont:1;
+            unsigned int sp0:10;
+            unsigned int zero:12;
+            unsigned int rid:8;
+            unsigned int curr_buf;
+            unsigned int offset;
+            unsigned int sp1;
+        };
+        unsigned int __raw[4];
+    };
 };
 
 
