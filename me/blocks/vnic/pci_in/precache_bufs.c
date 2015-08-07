@@ -49,8 +49,8 @@ extern __shared __gpr unsigned int data_dma_seq_issued;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
 __shared __gpr unsigned int data_dma_seq_safe = 0;
-__shared __gpr unsigned int jumbo_dma_seq_issued = 0;
-__shared __gpr unsigned int jumbo_dma_seq_compl = 0;
+extern __shared __gpr unsigned int jumbo_dma_seq_issued;
+extern __shared __gpr unsigned int jumbo_dma_seq_compl;
 
 /* Signals and transfer registers for receiving DMA events */
 static volatile __xread unsigned int nfd_in_data_event_xfer;
