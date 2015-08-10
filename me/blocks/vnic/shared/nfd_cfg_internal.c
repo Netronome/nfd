@@ -535,7 +535,7 @@ nfd_cfg_pcie_monitor_stop()
         local_csr_write(local_csr_mailbox_1, chk_val);
 
         /* We have an ABI mismatch with the pcie_monitor, halt. */
-        halt();
+        /* halt(); */ /* XXX suppressed for compatibility with SDN BSP */
     }
 
     /* We disable the pcie_monitor by clearing a bit in ARM CLS */
