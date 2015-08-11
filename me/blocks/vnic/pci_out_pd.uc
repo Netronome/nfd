@@ -739,7 +739,7 @@ add_wq_credits#:
     .reg ring_num
     .reg bitmap_lo
     .reg cntr_addr_lo
-    .reg tmp
+    .reg seq
 
     .reg $ticket
     .sig ticket_sig
@@ -761,15 +761,9 @@ no_ctm_buffer#:
     mem[release_ticket, $ticket, 0, bitmap_lo, 1], sig_done[ticket_sig]
 
     wsm_extract(addr_lo, io_work, SB_WQ_MUBUF)
-
-    pci_out_pd_request_work(io_work[0], in_wq_sig)
-
-    // Cheat and pull from the read xfers before they get clobbered
-    #pragma warning(disable:5009)
     ctx_arb[ticket_sig], defer[2]
     alu[cntr_addr_lo, --, B, qnum, <<4]
     wsm_extract(ring_num, io_work, SB_WQ_BLS)
-    #pragma warning(default:5009)
 
     // Free the MU buffer
     alu[-- , g_blm_iref, OR, ring_num, <<16]
@@ -784,13 +778,16 @@ ticket_ready#:
     mem[add_imm, --, g_send_cntrs_addr_hi, <<8, cntr_addr_lo], indirect_ref
 
 complete_done#:
+    #pragma warning(disable:5009)
+    pci_out_pd_request_work(io_work[0], in_wq_sig)
+    #pragma warning(default:5009)
     wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
 
 ticket_error#:
     alu[g_num_ticket_errors, g_num_ticket_errors, +, 1]
     local_csr_wr[MAILBOX0, g_num_ticket_errors]
-    wsm_extract(tmp, io_work, SB_WQ_SEQ)
-    local_csr_wr[MAILBOX1, tmp]
+    wsm_extract(seq, io_work, SB_WQ_SEQ)
+    local_csr_wr[MAILBOX1, seq]
     cycle32_sleep(250)
     mem[release_ticket, $ticket, 0, bitmap_lo, 1], sig_done[ticket_sig]
     ctx_arb[ticket_sig], br[ticket_ready#]
