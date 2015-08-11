@@ -739,6 +739,7 @@ add_wq_credits#:
     .reg ring_num
     .reg bitmap_lo
     .reg cntr_addr_lo
+    .reg tmp
 
     .reg $ticket
     .sig ticket_sig
@@ -786,6 +787,10 @@ complete_done#:
     wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
 
 ticket_error#:
+    alu[g_num_ticket_errors, g_num_ticket_errors, +, 1]
+    local_csr_wr[MAILBOX0, g_num_ticket_errors]
+    wsm_extract(tmp, io_work, SB_WQ_SEQ)
+    local_csr_wr[MAILBOX1, tmp]
     cycle32_sleep(250)
     mem[release_ticket, $ticket, 0, bitmap_lo, 1], sig_done[ticket_sig]
     ctx_arb[ticket_sig], br[ticket_ready#]
@@ -924,6 +929,7 @@ main#:
     .reg volatile g_pcie_addr_lo
     .reg volatile g_pcie_addr_hi
     .reg volatile g_dma_max
+    .reg volatile g_num_ticket_errors
 
     .reg @ndequeued
     .init @ndequeued SB_WQ_CREDIT_BATCH
@@ -1031,6 +1037,7 @@ main#:
     move(g_pcie_addr_lo, NFP_PCIE_DMA_TOPCI_LO)
     move(g_pcie_addr_hi, (PCIE_ISL << 30))
     move(g_dma_max, PCIE_DMA_MAX_LEN)
+    move(g_num_ticket_errors, 0)
 
 
 
