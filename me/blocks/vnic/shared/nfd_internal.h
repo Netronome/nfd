@@ -185,7 +185,7 @@ struct nfd_in_dma_state {
             unsigned int zero:12;
             unsigned int rid:8;
             unsigned int curr_buf;
-            unsigned int offset;
+            int offset;
             unsigned int sp1;
         };
         unsigned int __raw[4];
