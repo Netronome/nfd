@@ -509,7 +509,7 @@ do {                                                                    \
                                                                         \
         /* Handle the DMA sequence numbers for the batch */             \
         /* XXX add _last_pkt parameter to avoid race? */                \
-        if (_pkt == 0) {                                                \
+        if (_type == NFD_IN_DATA_EVENT_TYPE) {                          \
             descr_tmp.pcie_addr_hi = 0;                                 \
             descr_tmp.pcie_addr_lo = 0;                                 \
                                                                         \
@@ -529,10 +529,6 @@ do {                                                                    \
                            NFD_IN_DATA_DMA_QUEUE,                       \
                            sig_done, &last_of_batch_dma_sig);           \
                                                                         \
-        } else {                                                        \
-            /* XXX fix possible bug here: */                            \
-            /* why are we removing last_of_batch? */                    \
-            wait_msk &= ~__signals(&last_of_batch_dma_sig);             \
         }                                                               \
                                                                         \
     } else {                                                            \
