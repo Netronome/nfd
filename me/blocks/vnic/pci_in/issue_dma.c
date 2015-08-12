@@ -374,7 +374,10 @@ do {                                                                    \
     /* Issue DMA for 4k of segment, updating processing state */        \
     dma_seqn_set_event(&descr_tmp, NFD_IN_JUMBO_EVENT_TYPE, 1,          \
                        jumbo_dma_seq_issued);                           \
-    dma_out.pkt##_pkt## = descr_tmp;                                    \
+    dma_out.pkt##_pkt##.__raw[0] = descr_tmp.__raw[0];                  \
+    dma_out.pkt##_pkt##.__raw[1] = descr_tmp.__raw[1];                  \
+    dma_out.pkt##_pkt##.__raw[2] = descr_tmp.__raw[2];                  \
+    dma_out.pkt##_pkt##.__raw[3] = descr_tmp.__raw[3];                  \
                                                                         \
     pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, NFD_IN_DATA_DMA_QUEUE);  \
                                                                         \
@@ -452,7 +455,10 @@ do {                                                                    \
         descr_tmp.dma_mode = (((_type & 0xF) << 12) | 1 |               \
                               ((_src & 0xFF) << 2));                    \
         descr_tmp.length = dma_len - 1;                                 \
-        dma_out.pkt##_pkt## = descr_tmp;                                \
+    dma_out.pkt##_pkt##.__raw[0] = descr_tmp.__raw[0];                  \
+    dma_out.pkt##_pkt##.__raw[1] = descr_tmp.__raw[1];                  \
+    dma_out.pkt##_pkt##.__raw[2] = descr_tmp.__raw[2];                  \
+    dma_out.pkt##_pkt##.__raw[3] = descr_tmp.__raw[3];                  \
                                                                         \
         if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                      \
             pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
@@ -498,7 +504,10 @@ do {                                                                    \
             descr_tmp.length = 0;                                       \
                                                                         \
             descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG_SIG_ONLY;     \
-            dma_out.pkt##_pkt = descr_tmp;                              \
+            dma_out.pkt##_pkt##.__raw[0] = descr_tmp.__raw[0];          \
+            dma_out.pkt##_pkt##.__raw[1] = descr_tmp.__raw[1];          \
+            dma_out.pkt##_pkt##.__raw[2] = descr_tmp.__raw[2];          \
+            dma_out.pkt##_pkt##.__raw[3] = descr_tmp.__raw[3];          \
             descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG;              \
             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                \
                            NFD_IN_DATA_DMA_QUEUE,                       \
@@ -566,7 +575,10 @@ do {                                                                    \
         descr_tmp.dma_mode = (((_type & 0xF) << 12) | 1 |               \
                               ((_src & 0xFF) << 2));                    \
         descr_tmp.length = dma_len - 1;                                 \
-        dma_out.pkt##_pkt## = descr_tmp;                                \
+        dma_out.pkt##_pkt##.__raw[0] = descr_tmp.__raw[0];              \
+        dma_out.pkt##_pkt##.__raw[1] = descr_tmp.__raw[1];              \
+        dma_out.pkt##_pkt##.__raw[2] = descr_tmp.__raw[2];              \
+        dma_out.pkt##_pkt##.__raw[3] = descr_tmp.__raw[3];              \
                                                                         \
         if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                      \
             pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
