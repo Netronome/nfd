@@ -107,13 +107,11 @@ do {                                                                    \
             if (cfg_msg##_isl.vnic == NFD_MAX_VFS) {                    \
                 /* We have a PF FLR */                                  \
                 nfd_flr_init_pf_ctrl_bar(NFD_CFG_BASE_LINK(_isl));      \
-                nfd_flr_ack_pf(_isl);                                   \
                                                                         \
             } else {                                                    \
                 /* We have a VF FLR */                                  \
                 nfd_flr_init_vf_ctrl_bar(NFD_CFG_BASE_LINK(_isl),       \
                                      cfg_msg##_isl.vnic);               \
-                nfd_flr_ack_vf(_isl, cfg_msg##_isl.vnic);               \
                                                                         \
             }                                                           \
         }                                                               \

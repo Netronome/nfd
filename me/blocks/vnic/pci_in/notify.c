@@ -65,7 +65,7 @@ static SIGNAL_MASK wait_msk;
 static unsigned int next_ctx;
 
 __xwrite struct _pkt_desc_batch batch_out;
-__xwrite unsigned int qc_xfer;
+__xread unsigned int qc_xfer;
 
 /* XXX use CLS ring API when available */
 /* XXX THS-50 workaround, use CTM instead of CLS rings */
@@ -466,6 +466,7 @@ notify()
         __implicit_read(&qc_sig);
         __implicit_read(&msg_sig);
         __implicit_read(&msg_order_sig);
+        __implicit_read(&qc_xfer);
 
         reorder_done_opt(&next_ctx, &msg_order_sig);
 

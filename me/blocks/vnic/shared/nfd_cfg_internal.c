@@ -393,7 +393,7 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 
-    mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_EXN,
+    mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
 #endif
 }
@@ -468,6 +468,8 @@ nfd_cfg_flr_setup()
     unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
         ((unsigned int) __MEID>>4), NFP_EVENT_PROVIDER_INDEX_PCIE);
     unsigned int event_mask, event_match;
+
+    __assign_relative_register(&flr_ap_sig, NFD_CFG_FLR_AP_SIG_NO);
 
     __implicit_write(&flr_ap_sig);
     __implicit_write(&flr_ap_xfer);
@@ -558,7 +560,9 @@ nfd_cfg_check_flr_ap()
         __xread unsigned int pcie_state_change_stat;
         __xread unsigned int pf_csr;
         __xread unsigned int vf_csr[2];
+        unsigned int vendor_msg;
         unsigned int state_change_ack;
+        unsigned int int_mgr_status;
         int vf;
 
         local_csr_write(local_csr_mailbox_0, flr_ap_xfer);
@@ -567,12 +571,32 @@ nfd_cfg_check_flr_ap()
         nfd_flr_check_pf(PCIE_ISL, &flr_pend_status);
         nfd_flr_check_vfs(PCIE_ISL, &flr_pend_status, flr_pend_vf);
 
+        /* Acknowledge PCIE vendor defined messages */
+        vendor_msg = xpb_read(NFP_PCIEX_COMPCFG_CFG0);
+        if (vendor_msg & (1 << NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf)) {
+            /* "PcieMsgValid" is write one to clear */
+            vendor_msg |= (1 << NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf);
+            xpb_write(NFP_PCIEX_COMPCFG_CFG0, vendor_msg);
+        }
+
         /* Acknowledge PCIe state changes */
         state_change_ack = xpb_read(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT);
         state_change_ack &= NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk;
         if (state_change_ack) {
             xpb_write(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT,
                       state_change_ack);
+        }
+
+        /* Recheck InterruptManager.Status  */
+        int_mgr_status = xpb_read(NFP_PCIEX_PCIE_INT_MGR_STATUS);
+        if ((int_mgr_status & ~NFP_PCIEX_PCIE_INT_MGR_STATUS_FLR_msk) != 0) {
+            /* We have a non-zero status that is NOT due to outstanding FLRs.
+             * Therefore, we flag the AP signal again so that the interrupt
+             * status is rechecked.
+             * The FLR bits are excluded as they take time to complete, and
+             * the FLR acknowledgement methods reset the AP signal as well.
+             */
+            signal_ctx(NFD_CFG_FLR_AP_CTX_NO, NFD_CFG_FLR_AP_SIG_NO);
         }
 
         /* Mark the autopush signal and xfer as used

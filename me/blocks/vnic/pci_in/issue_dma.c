@@ -163,7 +163,6 @@ _add_to_pcie_addr(__gpr unsigned int *descr_tmp_raw, unsigned int dma_len)
 }
 
 
-
 /* Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
  * swap token complete correctly for DMAs that aren't 4B multiples in size. */
 void
@@ -805,7 +804,7 @@ do {                                                                    \
         batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];           \
                                                                         \
         /* Handle the DMA sequence numbers for the batch */             \
-        if (_pkt == 0) {                                                \
+        if (_type == NFD_IN_DATA_EVENT_TYPE) {                          \
             descr_tmp.cpp_addr_hi = 0;                                  \
             descr_tmp.cpp_addr_lo = 0;                                  \
             descr_tmp.pcie_addr_hi = 0;                                 \

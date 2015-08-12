@@ -174,6 +174,25 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 
 
 /**
+ * Add a length to a PCIe address, with carry to PCIe HI
+ * @param descr_tmp_raw     "struct nfp_pcie_dma_cmd" to update
+ * @param dma_len           length to add to the address
+ *
+ * "descr_tmp_raw" must point to the "unsigned int __raw[4]" part
+ * of the union.
+ */
+__intrinsic void
+_add_to_pcie_addr(__gpr unsigned int *descr_tmp_raw, unsigned int dma_len)
+{
+    /* We need to use the +carry op to update the 8bit PCIe HI value.
+     * This field is in the low 8bits of __raw[3].  Therefore we
+     * use inline asm. */
+    __asm { alu[descr_tmp_raw[2], descr_tmp_raw[2], +, dma_len] }
+    __asm { alu[descr_tmp_raw[3], descr_tmp_raw[3], +carry, 0] }
+}
+
+
+/**
  * Perform once off, CTX0-only initialisation
  */
 void
@@ -391,7 +410,6 @@ do {                                                                    \
             __asm { alu[msg.cpp.__raw[1], --, b,                        \
                         *l$index2[NFD_OUT_CPP_MU_INDEX##_pkt]] }        \
             descr_tmp.rid = rx_desc##_pkt.rid;                          \
-            descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;      \
                                                                         \
             data_len = rx_desc##_pkt##.data_len;                        \
             pcie_lo_start = fl_entries[_pkt].dma_addr_lo;               \
@@ -425,8 +443,11 @@ do {                                                                    \
                         }                                               \
                                                                         \
                         data_len -= first_dma_len;                      \
-                        descr_tmp.pcie_addr_lo = (pcie_lo_start +       \
-                                                  first_dma_len);       \
+                        descr_tmp.pcie_addr_hi =                        \
+                            fl_entries[_pkt].dma_addr_hi;               \
+                        descr_tmp.pcie_addr_lo = pcie_lo_start;         \
+                        _add_to_pcie_addr(descr_tmp.__raw,              \
+                                          first_dma_len);               \
                         descr_tmp.cpp_addr_lo = (cpp_lo_start +         \
                                                  first_dma_len);        \
                         pcie_dma_set_event(&descr_tmp,                  \
@@ -445,7 +466,8 @@ do {                                                                    \
                                            ctx_swap, &resv_dma_sig);    \
                                                                         \
                             data_len -= PCIE_DMA_MAX_SZ;                \
-                            descr_tmp.pcie_addr_lo += PCIE_DMA_MAX_SZ;  \
+                            _add_to_pcie_addr(descr_tmp.__raw,          \
+                                              PCIE_DMA_MAX_SZ);         \
                             descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;   \
                                                                         \
                             resv_dma_cnt++;                             \
@@ -477,6 +499,7 @@ do {                                                                    \
                 data_dma_resv_avail -= resv_dma_cnt;                    \
                                                                         \
                 /* Issue the main DMA */                                \
+                descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;  \
                 descr_tmp.pcie_addr_lo = pcie_lo_start;                 \
                 descr_tmp.cpp_addr_lo = cpp_lo_start;                   \
                                                                         \
@@ -510,7 +533,9 @@ do {                                                                    \
                 descr_tmp.cpp_addr_lo = msg.cpp.mu_addr << 11;          \
                 descr_tmp.cpp_addr_lo += split_len;                     \
                                                                         \
-                descr_tmp.pcie_addr_lo = pcie_lo_start + ctm_bytes;     \
+                descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;  \
+                descr_tmp.pcie_addr_lo = pcie_lo_start;                 \
+                _add_to_pcie_addr(descr_tmp.__raw, ctm_bytes);          \
                                                                         \
                 pcie_dma_set_event(&descr_tmp,                          \
                                    NFD_OUT_DATA_IGN_EVENT_TYPE, 0);     \
@@ -555,7 +580,7 @@ do {                                                                    \
                         SIGNAL resv_dma_sig;                            \
                                                                         \
                         descr_tmp.cpp_addr_lo += this_dma_len;          \
-                        descr_tmp.pcie_addr_lo += this_dma_len;         \
+                        _add_to_pcie_addr(descr_tmp.__raw, this_dma_len); \
                                                                         \
                         /* Pick dma_len for the next DMA */             \
                         if (data_len > 4096) {                          \
@@ -591,6 +616,7 @@ do {                                                                    \
                 data_dma_resv_avail -= resv_dma_cnt;                    \
                                                                         \
                 /* Issue the main DMA */                                \
+                descr_tmp.pcie_addr_hi = fl_entries[_pkt].dma_addr_hi;  \
                 descr_tmp.pcie_addr_lo = pcie_lo_start;                 \
                                                                         \
                 descr_tmp.length = ctm_bytes - 1;                       \

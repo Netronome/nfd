@@ -384,7 +384,7 @@ _fetch_fl(__gpr unsigned int *queue)
     space_chk = ((NFD_OUT_FL_BUFS_PER_QUEUE - NFD_OUT_FL_BATCH_SZ) +
                  queue_data[*queue].rx_w - queue_data[*queue].fl_s);
     if (space_chk >= 0) {
-        __xwrite unsigned int qc_xfer;
+        __xread unsigned int qc_xfer;
         unsigned int pending_slot;
         SIGNAL dma_sig;
 
@@ -427,6 +427,7 @@ _fetch_fl(__gpr unsigned int *queue)
         __pcie_dma_enq(PCIE_ISL, &descr, NFD_OUT_FL_DMA_QUEUE,
                        sig_done, &dma_sig);
         wait_for_all(&dma_sig, &qc_sig);
+        __implicit_read(&qc_xfer);
 
         /* Indicate work done on queue */
         ret = 0;

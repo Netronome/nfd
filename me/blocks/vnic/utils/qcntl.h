@@ -129,7 +129,7 @@ __intrinsic void qc_ping_queue(unsigned char pcie_isl, unsigned int queue,
  * @param queue         which QC queue to address
  * @param ptr           specify read or write pointer (QC_RPTR or QC_WPTR)
  * @param value         the value to add to the pointer
- * @param xfer          transfer register to use for the write
+ * @param xfer          transfer register to use for the read
  * @param sync          type of synchronisation (sig_done or ctx_swap)
  * @param sig           signal to use
  *
@@ -139,7 +139,7 @@ __intrinsic void qc_ping_queue(unsigned char pcie_isl, unsigned int queue,
  */
 __intrinsic void __qc_add_to_ptr(unsigned char pcie_isl, unsigned int queue,
                                  enum qc_ptr_type ptr,unsigned int value,
-                                 __xwrite unsigned int *xfer,
+                                 __xread unsigned int *xfer,
                                  sync_t sync, SIGNAL *sig);
 
 __intrinsic void qc_add_to_ptr(unsigned char pcie_isl, unsigned int queue,
