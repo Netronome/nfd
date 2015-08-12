@@ -225,7 +225,7 @@ cache_desc_setup_shared()
     init_bitmasks(&urgent_bmsk);
 
     dma_seqn_ap_setup(NFD_OUT_FL_EVENT_FILTER, NFD_OUT_FL_EVENT_FILTER,
-                      NFD_OUT_FL_EVENT_TYPE, &fl_cache_event_xfer,
+                      NFD_OUT_FL_EVENT_TYPE, 0, &fl_cache_event_xfer,
                       &fl_cache_event_sig);
 
     /*
@@ -469,7 +469,7 @@ _fetch_fl(__gpr unsigned int *queue)
             cache_desc_compute_fl_addr(queue, queue_data[*queue].fl_s);
         descr_tmp.rid = queue_data[*queue].requester_id;
         /* Can replace with ld_field instruction if 8bit seqn is enough */
-        pcie_dma_set_event(&descr_tmp, NFD_OUT_FL_EVENT_TYPE,
+        dma_seqn_set_event(&descr_tmp, NFD_OUT_FL_EVENT_TYPE, 0,
                            fl_cache_dma_seq_issued);
         descr = descr_tmp;
 
@@ -680,7 +680,7 @@ send_desc_setup_shared()
     init_bitmasks(&pending_bmsk);
 
     dma_seqn_ap_setup(NFD_OUT_DESC_EVENT_FILTER, NFD_OUT_DESC_EVENT_FILTER,
-                      NFD_OUT_DESC_EVENT_TYPE, &desc_dma_event_xfer,
+                      NFD_OUT_DESC_EVENT_TYPE, 0, &desc_dma_event_xfer,
                       &desc_dma_event_sig);
 
     /*
@@ -786,7 +786,7 @@ _start_send(__gpr unsigned int *queue)
                 cache_desc_compute_fl_addr(queue, rx_s);
             rx_descr_tmp.rid = queue_data[*queue].requester_id;
             /* Can replace with ld_field instruction if 8bit seqn is enough */
-            pcie_dma_set_event(&rx_descr_tmp, NFD_OUT_DESC_EVENT_TYPE,
+            dma_seqn_set_event(&rx_descr_tmp, NFD_OUT_DESC_EVENT_TYPE, 0,
                                desc_dma_issued);
             descr = rx_descr_tmp;
 

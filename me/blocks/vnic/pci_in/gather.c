@@ -150,7 +150,7 @@ void
 distr_gather_setup_shared()
 {
     dma_seqn_ap_setup(NFD_IN_GATHER_EVENT_FILTER, NFD_IN_GATHER_EVENT_FILTER,
-                      NFD_IN_GATHER_EVENT_TYPE, &nfd_in_gather_event_xfer,
+                      NFD_IN_GATHER_EVENT_TYPE, 0, &nfd_in_gather_event_xfer,
                       &nfd_in_gather_event_sig);
 }
 
@@ -336,7 +336,7 @@ gather()
             descr_tmp.cpp_addr_lo =  desc_ring_base | desc_ring_off;
             descr_tmp.rid = queue_data[queue].requester_id;
             /* Can replace with ld_field instruction if 8bit seqn is enough */
-            pcie_dma_set_event(&descr_tmp, NFD_IN_GATHER_EVENT_TYPE,
+            dma_seqn_set_event(&descr_tmp, NFD_IN_GATHER_EVENT_TYPE, 0,
                                dma_seq_issued);
             descr_tmp.length = ((tx_r_update_tmp *
                                  sizeof(struct nfd_in_tx_desc)) - 1);

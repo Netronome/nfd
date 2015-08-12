@@ -328,11 +328,11 @@ void
 distr_precache_bufs_setup_shared()
 {
     dma_seqn_ap_setup(NFD_IN_DATA_EVENT_FILTER, NFD_IN_DATA_EVENT_FILTER,
-                      NFD_IN_DATA_EVENT_TYPE, &nfd_in_data_event_xfer,
+                      NFD_IN_DATA_EVENT_TYPE, 1, &nfd_in_data_event_xfer,
                       &nfd_in_data_event_sig);
 
     dma_seqn_ap_setup(NFD_IN_JUMBO_EVENT_FILTER, NFD_IN_JUMBO_EVENT_FILTER,
-                      NFD_IN_JUMBO_EVENT_TYPE, &nfd_in_jumbo_event_xfer,
+                      NFD_IN_JUMBO_EVENT_TYPE, 1, &nfd_in_jumbo_event_xfer,
                       &nfd_in_jumbo_event_sig);
 }
 
