@@ -36,8 +36,14 @@ __intrinsic void cls_ring_setup(unsigned int rnum, __cls void *base,
 
 __intrinsic int cls_state_test(int state);
 
+__intrinsic int cls_state_test2(int state1, int state2);
+
 #define CLS_RING_FULL_IND(x) cls_state_test(cls_ring##x##_status)
 #define CLS_RING_FULL(x) CLS_RING_FULL_IND(x)
+
+#define CLS_RING_EITHER_FULL_IND(x, y) \
+    cls_state_test2(cls_ring##x##_status, cls_ring##y##_status)
+#define CLS_RING_EITHER_FULL(x, y) CLS_RING_EITHER_FULL_IND(x, y)
 
 __intrinsic void cls_ring_put(unsigned int rnum, __xwrite void *data,
                               size_t size, SIGNAL *put_sig);

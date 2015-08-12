@@ -67,6 +67,25 @@ cls_state_test(int rstate)
 }
 
 
+__intrinsic int
+cls_state_test2(int rstate1, int rstate2)
+{
+    __gpr int full = 1;
+
+    ctassert(__is_ct_const(rstate1));
+    ctassert(__is_ct_const(rstate2));
+
+    __asm {
+        br_cls_state[__ct_const_val(rstate1), match];
+        br_cls_state[__ct_const_val(rstate2), match];
+        alu[full, --, B, 0];
+        match:
+    }
+
+    return full;
+}
+
+
 __intrinsic void
 cls_ring_put(unsigned int rnum, __xwrite void *data, size_t size,
              SIGNAL *put_sig)

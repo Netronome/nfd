@@ -143,6 +143,14 @@
 /* Debug defines */
 #define NFD_OUT_DBG_CACHE_DESC_INTVL    1000000
 
+/* Defines for gather/issue_dma CLS rings */
+#define NFD_IN_BATCH_RING0_ADDR         0
+#define NFD_IN_BATCH_RING0_SIZE_LW      64
+#define NFD_IN_BATCH_RING0_NUM          1
+#define NFD_IN_BATCH_RING1_ADDR         512
+#define NFD_IN_BATCH_RING1_SIZE_LW      64
+#define NFD_IN_BATCH_RING1_NUM          2
+
 
 #if !defined(__NFP_LANG_ASM)
 

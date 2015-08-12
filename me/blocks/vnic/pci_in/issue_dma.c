@@ -23,11 +23,15 @@
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 
-/*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
+#include <vnic/utils/cls_ring.h>
 #include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
-#include <vnic/utils/nn_ring.h>
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
+
+#ifndef PCI_IN_ISSUE_DMA_IDX
+#warning "PCI_IN_ISSUE_DMA_IDX not defined.  Defaulting to 0.  Make sure there is only one instance"
+#define PCI_IN_ISSUE_DMA_IDX 0
+#endif
 
 struct _tx_desc_batch {
     struct nfd_in_tx_desc pkt0;
@@ -109,14 +113,17 @@ static __xwrite struct _issued_pkt_batch batch_out;
 static SIGNAL tx_desc_sig, msg_sig0, desc_order_sig, dma_order_sig;
 static SIGNAL last_of_batch_dma_sig;
 static SIGNAL msg_sig1;
+static SIGNAL batch_sig;
 static SIGNAL_MASK wait_msk;
 
 unsigned int next_ctx;
 
-/* Configure the NN ring */
-NN_RING_ZERO_PTRS;
-NN_RING_EMPTY_ASSERT_SET(0);
-
+/* CLS ring of batch information from the gather() block */
+CLS_RING_DECL;
+ASM(.alloc_resource nfd_in_batch_ring0_num cls_rings+NFD_IN_BATCH_RING0_NUM \
+    island 1 1);
+ASM(.alloc_resource nfd_in_batch_ring1_num cls_rings+NFD_IN_BATCH_RING1_NUM \
+    island 1 1);
 
 /* Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
  * swap token complete correctly for DMAs that aren't 4B multiples in size. */
@@ -281,9 +288,9 @@ issue_dma_setup()
     descr_tmp.cpp_token = NFD_IN_DATA_DMA_TOKEN;
     descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG;
 
-    /* wait_msk initially only needs tx_desc_sig and dma_order_sig
+    /* wait_msk initially only needs batch_sig, tx_desc_sig and dma_order_sig
      * No DMAs or messages have been issued at this stage */
-    wait_msk = __signals(&tx_desc_sig, &dma_order_sig);
+    wait_msk = __signals(&batch_sig, &tx_desc_sig, &dma_order_sig);
     next_ctx = reorder_get_next_ctx(NFD_IN_ISSUE_START_CTX,
                                     NFD_IN_ISSUE_END_CTX);
 }
@@ -581,9 +588,9 @@ do {                                                                    \
 
 
 /**
- * Fetch batch messages from the NN ring and process them, issuing up to
+ * Fetch batch messages from the CLS ring and process them, issuing up to
  * PCI_IN_MAX_BATCH_SZ DMAs, and placing a batch of messages onto the
- * "nfd_in_issued_ring".  Messages are only dequeued from the NN ring when the
+ * "nfd_in_issued_ring".  Messages are only dequeued from the CLS ring when the
  * "gather_dma_seq_compl" sequence number indicates that it is safe to do so.
  * The message processing stalls until "data_dma_seq_safe" and
  * "data_dma_seq_issued" indicate that it is safe to continue.  Two ordering
@@ -598,14 +605,14 @@ issue_dma()
 
     __gpr struct nfd_in_issued_desc issued_tmp;
 
-    struct nfd_in_batch_desc batch;
+    static __xread struct nfd_in_batch_desc batch;
     unsigned int queue;
     unsigned int num;
 
     reorder_test_swap(&desc_order_sig);
 
     /* Check "DMA" completed and we can read the batch
-     * If so, the NN ring MUST have a batch descriptor for us
+     * If so, the CLS ring MUST have a batch descriptor for us
      * NB: only one ctx can execute this at any given time */
     while (gather_dma_seq_compl == gather_dma_seq_serv) {
         ctx_swap(); /* Yield while waiting for work */
@@ -613,19 +620,17 @@ issue_dma()
 
     reorder_done_opt(&next_ctx, &desc_order_sig);
 
-#ifdef NFD_ERROR_CHCECKING
-    if (nn_ring_empty()) {
-        halt();          /* A serious error has occurred */
-    }
-#endif
     /*
      * Increment gather_dma_seq_serv upfront to avoid ambiguity
      * about sequence number zero
      */
     gather_dma_seq_serv++;
 
+    /* Read the batch descriptor */
+    cls_ring_get(NFD_IN_BATCH_RING0_NUM + PCI_IN_ISSUE_DMA_IDX,
+                 &batch, sizeof(batch), &batch_sig);
+
     /* Read the batch */
-    batch.__raw = nn_ring_get();
     desc_ring_off = ((gather_dma_seq_serv * sizeof(tx_desc)) &
                      (NFD_IN_DESC_RING_SZ - 1));
     desc_ring_addr = (__cls void *) (desc_ring_base | desc_ring_off);
@@ -638,11 +643,12 @@ issue_dma()
         local_csr_wr[local_csr_active_ctx_wakeup_events, wait_msk];
     }
 
-    wait_msk = __signals(&last_of_batch_dma_sig, &tx_desc_sig, &msg_sig0,
-                         &msg_sig1, &dma_order_sig);
+    wait_msk = __signals(&last_of_batch_dma_sig, &batch_sig, &tx_desc_sig,
+                         &msg_sig0, &msg_sig1, &dma_order_sig);
     __implicit_read(&last_of_batch_dma_sig);
     __implicit_read(&msg_sig1);
     __implicit_read(&msg_sig0);
+    __implicit_read(&batch_sig);
     __implicit_read(&tx_desc_sig);
     __implicit_read(&dma_order_sig);
     __implicit_read(&dma_out, sizeof dma_out);
@@ -724,6 +730,8 @@ issue_dma()
         _ISSUE_CLR(6);
         _ISSUE_CLR(7);
     } else {
+        local_csr_write(local_csr_mailbox_0, 0xdeadbeef);
+        local_csr_write(local_csr_mailbox_1, batch.__raw);
         halt();
     }
 

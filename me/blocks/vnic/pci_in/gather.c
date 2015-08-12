@@ -17,10 +17,18 @@
 
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd_internal.h>
+#include <vnic/shared/nfcc_chipres.h>
 #include <vnic/utils/dma_seqn.h>
-#include <vnic/utils/nn_ring.h>
+#include <vnic/utils/cls_ring.h>
 #include <vnic/utils/qc.h>
 
+#ifndef ISSUE_DMA_QMASK
+#define ISSUE_DMA_QMASK 0
+#endif
+
+#ifndef ISSUE_DMA_QSHIFT
+#define ISSUE_DMA_QSHIFT 0
+#endif
 
 /*
  * State variables for PCI.IN gather
@@ -49,6 +57,17 @@ __export __shared __cls __align(DESC_RING_SZ) struct nfd_in_tx_desc
     desc_ring[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
 
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
+
+
+CLS_RING_DECL;
+ASM(.alloc_mem nfd_in_batch_ring0_mem cls+NFD_IN_BATCH_RING0_ADDR island \
+    (NFD_IN_BATCH_RING0_SIZE_LW*4) (NFD_IN_BATCH_RING0_SIZE_LW*4));
+ASM(.alloc_resource nfd_in_batch_ring0_num cls_rings+NFD_IN_BATCH_RING0_NUM \
+    island 1 1);
+ASM(.alloc_mem nfd_in_batch_ring1_mem cls+NFD_IN_BATCH_RING1_ADDR island \
+    (NFD_IN_BATCH_RING1_SIZE_LW*4) (NFD_IN_BATCH_RING1_SIZE_LW*4));
+ASM(.alloc_resource nfd_in_batch_ring1_num cls_rings+NFD_IN_BATCH_RING1_NUM \
+    island 1 1);
 
 
 /* XXX Move to some sort of CT reflect library */
@@ -91,6 +110,13 @@ void
 gather_setup_shared()
 {
     struct pcie_dma_cfg_one cfg;
+
+    cls_ring_setup(NFD_IN_BATCH_RING0_NUM, 
+                   (__cls void *)_link_sym(nfd_in_batch_ring0_mem),
+                   (NFD_IN_BATCH_RING0_SIZE_LW * 4));
+    cls_ring_setup(NFD_IN_BATCH_RING1_NUM, 
+                   (__cls void *)_link_sym(nfd_in_batch_ring1_mem),
+                   (NFD_IN_BATCH_RING1_SIZE_LW * 4));
 
     /*
      * Initialise the CLS TX descriptor ring
@@ -207,15 +233,17 @@ gather()
     __gpr unsigned int tx_r_update_tmp;
     __gpr unsigned int tx_s_cp;
     __gpr int tx_r_correction;
+    __gpr int ring;
 
     /*
      * Before looking for a batch of work, we need to be able to issue a DMA
-     * and we need space in the CLS and NN rings. The CLS ring is sized to hold
-     * more batches than the NN ring, so checking for !nn_ring_full is enough.
+     * and we need space in the CLS rings. The CLS descriptor ring is sized to
+     * hold more batches than the CLS ring, so checking for !cls_ring_full is
+     * enough.
      */
     if ((dma_seq_issued != (NFD_IN_GATHER_MAX_IN_FLIGHT +
                             gather_dma_seq_compl)) &&
-        (!nn_ring_full())) {
+        !CLS_RING_EITHER_FULL(NFD_IN_BATCH_RING0_NUM, NFD_IN_BATCH_RING1_NUM)) {
         ret = select_queue(&queue, &pending_bmsk);
 
         /* No work to do. */
@@ -253,6 +281,9 @@ gather()
             unsigned int pcie_addr_off;
             unsigned int desc_ring_off;
             __xwrite struct nfp_pcie_dma_cmd descr;
+            __xwrite struct nfd_in_batch_desc xbatch;
+            SIGNAL batch_sig;
+            SIGNAL dma_sig;
 
             /* logic to only send batches of 8, 4, 3, 2, 1 */
             /* batches of 7, 6, 5 will turn in to batches of 4 */
@@ -288,7 +319,11 @@ gather()
             batch.__raw = 0;
             batch.queue = queue;
             batch.num = tx_r_update_tmp;
-            nn_ring_put(batch.__raw);
+            xbatch.__raw = batch.__raw;
+            /* REMOVE:  XOR 1 added for testing purposes */
+            ring = NFD_IN_BATCH_RING0_NUM + 
+                   (((queue >> ISSUE_DMA_QSHIFT) & ISSUE_DMA_QMASK) ^ 1);
+            cls_ring_put(ring, &xbatch, sizeof(xbatch), &batch_sig);
 
             /*
              * Prepare the "DMA"
@@ -315,7 +350,11 @@ gather()
             /*
              * Issue the DMA
              */
-            pcie_dma_enq(PCIE_ISL, &descr, NFD_IN_GATHER_DMA_QUEUE);
+            __pcie_dma_enq(PCIE_ISL, &descr, NFD_IN_GATHER_DMA_QUEUE,
+                           sig_done, &dma_sig);
+
+            /* wait for ring put and the dma signal */
+            wait_for_all(&batch_sig, &dma_sig);
 
         } else {
             /*
