@@ -12,13 +12,22 @@
 #include <std/event.h>
 
 #include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_pcie.h>
 
 #include <vnic/utils/dma_seqn.h>
 
 
+#define DMA_SEQN_EXT_TYPE_msk   0x3
+#define DMA_SEQN_EXT_TYPE_shf   14
+#define DMA_SEQN_SEQN_msk       0xff
+#define DMA_SEQN_SEQN_shf       16
+#define DMA_SEQN_EXTRACT_shf    6
+
+
 __intrinsic void
 dma_seqn_ap_setup(unsigned int filter_num, unsigned int ap_num,
-                  unsigned int type, volatile __xread unsigned int *xfer,
+                  unsigned int type, unsigned int ext_type,
+                  volatile __xread unsigned int *xfer,
                   SIGNAL *sig)
 {
     unsigned int ctx = ctx();
@@ -30,12 +39,17 @@ dma_seqn_ap_setup(unsigned int filter_num, unsigned int ap_num,
     unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0, 0xF);
     unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
         meid>>4, NFP_EVENT_PROVIDER_INDEX_PCIE);
-    unsigned int event_match = NFP_EVENT_MATCH(pcie_provider, 0, type);
-
+    unsigned int event_match;
 
     ctassert(__is_ct_const(filter_num));
     ctassert(__is_ct_const(ap_num));
     ctassert(__is_ct_const(type));
+    ctassert(__is_ct_const(ext_type));
+
+    /* We extend the HW event type by using 2 bits of the source field. */
+    event_match = NFP_EVENT_MATCH(pcie_provider,
+                                  (ext_type & DMA_SEQN_EXT_TYPE_msk),
+                                  type);
 
     /*
      * Set filter status.
@@ -68,9 +82,54 @@ __intrinsic void
 dma_seqn_advance(volatile __xread unsigned int *xfer, __gpr unsigned int *compl)
 {
     unsigned int seqn_inc;
-    struct nfp_event_match event;
 
-    event.__raw = *xfer;
-    seqn_inc = (event.source - *compl) & 0xFFF;
+    seqn_inc = *xfer >> DMA_SEQN_EXTRACT_shf;
+    seqn_inc = (seqn_inc - *compl) & DMA_SEQN_SEQN_msk;
     *compl += seqn_inc;
+}
+
+
+
+__intrinsic void
+dma_seqn_set_event(void *cmd, unsigned int type, unsigned int ext_type,
+                   unsigned int source)
+{
+    unsigned int dma_mode;
+    struct nfp_pcie_dma_cmd *cmd_ptr;
+
+    dma_mode = source & DMA_SEQN_SEQN_msk;
+    dma_mode = ((dma_mode << 2) |
+                (((type & 0xF) << 12) | (ext_type & DMA_SEQN_EXT_TYPE_msk)));
+
+    cmd_ptr = cmd;
+    cmd_ptr->mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;
+    cmd_ptr->dma_mode = dma_mode;
+}
+
+
+__intrinsic unsigned int
+dma_seqn_init_event(unsigned int type, unsigned int ext_type)
+{
+    unsigned int event;
+
+    ctassert(__is_ct_const(type));
+    ctassert(__is_ct_const(ext_type));
+
+    event = NFP_PCIE_DMA_CMD_MODE_SEL(2);
+    event |= NFP_PCIE_DMA_CMD_DMA_MODE(((type & 0xF) << 12) |
+                                       (ext_type & DMA_SEQN_EXT_TYPE_msk));
+
+    return event;
+}
+
+
+__intrinsic unsigned int
+dma_seqn_set_seqn(unsigned int cpp_hi_part, unsigned int source)
+{
+    unsigned int event;
+
+    event = source & DMA_SEQN_SEQN_msk;
+    event = cpp_hi_part | (event << DMA_SEQN_SEQN_shf);
+
+    return event;
 }
