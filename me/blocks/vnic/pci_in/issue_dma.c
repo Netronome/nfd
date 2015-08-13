@@ -384,8 +384,8 @@ do {                                                                    \
     dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word | (_buf >> 21);          \
                                                                         \
     dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                        \
-    dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word |                      \
-                                    NFP_PCIE_DMA_CMD_LENGTH(dma_len - 1)); \
+    dma_out.pkt##_pkt##.__raw[3] =                                      \
+        pcie_hi_word | NFP_PCIE_DMA_CMD_LENGTH(NFD_IN_DMA_SPLIT_LEN - 1); \
                                                                         \
     pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, NFD_IN_DATA_DMA_QUEUE);  \
                                                                         \
