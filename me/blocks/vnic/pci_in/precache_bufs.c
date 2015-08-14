@@ -20,6 +20,10 @@
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/dma_seqn.h>
 
+#ifndef PCI_IN_ISSUE_DMA_IDX
+#warning "PCI_IN_ISSUE_DMA_IDX not defined.  Defaulting to 0.  Make sure there is only one instance"
+#define PCI_IN_ISSUE_DMA_IDX 0
+#endif
 
 /* Configure *l$index3 to be a global pointer, and
  * set up a convenience define */
@@ -60,10 +64,34 @@ static SIGNAL nfd_in_jumbo_event_sig;
 
 /* Signals and transfer registers for sequence number reflects */
 static __xwrite unsigned int nfd_in_data_compl_refl_out = 0;
-__remote volatile __xread unsigned int nfd_in_data_compl_refl_in;
 __remote volatile SIGNAL nfd_in_data_compl_refl_sig;
-__visible volatile __xread unsigned int nfd_in_data_served_refl_in;
-__visible volatile SIGNAL nfd_in_data_served_refl_sig;
+
+#if (PCI_IN_ISSUE_DMA_IDX == 0)
+
+__remote volatile __xread unsigned int nfd_in_data_compl_refl_in0;
+__visible volatile __xread unsigned int nfd_in_data_served_refl_in0;
+__visible volatile SIGNAL nfd_in_data_served_refl_sig0;
+#define nfd_in_data_compl_refl_in nfd_in_data_compl_refl_in0
+#define nfd_in_data_served_refl_in nfd_in_data_served_refl_in0
+#define nfd_in_data_served_refl_sig nfd_in_data_served_refl_sig0
+#define NFD_IN_ISSUED_RING_SZ NFD_IN_ISSUED_RING0_SZ
+#define NFD_IN_ISSUED_RING_RES NFD_IN_ISSUED_RING0_RES
+
+#elif (PCI_IN_ISSUE_DMA_IDX == 1)
+
+__remote volatile __xread unsigned int nfd_in_data_compl_refl_in1;
+__visible volatile __xread unsigned int nfd_in_data_served_refl_in1;
+__visible volatile SIGNAL nfd_in_data_served_refl_sig1;
+#define nfd_in_data_compl_refl_in nfd_in_data_compl_refl_in1
+#define nfd_in_data_served_refl_in nfd_in_data_served_refl_in1
+#define nfd_in_data_served_refl_sig nfd_in_data_served_refl_sig1
+#define NFD_IN_ISSUED_RING_SZ NFD_IN_ISSUED_RING1_SZ
+#define NFD_IN_ISSUED_RING_RES NFD_IN_ISSUED_RING1_RES
+#else
+
+#error "Invalid PCI_IN_ISSUE_DMA_IDX.  Must be 0 or 1."
+
+#endif
 
 
 /* XXX Move to some sort of CT reflect library */

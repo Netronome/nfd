@@ -7,7 +7,7 @@
 #ifndef _BLOCKS__VNIC_PCI_IN_NOTIFY_STATUS_H_
 #define _BLOCKS__VNIC_PCI_IN_NOTIFY_STATUS_H_
 
-#define STATUS_NOTIFY_START      30
+#define STATUS_NOTIFY_START      60
 
 
 /* XXX the dma_served is already in xfers for the reflect */

@@ -21,13 +21,16 @@
 /**
  * Notify state
  */
-extern __shared __gpr unsigned int data_dma_seq_compl;
-extern __shared __gpr unsigned int data_dma_seq_served;
+extern __shared __gpr unsigned int data_dma_seq_compl0;
+extern __shared __gpr unsigned int data_dma_seq_served0;
+extern __shared __gpr unsigned int data_dma_seq_compl1;
+extern __shared __gpr unsigned int data_dma_seq_served1;
 
 /**
  * Xfers to display state
  */
-static __xwrite struct nfd_in_notify_status status_notify = {0, 0};
+static __xwrite struct nfd_in_notify_status status_notify0 = {0, 0};
+static __xwrite struct nfd_in_notify_status status_notify1 = {0, 0};
 
 SIGNAL status_throttle;
 
@@ -36,7 +39,8 @@ void
 notify_status_setup()
 {
     /* Fix the transfer registers used */
-    __assign_relative_register(&status_notify, STATUS_NOTIFY_START);
+    __assign_relative_register(&status_notify0, STATUS_NOTIFY_START);
+    __assign_relative_register(&status_notify1, (STATUS_NOTIFY_START + 2));
 
     set_alarm(NFD_IN_DBG_GATHER_INTVL, &status_throttle);
 }
@@ -49,13 +53,16 @@ notify_status()
 
     if (signal_test(&status_throttle))
     {
-        __implicit_read(&status_notify, sizeof status_notify);
+        __implicit_read(&status_notify0, sizeof status_notify0);
+        __implicit_read(&status_notify1, sizeof status_notify1);
 
         /*
          * Collect the notify state from various sources
          */
-        status_notify.dma_compl = data_dma_seq_compl;
-        status_notify.dma_served = data_dma_seq_served;
+        status_notify0.dma_compl = data_dma_seq_compl0;
+        status_notify0.dma_served = data_dma_seq_served0;
+        status_notify1.dma_compl = data_dma_seq_compl1;
+        status_notify1.dma_served = data_dma_seq_served1;
 
         /*
          * Reset the alarm

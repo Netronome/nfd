@@ -24,7 +24,7 @@
 #include <vnic/shared/nfd_internal.h>
 
 #include <vnic/utils/cls_ring.h>
-#include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
+#include <vnic/utils/ctm_ring.h>
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
 
@@ -69,12 +69,6 @@ struct _dma_desc_batch {
 NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 
 
-/* Ring declarations */
-/* XXX use CLS ring API when available */
-/* XXX THS-50 workaround, use CTM instead of CLS rings */
-__export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING_SZ)
-    struct nfd_in_issued_desc nfd_in_issued_ring[NFD_IN_ISSUED_RING_SZ];
-
 #define NFD_IN_DESC_RING_SZ (NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ * \
                       sizeof(struct nfd_in_tx_desc))
 __export __shared __cls __align(NFD_IN_DESC_RING_SZ) struct nfd_in_tx_desc
@@ -96,6 +90,28 @@ extern __shared __gpr unsigned int data_dma_seq_safe;
 __shared __gpr unsigned int jumbo_dma_seq_issued = 0;
 __shared __gpr unsigned int jumbo_dma_seq_compl = 0;
 
+
+/* Ring declarations */
+/* TODO: use generic resource management to sanity check these rings */
+#if (PCI_IN_ISSUE_DMA_IDX == 0)
+
+__export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING0_SZ)
+    struct nfd_in_issued_desc nfd_in_issued_ring0[NFD_IN_ISSUED_RING0_SZ];
+#define nfd_in_issued_ring nfd_in_issued_ring0
+#define NFD_IN_ISSUED_RING_NUM NFD_IN_ISSUED_RING0_NUM
+
+#elif (PCI_IN_ISSUE_DMA_IDX == 1)
+
+__export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING1_SZ)
+    struct nfd_in_issued_desc nfd_in_issued_ring1[NFD_IN_ISSUED_RING1_SZ];
+#define nfd_in_issued_ring nfd_in_issued_ring1
+#define NFD_IN_ISSUED_RING_NUM NFD_IN_ISSUED_RING1_NUM
+
+#else /* invalid PCI_IN_ISSUE_DMA_IDX */
+
+#error "Invalid PCI_IN_ISSUE_DMA_IDX.  Must be 0 or 1."
+
+#endif
 
 /* Signals and transfer registers for managing
  * gather_dma_seq_compl updates*/
@@ -154,9 +170,6 @@ issue_dma_setup_shared()
     struct nfp_pcie_dma_cfg cfg_tmp;
     __xwrite struct nfp_pcie_dma_cfg cfg;
 
-    /* XXX THS-50 workaround */
-    /* cls_ring_setup(NFD_IN_ISSUED_RING_NUM, nfd_in_issued_ring,
-     * sizeof nfd_in_issued_ring); */
     ctm_ring_setup(NFD_IN_ISSUED_RING_NUM, nfd_in_issued_ring,
                    sizeof nfd_in_issued_ring);
 
@@ -762,11 +775,8 @@ issue_dma()
     /* We have finished processing the batch, let the next continue */
     reorder_done_opt(&next_ctx, &dma_order_sig);
 
-    /* XXX THS-50 workaround */
-    /* cls_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out, sizeof batch_out, */
-    /*              &msg_sig); */
-    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out.pkt0,
+    ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt0,
                  (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
-    ctm_ring_put(NFD_IN_ISSUED_RING_NUM, &batch_out.pkt4,
+    ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt4,
                  (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
 }

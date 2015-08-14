@@ -14,10 +14,11 @@
 __intrinsic void ctm_ring_setup(unsigned int rnum, __ctm void *base,
                                 size_t size);
 
-__intrinsic void ctm_ring_put(unsigned int rnum, __xwrite void *data,
+__intrinsic void ctm_ring_put(unsigned int isl, unsigned int rnum,
+                              __xwrite void *data,
                               size_t size, SIGNAL *put_sig);
 
-__intrinsic void ctm_ring_get(unsigned int rnum, __xread void *data,
-                              size_t size, SIGNAL *get_sig);
+__intrinsic void ctm_ring_get(unsigned int isl, unsigned int rnum,
+                              __xread void *data, size_t size, SIGNAL *get_sig);
 
 #endif /* !_NFP__CTM_RING_H_ */

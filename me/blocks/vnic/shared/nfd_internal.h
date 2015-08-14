@@ -30,9 +30,12 @@
 #define NFD_IN_FAST_PATH_BATCH_SZ 8
 #define NFD_IN_MAX_NON_FAST_PATH_BATCH_SZ 4
 #define NFD_IN_DESC_BATCH_Q_SZ  128
-#define NFD_IN_ISSUED_RING_SZ   128
-#define NFD_IN_ISSUED_RING_RES  32
-#define NFD_IN_ISSUED_RING_NUM  15
+#define NFD_IN_ISSUED_RING0_SZ  128
+#define NFD_IN_ISSUED_RING0_RES 32
+#define NFD_IN_ISSUED_RING0_NUM 14
+#define NFD_IN_ISSUED_RING1_SZ  128
+#define NFD_IN_ISSUED_RING1_RES 32
+#define NFD_IN_ISSUED_RING1_NUM 15
 
 #define NFD_IN_BUF_STORE_SZ     96
 #define NFD_IN_BUF_RECACHE_WM   24
@@ -48,7 +51,7 @@
 
 #define NFD_IN_ISSUE_START_CTX  2
 #define NFD_IN_ISSUE_END_CTX    6
-#define NFD_IN_NOTIFY_START_CTX 2
+#define NFD_IN_NOTIFY_START_CTX 0
 #define NFD_IN_NOTIFY_END_CTX   6
 
 #define NFD_IN_DSTQ_MSK         0x7
@@ -90,6 +93,15 @@
 #define NFD_IN_DBG_GATHER_INTVL     1000000
 #define NFD_IN_DBG_ISSUE_DMA_INTVL  1000000
 #define NFD_IN_DBG_NOTIFY_INTVL     1000000
+
+/* Defines for gather/issue_dma CLS rings */
+#define NFD_IN_BATCH_RING0_ADDR         0
+#define NFD_IN_BATCH_RING0_SIZE_LW      64
+#define NFD_IN_BATCH_RING0_NUM          1
+#define NFD_IN_BATCH_RING1_ADDR         512
+#define NFD_IN_BATCH_RING1_SIZE_LW      64
+#define NFD_IN_BATCH_RING1_NUM          2
+
 
 /* nfd_out */
 #define NFD_OUT_MAX_BATCH_SZ            4
@@ -143,14 +155,6 @@
 
 /* Debug defines */
 #define NFD_OUT_DBG_CACHE_DESC_INTVL    1000000
-
-/* Defines for gather/issue_dma CLS rings */
-#define NFD_IN_BATCH_RING0_ADDR         0
-#define NFD_IN_BATCH_RING0_SIZE_LW      64
-#define NFD_IN_BATCH_RING0_NUM          1
-#define NFD_IN_BATCH_RING1_ADDR         512
-#define NFD_IN_BATCH_RING1_SIZE_LW      64
-#define NFD_IN_BATCH_RING1_NUM          2
 
 
 #if !defined(__NFP_LANG_ASM)

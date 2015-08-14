@@ -21,13 +21,18 @@
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg_internal.c>
 #include <vnic/shared/nfd_internal.h>
-/*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
-#include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
+#include <vnic/utils/ctm_ring.h>
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 
-/* XXX assume this runs on PCI.IN ME0 */
+/* TODO: get NFD_PCIE_ISL_BASE from a common header file */
+#define NOTIFY_RING_ISL (PCIE_ISL + 4)
+
+#if !defined(NFD_IN_HAS_ISSUE0) && !defined(NFD_IN_HAS_ISSUE1)
+#error "At least one of NFD_IN_HAS_ISSUE0 and NFD_IN_HAS_ISSUE1 must be defined"
+#endif
+
 
 struct _issued_pkt_batch {
     struct nfd_in_issued_desc pkt0;
@@ -55,16 +60,30 @@ struct _pkt_desc_batch {
 NFD_INIT_DONE_DECLARE;
 
 
-__shared __gpr unsigned int data_dma_seq_served = 0;
-__shared __gpr unsigned int data_dma_seq_compl = 0;
-static __gpr unsigned int data_dma_seq_sent = 0;
-
-/* Signals and transfer registers for sequence number reflects */
-__visible volatile __xread unsigned int nfd_in_data_compl_refl_in;
+/* Shared by both issue DMA MEs */
 __visible volatile SIGNAL nfd_in_data_compl_refl_sig;
-__remote volatile __xread unsigned int nfd_in_data_served_refl_in;
-__remote volatile SIGNAL nfd_in_data_served_refl_sig;
-static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
+
+/* Used for issue DMA 0 */
+__shared __gpr unsigned int data_dma_seq_served0 = 0;
+__shared __gpr unsigned int data_dma_seq_compl0 = 0;
+static __gpr unsigned int data_dma_seq_sent0 = 0;
+static __xwrite unsigned int nfd_in_data_served_refl_out0 = 0;
+
+/* Shared with issue DMA 0 */
+__visible volatile __xread unsigned int nfd_in_data_compl_refl_in0 = 0;
+__remote volatile __xread unsigned int nfd_in_data_served_refl_in0;
+__remote volatile SIGNAL nfd_in_data_served_refl_sig0;
+
+/* Used for issue DMA 1 */
+__shared __gpr unsigned int data_dma_seq_served1 = 0;
+__shared __gpr unsigned int data_dma_seq_compl1 = 0;
+static __gpr unsigned int data_dma_seq_sent1 = 0;
+static __xwrite unsigned int nfd_in_data_served_refl_out1 = 0;
+
+/* Shared with issue DMA 1 */
+__visible volatile __xread unsigned int nfd_in_data_compl_refl_in1 = 0;
+__remote volatile __xread unsigned int nfd_in_data_served_refl_in1;
+__remote volatile SIGNAL nfd_in_data_served_refl_sig1;
 
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
@@ -77,11 +96,6 @@ static unsigned int next_ctx;
 
 __xwrite struct _pkt_desc_batch batch_out;
 __xwrite unsigned int qc_xfer;
-
-/* XXX use CLS ring API when available */
-/* XXX THS-50 workaround, use CTM instead of CLS rings */
-__export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING_SZ)
-    struct nfd_in_issued_desc nfd_in_issued_ring[NFD_IN_ISSUED_RING_SZ];
 
 /* XXX declare dst_q counters in LM */
 
@@ -251,11 +265,9 @@ notify_setup_shared()
 void
 notify_setup()
 {
-    if (ctx() != 0) {
-        wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
-        next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX,
-                                        NFD_IN_NOTIFY_END_CTX);
-    }
+    wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
+    next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX,
+                                    NFD_IN_NOTIFY_END_CTX);
 }
 
 #ifndef NFD_MU_PTR_DBG_MSK
@@ -313,7 +325,8 @@ do {                                                                    \
  * we must still participate in the "msg_order_sig" ordering.
  */
 __forceinline void
-notify()
+_notify(__gpr unsigned int *complete, __gpr unsigned int *served,
+        int input_ring)
 {
 
     unsigned int n_batch;
@@ -332,23 +345,19 @@ notify()
     wait_for_all(&get_order_sig);
     reorder_done_opt(&next_ctx, &get_order_sig);
 
-
     /* Is there a batch to process
      * XXX assume that issue_dma only inc's dma seq for final dma in batch */
-    if (data_dma_seq_compl != data_dma_seq_served)
+    if (*complete != *served)
     {
         /* Process whole batch */
         __critical_path();
 
         /* Increment data_dma_seq_served before swapping */
-        data_dma_seq_served += 1;
+        *served += 1;
 
-        /* XXX THS-50 workaround */
-        /* cls_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in, sizeof batch_in, */
-        /*              &msg_sig); */
-        ctm_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in.pkt0,
+        ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt0,
                      (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
-        ctm_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in.pkt4,
+        ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt4,
                      (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
 
         __asm {
@@ -418,6 +427,19 @@ notify()
 }
 
 
+__forceinline void
+notify(int side)
+{
+    if (side) {
+        _notify(&data_dma_seq_compl0, &data_dma_seq_served0, 
+                NFD_IN_ISSUED_RING0_NUM);
+    } else {
+        _notify(&data_dma_seq_compl1, &data_dma_seq_served1, 
+                NFD_IN_ISSUED_RING1_NUM);
+    }
+}
+
+
 /**
  * Check autopush for seq_compl and reflect seq_served to issue_dma ME
  *
@@ -437,24 +459,47 @@ __intrinsic void
 distr_notify()
 {
     if (signal_test(&nfd_in_data_compl_refl_sig)) {
-        data_dma_seq_compl = nfd_in_data_compl_refl_in;
+#ifdef NFD_IN_HAS_ISSUE0
+        data_dma_seq_compl0 = nfd_in_data_compl_refl_in0;
+#endif
+#ifdef NFD_IN_HAS_ISSUE1
+        data_dma_seq_compl1 = nfd_in_data_compl_refl_in1;
+#endif NFD_IN_HAS_ISSUE1
     }
 
-    /* XXX possibly throttle these reflects further */
-    if (data_dma_seq_served != data_dma_seq_sent) {
-        __implicit_read(&nfd_in_data_served_refl_out);
+#ifdef NFD_IN_HAS_ISSUE0
+    if (data_dma_seq_served0 != data_dma_seq_sent0) {
+        __implicit_read(&nfd_in_data_served_refl_out0);
 
-        data_dma_seq_sent = data_dma_seq_served;
+        data_dma_seq_sent0 = data_dma_seq_served0;
 
-        nfd_in_data_served_refl_out = data_dma_seq_sent;
+        nfd_in_data_served_refl_out0 = data_dma_seq_sent0;
         reflect_data(NFD_IN_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_in_data_served_refl_in,
+                     __xfer_reg_number(&nfd_in_data_served_refl_in0,
                                        NFD_IN_DATA_DMA_ME),
-                     __signal_number(&nfd_in_data_served_refl_sig,
+                     __signal_number(&nfd_in_data_served_refl_sig0,
                                      NFD_IN_DATA_DMA_ME),
-                     &nfd_in_data_served_refl_out,
-                     sizeof nfd_in_data_served_refl_out);
+                     &nfd_in_data_served_refl_out0,
+                     sizeof nfd_in_data_served_refl_out0);
     }
+#endif
+
+#ifdef NFD_IN_HAS_ISSUE1
+    if (data_dma_seq_served1 != data_dma_seq_sent1) {
+        __implicit_read(&nfd_in_data_served_refl_out1);
+
+        data_dma_seq_sent1 = data_dma_seq_served1;
+
+        nfd_in_data_served_refl_out1 = data_dma_seq_sent1;
+        reflect_data(NFD_IN_DATA_DMA_ME,
+                     __xfer_reg_number(&nfd_in_data_served_refl_in1,
+                                       NFD_IN_DATA_DMA_ME),
+                     __signal_number(&nfd_in_data_served_refl_sig1,
+                                     NFD_IN_DATA_DMA_ME),
+                     &nfd_in_data_served_refl_out1,
+                     sizeof nfd_in_data_served_refl_out1);
+    }
+#endif
 }
 
 
@@ -471,31 +516,24 @@ main(void)
 
         NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
 
-    } else {
-        notify_setup();
     }
 
+    notify_setup();
 
-    /*
-     * Work loop
-     */
     if (ctx() == 0) {
-        /* CTX0 main loop */
+
         for (;;) {
             distr_notify();
-
-            notify_status();
-
-            /* Yield thread */
-            ctx_swap();
+            notify(0);
+            notify(1);
         }
+
     } else {
-        /* Worker main loop */
-        for (;;) {
-            notify();
 
-            /* Yield thread */
-            /* ctx_swap(); */
+        for (;;) {
+            notify(0);
+            notify(1);
         }
+
     }
 }
