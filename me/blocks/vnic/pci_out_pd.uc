@@ -833,7 +833,7 @@ ticket_error#:
 #endm
 
 
-#macro die_if_debug()
+#macro kill_extra_threads()
 
     #if COMPILE_ONLY_DEBUG
 
@@ -849,6 +849,29 @@ ticket_error#:
     keep_going#:
         // not reached
     #endif
+
+
+    /*
+     * If there are 3 packet DMA MEs in the system and if we were running
+     * 8 threads, then the total number of committed slots in the 
+     * FrmPCIELo DMA queue would be:
+     *
+     *    3 MEs * 8 thds/ME * 3 pkt blks/thd * 2 DMAs/ptk blk = 144 DMAs
+     *
+     * This is more than the 128 DMA slots in the low priority queue.  So
+     * instead we use 7 threads per ME giving us:
+     *
+     *    3 MEs * 7 thds/ME * 3 pkt blks/thd * 2 DMAs/ptk blk = 126 DMAs
+     *
+     * We lose some small amount of hardware supported latency hiding
+     * ability per thread in exchange for more latency hiding overall and
+     * much more CPU power available.
+     */
+    #ifdef NFD_OUT_3_PD_MES
+        .if (ctx() == 7)
+            ctx_arb[kill]
+        .endif
+    #endif /* NFD_OUT_3_PD_MES */
 
 #endm
 
@@ -1044,7 +1067,7 @@ main#:
      * (main loop)
      */
 
-    die_if_debug()
+    kill_extra_threads()
 
 #if ONE_PKT_AT_A_TIME
 
