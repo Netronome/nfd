@@ -383,9 +383,8 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
 
     if (update & NFP_NET_CFG_UPDATE_MSIX) {
 
-        /* Check if we are up and rings have changed */
-        if ((control & NFP_NET_CFG_CTRL_ENABLE) &&
-            (update & NFP_NET_CFG_UPDATE_RING)) {
+        /* Check if we are up */
+        if (control & NFP_NET_CFG_CTRL_ENABLE) {
             vf_tx_rings_new = cfg_bar_data[NFP_NET_CFG_TXRS_ENABLE >> 2];
             vf_rx_rings_new = cfg_bar_data[NFP_NET_CFG_RXRS_ENABLE >> 2];
         } else if ((update & NFP_NET_CFG_UPDATE_GEN) &&
@@ -416,7 +415,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
 
         /* Reconfigure the RX/TX ring state */
         msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 1, vf_rx_rings_new);
-        msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 0, vf_rx_rings_new);
+        msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 0, vf_tx_rings_new);
     }
 
     if (update & NFP_NET_CFG_UPDATE_IRQMOD) {
