@@ -212,6 +212,7 @@ distr_gather()
 
 
         if (i0amt) {
+#ifdef NFD_IN_HAS_ISSUE0
             /* Mirror to Issue DMA 0 */
             __implicit_read(&nfd_in_gather_compl_refl_out0);
 
@@ -224,10 +225,16 @@ distr_gather()
                                          NFD_IN_DATA_DMA_ME0),
                          &nfd_in_gather_compl_refl_out0,
                          sizeof nfd_in_gather_compl_refl_out0);
+#else
+            local_csr_write(local_csr_mailbox_0, NFD_IN_GATHER_INVALID_IDMA);
+            local_csr_write(local_csr_mailbox_1, 0);
+            halt();
+#endif
 
         }
 
         if (i1amt) {
+#ifdef NFD_IN_HAS_ISSUE1
             /* Mirror to Issue DMA 1 */
             __implicit_read(&nfd_in_gather_compl_refl_out1);
 
@@ -240,6 +247,12 @@ distr_gather()
                                          NFD_IN_DATA_DMA_ME1),
                          &nfd_in_gather_compl_refl_out1,
                          sizeof nfd_in_gather_compl_refl_out1);
+#else
+            local_csr_write(local_csr_mailbox_0, NFD_IN_GATHER_INVALID_IDMA);
+            local_csr_write(local_csr_mailbox_1, 1);
+            halt();
+#endif
+
         }
 
         __implicit_write(&nfd_in_gather_event_sig);
