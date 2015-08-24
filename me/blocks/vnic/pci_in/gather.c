@@ -194,9 +194,6 @@ distr_gather()
         dma_seqn_advance_save(&nfd_in_gather_event_xfer, &gather_dma_seq_compl,
                               &amt);
 
-        /* REMOVE ME */
-        local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) + 1);
-        local_csr_write(local_csr_mailbox3, gather_dma_seq_compl);
         if (amt > 0) {
             local_csr_write(local_csr_mailbox0, idma_list);
             local_csr_write(local_csr_mailbox1, amt);
@@ -214,15 +211,10 @@ distr_gather()
             amt--;
         }
 
-        /* REMOVE ME */
-        local_csr_write(local_csr_mailbox3, gather_dma_seq_compl | 0x80000000);
-
         if (send_idma0) {
             /* Mirror to Issue DMA 0 */
             __implicit_read(&nfd_in_gather_compl_refl_out0);
 
-            /* REMOVE ME */
-            local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) | (1 << 30));
             nfd_in_gather_compl_refl_out0 = dma_completed0;
             reflect_data(NFD_IN_DATA_DMA_ME0,
                          __xfer_reg_number(&nfd_in_gather_compl_refl_in0,
@@ -238,8 +230,6 @@ distr_gather()
             /* Mirror to Issue DMA 1 */
             __implicit_read(&nfd_in_gather_compl_refl_out1);
 
-            /* REMOVE ME */
-            local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) | (1 << 31));
             nfd_in_gather_compl_refl_out1 = dma_completed1;
             reflect_data(NFD_IN_DATA_DMA_ME1,
                          __xfer_reg_number(&nfd_in_gather_compl_refl_in1,
