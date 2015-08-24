@@ -34,6 +34,8 @@
 #define PCI_IN_ISSUE_DMA_IDX 0
 #endif
 
+#define NFD_IN_Q_STATE_PTR *l$index2
+
 #if (PCI_IN_ISSUE_DMA_IDX == 0)
 #define NFD_IN_DATA_EVENT_FILTER NFD_IN_DATA0_EVENT_FILTER
 #define NFD_IN_JUMBO_EVENT_FILTER NFD_IN_JUMBO0_EVENT_FILTER
@@ -183,6 +185,26 @@ _issue_dma_enable_DmaByteMaskSwap(unsigned char pcie_isl)
 
     __asm pcie[write_pci, data, addr_hi, <<8, dma_dbg_reg_0_addr, 1], \
         ctx_swap[sig]
+}
+
+
+/**
+ * Test a bit in the queue_data struct
+ */
+__intrinsic int
+issue_dma_queue_state_bit_set_test(int bit_num)
+{
+    int result = 1;
+
+    ctassert(__is_ct_const(bit_num));
+
+    __asm {
+        br_bset[NFD_IN_Q_STATE_PTR[0], __ct_const_val(bit_num), match];
+        alu[result, --, B, 0];
+        match:
+    }
+
+    return result;
 }
 
 
@@ -461,6 +483,7 @@ do {                                                                    \
     unsigned int dma_len;                                               \
     __gpr unsigned int buf_addr;                                        \
     __gpr unsigned int curr_buf;                                        \
+    __gpr unsigned int temp;                                            \
     unsigned int cpp_hi_word;                                           \
     unsigned int cpp_addr_lo;                                           \
     unsigned int pcie_hi_word;                                          \
@@ -469,7 +492,8 @@ do {                                                                    \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                              \
     _ISSUE_PROC_A0_SUPPORT(dma_len);                                    \
                                                                         \
-    if (tx_desc.pkt##_pkt##.eop && !queue_data[queue].cont) {           \
+    if (tx_desc.pkt##_pkt##.eop &&                                      \
+        (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT) == 0)) { \
         /* Fast path, use buf_store data */                             \
         __critical_path();                                              \
                                                                         \
@@ -499,7 +523,7 @@ do {                                                                    \
             dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_no_sig_part |        \
                                             (buf_addr >> 21));          \
             pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
-                           NFD_IN_DATA_DMA_QUEUE);                      \
+                                NFD_IN_DATA_DMA_QUEUE);                 \
         } else {                                                        \
             cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src);   \
             dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word | (buf_addr >> 21); \
@@ -522,8 +546,7 @@ do {                                                                    \
         batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];  \
         batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
                                                                         \
-                                                                        \
-    } else if (!queue_data[queue].up) {                                 \
+    } else if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_UP) == 0) { \
         /* Handle down queues off the fast path. */                     \
         /* As all packets in a batch come from one queue and are */     \
         /* processed without swapping, all the packets in the batch */  \
@@ -564,26 +587,29 @@ do {                                                                    \
             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                \
                            NFD_IN_DATA_DMA_QUEUE,                       \
                            sig_done, &last_of_batch_dma_sig);           \
-                                                                        \
         }                                                               \
                                                                         \
     } else {                                                            \
-        if (!queue_data[queue].cont) {                                  \
+        if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT) == 0) { \
             /* Initialise continuation data */                          \
                                                                         \
             /* XXX check efficiency */                                  \
             curr_buf = precache_bufs_use();                             \
             _ISSUE_PROC_MU_CHK(curr_buf);                               \
-            queue_data[queue].cont = 1;                                 \
-            queue_data[queue].offset = -tx_desc.pkt##_pkt##.offset;     \
-            queue_data[queue].curr_buf = curr_buf;                      \
+            __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
+                        OR, 1, <<NFD_IN_DMA_STATE_CONT] }               \
+            __asm { alu[temp, 0x7f, AND, tx_desc.pkt##_pkt##.__raw[0], >>24] } \
+            __asm { alu[NFD_IN_Q_STATE_PTR[2], NFD_IN_Q_STATE_PTR[2], -, \
+                        temp] }                                         \
+            __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, curr_buf] }       \
         }                                                               \
-        curr_buf = queue_data[queue].curr_buf;                          \
+        __asm { alu[curr_buf, --, B, NFD_IN_Q_STATE_PTR[1]] }           \
                                                                         \
         /* Use continuation data */                                     \
         cpp_addr_lo = curr_buf << 11;                                   \
-        cpp_addr_lo += queue_data[queue].offset;                        \
-        queue_data[queue].offset += dma_len;                            \
+        __asm { alu[cpp_addr_lo, cpp_addr_lo, +, NFD_IN_Q_STATE_PTR[2]] } \
+        __asm { alu[NFD_IN_Q_STATE_PTR[2], NFD_IN_Q_STATE_PTR[2], +,    \
+                    dma_len] }                                          \
                                                                         \
         pcie_hi_word =                                                  \
             (pcie_hi_word_part |                                        \
@@ -605,13 +631,13 @@ do {                                                                    \
             dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_no_sig_part |        \
                                             (curr_buf >> 21));          \
             pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
-                           NFD_IN_DATA_DMA_QUEUE);                      \
+                                NFD_IN_DATA_DMA_QUEUE);                 \
         } else {                                                        \
             cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src);   \
             dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word | (curr_buf >> 21); \
              __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,             \
-                       NFD_IN_DATA_DMA_QUEUE,                           \
-                       sig_done, &last_of_batch_dma_sig);               \
+                            NFD_IN_DATA_DMA_QUEUE,                      \
+                            sig_done, &last_of_batch_dma_sig);          \
         }                                                               \
                                                                         \
         /* Set up notify message */                                     \
@@ -630,12 +656,11 @@ do {                                                                    \
                                                                         \
         /* Clear continuation data on EOP */                            \
         if (tx_desc.pkt##_pkt##.eop) {                                  \
-            /* XXX check this is done in two cycles */                  \
-            queue_data[queue].cont = 0;                                 \
-            queue_data[queue].curr_buf = 0;                             \
-            queue_data[queue].offset = 0;                               \
+            __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
+                        AND~, 1, <<NFD_IN_DMA_STATE_CONT] }             \
+            __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, 0] }              \
+            __asm { alu[NFD_IN_Q_STATE_PTR[2], --, B, 0] }              \
         }                                                               \
-                                                                        \
     }                                                                   \
                                                                         \
 } while (0)
@@ -734,6 +759,8 @@ issue_dma()
     queue = batch.queue;
     num = batch.num;
     data_dma_seq_issued++;
+
+    local_csr_write(local_csr_active_lm_addr_2, &queue_data[queue]);
 
     issued_tmp.sp0 = 0;
     issued_tmp.num_batch = num;   /* Only needed in pkt0 */

@@ -183,6 +183,9 @@ struct nfd_in_queue_info {
 };
 
 
+#define NFD_IN_DMA_STATE_UP   31
+#define NFD_IN_DMA_STATE_CONT 30
+
 struct nfd_in_dma_state {
     union {
         struct {
