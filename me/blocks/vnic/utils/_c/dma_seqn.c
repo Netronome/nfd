@@ -35,8 +35,8 @@ dma_seqn_ap_setup(unsigned int filter_num, unsigned int ap_num,
     struct nfp_em_filter_status filter_status;
     __cls struct event_cls_filter *event_filter_handle;
 
-    /* Strict match type and provider, match all seqn */
-    unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0, 0xF);
+    /* Strict match type, ext_type, and provider, match all seqn */
+    unsigned int event_mask = NFP_EVENT_MATCH(0xFF, 0x3, 0xF);
     unsigned int pcie_provider = NFP_EVENT_PROVIDER_NUM(
         meid>>4, NFP_EVENT_PROVIDER_INDEX_PCIE);
     unsigned int event_match;
