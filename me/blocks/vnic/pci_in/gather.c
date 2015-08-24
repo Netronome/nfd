@@ -186,35 +186,36 @@ __intrinsic void
 distr_gather()
 {
     __gpr unsigned int amt;
-    __gpr int send_idma0 = 0;
-    __gpr int send_idma1 = 0;
+    __gpr unsigned int mask;
+    __gpr unsigned int i0amt;
+    __gpr unsigned int i1amt;
 
     if (signal_test(&nfd_in_gather_event_sig)) {
 
         dma_seqn_advance_save(&nfd_in_gather_event_xfer, &gather_dma_seq_compl,
                               &amt);
 
-        if (amt > 0) {
-            local_csr_write(local_csr_mailbox0, idma_list);
-            local_csr_write(local_csr_mailbox1, amt);
+        mask = (1 << amt) - 1;
+        i0amt = mask & ~idma_list;
+        __asm {
+            pop_count1[i0amt]
+            pop_count2[i0amt]
+            pop_count3[i0amt, i0amt]
         }
-
-        while (amt > 0) {
-            if ((idma_list & 1) == 0) {
-                dma_completed0++;
-                send_idma0 = 1;
-            } else {
-                dma_completed1++;
-                send_idma1 = 1;
-            }
-            idma_list >>= 1;
-            amt--;
+        i1amt = mask & idma_list;
+        __asm {
+            pop_count1[i1amt]
+            pop_count2[i1amt]
+            pop_count3[i1amt, i1amt]
         }
+        idma_list >>= amt;
 
-        if (send_idma0) {
+
+        if (i0amt) {
             /* Mirror to Issue DMA 0 */
             __implicit_read(&nfd_in_gather_compl_refl_out0);
 
+            dma_completed0 += i0amt;
             nfd_in_gather_compl_refl_out0 = dma_completed0;
             reflect_data(NFD_IN_DATA_DMA_ME0,
                          __xfer_reg_number(&nfd_in_gather_compl_refl_in0,
@@ -226,10 +227,11 @@ distr_gather()
 
         }
 
-        if (send_idma1) {
+        if (i1amt) {
             /* Mirror to Issue DMA 1 */
             __implicit_read(&nfd_in_gather_compl_refl_out1);
 
+            dma_completed1 += i1amt;
             nfd_in_gather_compl_refl_out1 = dma_completed1;
             reflect_data(NFD_IN_DATA_DMA_ME1,
                          __xfer_reg_number(&nfd_in_gather_compl_refl_in1,
