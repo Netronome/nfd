@@ -16,8 +16,43 @@
 #include <vnic/pci_in/precache_bufs.c>
 #include <vnic/shared/nfd_cfg_internal.c>
 
+/* Determine which configuration rings to use, and where to send the
+ * next configuration message.  The choice depends on whether this is
+ * PCI_IN_ISSUE_DMA_IDX 0 or 1, and whether NFD_IN_HAS_ISSUE0 and/or
+ * NFD_IN_HAS_ISSUE1 are set.  To simplify the configuration choices,
+ * we require that PCI_IN_ISSUE_DMA_IDX==0 is the first issue_dma ME
+ * used, hence NFD_IN_HAS_ISSUE0 must be set. */
 
-NFD_CFG_DECLARE(nfd_cfg_sig_pci_in1, nfd_cfg_sig_pci_out);
+#if PCI_IN_ISSUE_DMA_IDX == 0
+
+#define CFG_SIG_IN      nfd_cfg_sig_pci_in0
+#define CFG_RING_IN     0
+
+#ifdef NFD_IN_HAS_ISSUE1
+/* Route the configuration message via issue1 */
+#define CFG_RING_OUT    1
+#define CFG_NEXT_ME     3
+#define CFG_SIG_OUT     nfd_cfg_sig_pci_in1
+
+#else
+/* Route the configuration message to cache_desc */
+#define CFG_RING_OUT    2
+#define CFG_NEXT_ME     0
+#define CFG_SIG_OUT     nfd_cfg_sig_pci_out
+
+#endif
+
+#else   /* PCI_IN_ISSUE_DMA_IDX == 1 */
+/* Route the configuration message to cache_desc */
+#define CFG_SIG_IN      nfd_cfg_sig_pci_in1
+#define CFG_RING_IN     1
+
+#define CFG_RING_OUT    2
+#define CFG_NEXT_ME     0
+#define CFG_SIG_OUT     nfd_cfg_sig_pci_out
+#endif
+
+NFD_CFG_DECLARE(CFG_SIG_IN, CFG_SIG_OUT);
 NFD_INIT_DONE_DECLARE;
 
 struct nfd_cfg_msg cfg_msg;
@@ -30,7 +65,7 @@ main(void)
     if (ctx() == 0) {
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_in1, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&CFG_SIG_IN, &cfg_msg);
 
         precache_bufs_setup();
 
@@ -39,8 +74,11 @@ main(void)
         issue_dma_status_setup();
 
         issue_dma_setup_shared();
-
+#if PCI_IN_ISSUE_DMA_IDX == 0
+        NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
+#else
         NFD_INIT_DONE_SET(PCIE_ISL, 3);     /* XXX Remove? */
+#endif
     } else {
         issue_dma_setup();
     }
@@ -65,8 +103,8 @@ main(void)
              * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
                 /* XXX extract ring number once and save aside */
-                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_in1,
-                                      NFD_CFG_RING_NUM(PCIE_ISL, 0));
+                nfd_cfg_check_cfg_msg(&cfg_msg, &CFG_SIG_IN,
+                                      NFD_CFG_RING_NUM(PCIE_ISL, CFG_RING_IN));
 
                 if (cfg_msg.msg_valid) {
                     nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_IN1);
@@ -76,10 +114,13 @@ main(void)
 
                 if (!cfg_msg.msg_valid) {
                     nfd_cfg_complete_cfg_msg(&cfg_msg,
-                                             &nfd_cfg_sig_pci_out,
-                                             NFD_CFG_NEXT_ME(PCIE_ISL, 0),
-                                             NFD_CFG_RING_NUM(PCIE_ISL, 1),
-                                             NFD_CFG_RING_NUM(PCIE_ISL, 0));
+                                             &CFG_SIG_OUT,
+                                             NFD_CFG_NEXT_ME(PCIE_ISL,
+                                                             CFG_NEXT_ME),
+                                             NFD_CFG_RING_NUM(PCIE_ISL,
+                                                              CFG_RING_OUT),
+                                             NFD_CFG_RING_NUM(PCIE_ISL,
+                                                              CFG_RING_IN));
                 }
             }
 

@@ -514,7 +514,7 @@ main(void)
         notify_setup_shared();
         notify_status_setup();
 
-        NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
+        /* NFD_INIT_DONE_SET(PCIE_ISL, 2);     /\* XXX Remove? *\/ */
 
     }
 

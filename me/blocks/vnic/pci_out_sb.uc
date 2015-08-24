@@ -151,6 +151,8 @@
 .alloc_resource nfd_cfg_ring_num/**/PCIE_ISL/**/2 nfd_cfg_ring_nums/**/PCIE_ISL global 1
 .alloc_resource nfd_cfg_ring_num/**/PCIE_ISL/**/3 nfd_cfg_ring_nums/**/PCIE_ISL global 1
 .alloc_resource nfd_cfg_ring_num/**/PCIE_ISL/**/4 nfd_cfg_ring_nums/**/PCIE_ISL global 1
+.alloc_resource nfd_cfg_ring_num/**/PCIE_ISL/**/5 nfd_cfg_ring_nums/**/PCIE_ISL global 1
+
 
 // Debug state
 .alloc_mem nfd_out_sb_debug_state/**/PCIE_ISL emem0 global \
@@ -376,8 +378,8 @@
     .sig put_sig
 
     move(ring_addr_hi, (EMEM_ADDR(NFD_CFG_RING_EMEM) >> 8))
-    move(ring_in_addr_lo, nfd_cfg_ring_num/**/PCIE_ISL/**/2)
-    move(ring_out_addr_lo, nfd_cfg_ring_num/**/PCIE_ISL/**/3)
+    move(ring_in_addr_lo, nfd_cfg_ring_num/**/PCIE_ISL/**/3)
+    move(ring_out_addr_lo, nfd_cfg_ring_num/**/PCIE_ISL/**/4)
 
     .while (1)
 

@@ -88,6 +88,8 @@ NFD_CFG_RINGS_RES(NFD_CFG_RING_EMEM);
     ASM(.alloc_resource nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_nums##_isl \
         global 1)                                                       \
     ASM(.alloc_resource nfd_cfg_ring_num##_isl##4 nfd_cfg_ring_nums##_isl \
+        global 1)                                                       \
+    ASM(.alloc_resource nfd_cfg_ring_num##_isl##5 nfd_cfg_ring_nums##_isl \
         global 1)
 
 #define NFD_CFG_RINGS_DECL(_isl) NFD_CFG_RINGS_DECL_IND(_isl)
@@ -211,10 +213,10 @@ __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
  */
 #ifdef USE_SVC_ME
 #define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
-    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 4))
+    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 5))
 #else
 #define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
-    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 3))
+    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 4))
 #endif
 
 /**
