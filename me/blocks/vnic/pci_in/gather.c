@@ -191,7 +191,8 @@ distr_gather()
     if (signal_test(&nfd_in_gather_event_sig)) {
         __implicit_read(&nfd_in_gather_compl_refl_out);
 
-        dma_seqn_advance(&nfd_in_gather_event_xfer, &gather_dma_seq_compl, &amt);
+        dma_seqn_advance_save(&nfd_in_gather_event_xfer, &gather_dma_seq_compl,
+                              &amt);
 
         /* REMOVE ME */
         local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) + 1);

@@ -91,7 +91,8 @@ dma_seqn_advance(volatile __xread unsigned int *xfer, __gpr unsigned int *compl)
 
 
 __intrinsic void
-dma_seqn_advance_save(volatile __xread unsigned int *xfer, __gpr unsigned int *compl,
+dma_seqn_advance_save(volatile __xread unsigned int *xfer,
+                      __gpr unsigned int *compl,
                       __gpr unsigned int *seqn_inc)
 {
     *seqn_inc = *xfer >> DMA_SEQN_EXTRACT_shf;
