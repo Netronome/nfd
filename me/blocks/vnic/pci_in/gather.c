@@ -58,10 +58,11 @@ __shared __gpr unsigned int dma_completed1 = 0;
  * gather_dma_seq_compl updates*/
 static volatile __xread unsigned int nfd_in_gather_event_xfer;
 static volatile SIGNAL nfd_in_gather_event_sig;
-static __xwrite unsigned int nfd_in_gather_compl_refl_out = 0;
 
+static __xwrite unsigned int nfd_in_gather_compl_refl_out0 = 0;
 __remote volatile __xread unsigned int nfd_in_gather_compl_refl_in0;
 __remote volatile SIGNAL nfd_in_gather_compl_refl_sig0;
+static __xwrite unsigned int nfd_in_gather_compl_refl_out1 = 0;
 __remote volatile __xread unsigned int nfd_in_gather_compl_refl_in1;
 __remote volatile SIGNAL nfd_in_gather_compl_refl_sig1;
 
@@ -127,10 +128,10 @@ gather_setup_shared()
 {
     struct pcie_dma_cfg_one cfg;
 
-    cls_ring_setup(NFD_IN_BATCH_RING0_NUM, 
+    cls_ring_setup(NFD_IN_BATCH_RING0_NUM,
                    (__cls void *)_link_sym(nfd_in_batch_ring0_mem),
                    (NFD_IN_BATCH_RING0_SIZE_LW * 4));
-    cls_ring_setup(NFD_IN_BATCH_RING1_NUM, 
+    cls_ring_setup(NFD_IN_BATCH_RING1_NUM,
                    (__cls void *)_link_sym(nfd_in_batch_ring1_mem),
                    (NFD_IN_BATCH_RING1_SIZE_LW * 4));
 
@@ -189,7 +190,6 @@ distr_gather()
     __gpr int send_idma1 = 0;
 
     if (signal_test(&nfd_in_gather_event_sig)) {
-        __implicit_read(&nfd_in_gather_compl_refl_out);
 
         dma_seqn_advance_save(&nfd_in_gather_event_xfer, &gather_dma_seq_compl,
                               &amt);
@@ -219,31 +219,35 @@ distr_gather()
 
         if (send_idma0) {
             /* Mirror to Issue DMA 0 */
+            __implicit_read(&nfd_in_gather_compl_refl_out0);
+
             /* REMOVE ME */
             local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) | (1 << 30));
-            nfd_in_gather_compl_refl_out = dma_completed0;
+            nfd_in_gather_compl_refl_out0 = dma_completed0;
             reflect_data(NFD_IN_DATA_DMA_ME0,
                          __xfer_reg_number(&nfd_in_gather_compl_refl_in0,
                                            NFD_IN_DATA_DMA_ME0),
                          __signal_number(&nfd_in_gather_compl_refl_sig0,
                                          NFD_IN_DATA_DMA_ME0),
-                         &nfd_in_gather_compl_refl_out,
-                         sizeof nfd_in_gather_compl_refl_out);
+                         &nfd_in_gather_compl_refl_out0,
+                         sizeof nfd_in_gather_compl_refl_out0);
 
         }
 
         if (send_idma1) {
             /* Mirror to Issue DMA 1 */
+            __implicit_read(&nfd_in_gather_compl_refl_out1);
+
             /* REMOVE ME */
             local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) | (1 << 31));
-            nfd_in_gather_compl_refl_out = dma_completed1;
+            nfd_in_gather_compl_refl_out1 = dma_completed1;
             reflect_data(NFD_IN_DATA_DMA_ME1,
                          __xfer_reg_number(&nfd_in_gather_compl_refl_in1,
                                            NFD_IN_DATA_DMA_ME1),
                          __signal_number(&nfd_in_gather_compl_refl_sig1,
                                          NFD_IN_DATA_DMA_ME1),
-                         &nfd_in_gather_compl_refl_out,
-                         sizeof nfd_in_gather_compl_refl_out);
+                         &nfd_in_gather_compl_refl_out1,
+                         sizeof nfd_in_gather_compl_refl_out1);
         }
 
         __implicit_write(&nfd_in_gather_event_sig);
