@@ -209,6 +209,26 @@ issue_dma_queue_state_bit_set_test(int bit_num)
 
 
 /**
+ * Add a length to a PCIe address, with carry to PCIe HI
+ * @param descr_tmp_raw     "struct nfp_pcie_dma_cmd" to update
+ * @param dma_len           length to add to the address
+ *
+ * "descr_tmp_raw" must point to the "unsigned int __raw[4]" part
+ * of the union.
+ */
+__intrinsic void
+_add_to_pcie_addr(unsigned int *pcie_hi_word, unsigned int *pcie_addr_lo,
+                  unsigned int dma_len)
+{
+    /* We need to use the +carry op to update the 8bit PCIe HI value.
+     * This field is in the low 8bits of pcie_hi_word.  Therefore we
+     * use inline asm. */
+    __asm { alu[*pcie_addr_lo, *pcie_addr_lo, +, dma_len] }
+    __asm { alu[*pcie_hi_word, *pcie_hi_word, +carry, 0] }
+}
+
+
+/**
  * Perform shared configuration for issue_dma
  */
 void
@@ -453,7 +473,7 @@ do {                                                                    \
                                                                         \
     pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, NFD_IN_DATA_DMA_QUEUE);  \
                                                                         \
-    pcie_addr_lo += NFD_IN_DMA_SPLIT_LEN;                               \
+    _add_to_pcie_addr(&pcie_hi_word, &pcie_addr_lo, NFD_IN_DMA_SPLIT_LEN); \
     cpp_addr_lo += NFD_IN_DMA_SPLIT_LEN;                                \
     dma_len -= NFD_IN_DMA_SPLIT_LEN;                                    \
                                                                         \
