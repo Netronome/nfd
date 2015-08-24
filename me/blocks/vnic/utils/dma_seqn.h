@@ -40,6 +40,17 @@ __intrinsic void dma_seqn_advance(volatile __xread unsigned int *xfer,
 
 
 /**
+ * Compute the updated "completed" sequence number
+ * @param xfer          transfer register containing event
+ * @param compl         "completed" sequence number to update
+ * @param amt           saves the amount by which *compl gets incremented
+ */
+__intrinsic void dma_seqn_advance_save(volatile __xread unsigned int *xfer,
+                                       __gpr unsigned int *compl,
+                                       __gpr unsigned int *amt);
+
+
+/**
  * Populate the mode_sel and dma_mode fields for a DMA completion event
  * @param cmd           struct nfp_pcie_dma_cmd containing partial descriptor
  * @param type          event type

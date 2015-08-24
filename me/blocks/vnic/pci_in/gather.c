@@ -22,12 +22,12 @@
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/qc.h>
 
-#ifndef ISSUE_DMA_QMASK
-#define ISSUE_DMA_QMASK 0
+#ifndef NFD_IN_ISSUE_DMA_QSHIFT
+#define NFD_IN_ISSUE_DMA_QSHIFT 0
 #endif
 
-#ifndef ISSUE_DMA_QSHIFT
-#define ISSUE_DMA_QSHIFT 0
+#ifndef NFD_IN_ISSUE_DMA_QXOR
+#define NFD_IN_ISSUE_DMA_QXOR 0
 #endif
 
 /*
@@ -37,24 +37,40 @@
 extern __shared __gpr struct qc_bitmask pending_bmsk;
 extern __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
 
+#if (NFD_IN_GATHER_MAX_IN_FLIGHT > 32)
+#error "Issue DMA index ring will not work with more than 32 DMAs in flight"
+#endif
+static __shared __gpr unsigned int idma_list = 0;
+
+
 /* XXX assume hi bits 0 to DMA into CLS */
-static __shared __gpr unsigned int desc_ring_base;
+static __shared __gpr unsigned int desc_ring_base0;
+static __shared __gpr unsigned int desc_ring_base1;
 
 __shared __gpr unsigned int dma_seq_issued = 0;
 __shared __gpr unsigned int gather_dma_seq_compl = 0;
+__shared __gpr unsigned int dma_issued0 = 0;
+__shared __gpr unsigned int dma_completed0 = 0;
+__shared __gpr unsigned int dma_issued1 = 0;
+__shared __gpr unsigned int dma_completed1 = 0;
 
 /* Signals and transfer registers for managing
  * gather_dma_seq_compl updates*/
 static volatile __xread unsigned int nfd_in_gather_event_xfer;
 static volatile SIGNAL nfd_in_gather_event_sig;
 static __xwrite unsigned int nfd_in_gather_compl_refl_out = 0;
-__remote volatile __xread unsigned int nfd_in_gather_compl_refl_in;
-__remote volatile SIGNAL nfd_in_gather_compl_refl_sig;
+
+__remote volatile __xread unsigned int nfd_in_gather_compl_refl_in0;
+__remote volatile SIGNAL nfd_in_gather_compl_refl_sig0;
+__remote volatile __xread unsigned int nfd_in_gather_compl_refl_in1;
+__remote volatile SIGNAL nfd_in_gather_compl_refl_sig1;
 
 #define DESC_RING_SZ (NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ *       \
                       sizeof(struct nfd_in_tx_desc))
 __export __shared __cls __align(DESC_RING_SZ) struct nfd_in_tx_desc
-    desc_ring[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
+    desc_ring0[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
+__export __shared __cls __align(DESC_RING_SZ) struct nfd_in_tx_desc
+    desc_ring1[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
 
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
@@ -121,7 +137,8 @@ gather_setup_shared()
     /*
      * Initialise the CLS TX descriptor ring
      */
-    desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;
+    desc_ring_base0 = ((unsigned int) &desc_ring0) & 0xFFFFFFFF;
+    desc_ring_base1 = ((unsigned int) &desc_ring1) & 0xFFFFFFFF;
 
     /*
      * Set up NFD_IN_GATHER_CFG_REG DMA Config Register
@@ -167,20 +184,66 @@ distr_gather_setup_shared()
 __intrinsic void
 distr_gather()
 {
+    __gpr unsigned int amt;
+    __gpr int send_idma0 = 0;
+    __gpr int send_idma1 = 0;
+
     if (signal_test(&nfd_in_gather_event_sig)) {
         __implicit_read(&nfd_in_gather_compl_refl_out);
 
-        dma_seqn_advance(&nfd_in_gather_event_xfer, &gather_dma_seq_compl);
+        dma_seqn_advance(&nfd_in_gather_event_xfer, &gather_dma_seq_compl, &amt);
 
-        /* Mirror to remote ME */
-        nfd_in_gather_compl_refl_out = gather_dma_seq_compl;
-        reflect_data(NFD_IN_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_in_gather_compl_refl_in,
-                                       NFD_IN_DATA_DMA_ME),
-                     __signal_number(&nfd_in_gather_compl_refl_sig,
-                                     NFD_IN_DATA_DMA_ME),
-                     &nfd_in_gather_compl_refl_out,
-                     sizeof nfd_in_gather_compl_refl_out);
+        /* REMOVE ME */
+        local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) + 1);
+        local_csr_write(local_csr_mailbox3, gather_dma_seq_compl);
+        if (amt > 0) {
+            local_csr_write(local_csr_mailbox0, idma_list);
+            local_csr_write(local_csr_mailbox1, amt);
+        }
+
+        while (amt > 0) {
+            if ((idma_list & 1) == 0) {
+                dma_completed0++;
+                send_idma0 = 1;
+            } else {
+                dma_completed1++;
+                send_idma1 = 1;
+            }
+            idma_list >>= 1;
+            amt--;
+        }
+
+        /* REMOVE ME */
+        local_csr_write(local_csr_mailbox3, gather_dma_seq_compl | 0x80000000);
+
+        if (send_idma0) {
+            /* Mirror to Issue DMA 0 */
+            /* REMOVE ME */
+            local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) | (1 << 30));
+            nfd_in_gather_compl_refl_out = dma_completed0;
+            reflect_data(NFD_IN_DATA_DMA_ME0,
+                         __xfer_reg_number(&nfd_in_gather_compl_refl_in0,
+                                           NFD_IN_DATA_DMA_ME0),
+                         __signal_number(&nfd_in_gather_compl_refl_sig0,
+                                         NFD_IN_DATA_DMA_ME0),
+                         &nfd_in_gather_compl_refl_out,
+                         sizeof nfd_in_gather_compl_refl_out);
+
+        }
+
+        if (send_idma1) {
+            /* Mirror to Issue DMA 1 */
+            /* REMOVE ME */
+            local_csr_write(local_csr_mailbox2, local_csr_read(local_csr_mailbox2) | (1 << 31));
+            nfd_in_gather_compl_refl_out = dma_completed1;
+            reflect_data(NFD_IN_DATA_DMA_ME1,
+                         __xfer_reg_number(&nfd_in_gather_compl_refl_in1,
+                                           NFD_IN_DATA_DMA_ME1),
+                         __signal_number(&nfd_in_gather_compl_refl_sig1,
+                                         NFD_IN_DATA_DMA_ME1),
+                         &nfd_in_gather_compl_refl_out,
+                         sizeof nfd_in_gather_compl_refl_out);
+        }
 
         __implicit_write(&nfd_in_gather_event_sig);
         event_cls_autopush_filter_reset(
@@ -233,6 +296,7 @@ gather()
     __gpr unsigned int tx_r_update_tmp;
     __gpr unsigned int tx_s_cp;
     __gpr int tx_r_correction;
+    __gpr int idma;
     __gpr int ring;
 
     /*
@@ -277,9 +341,7 @@ gather()
              * There is. Put a message on the work_ring.
              */
             struct nfd_in_batch_desc batch;
-            unsigned int dma_cmd_sz;
             unsigned int pcie_addr_off;
-            unsigned int desc_ring_off;
             __xwrite struct nfp_pcie_dma_cmd descr;
             __xwrite struct nfd_in_batch_desc xbatch;
             SIGNAL batch_sig;
@@ -293,11 +355,9 @@ gather()
                 }
             }
 
-            /*
-             * Increment dma_seq_issued upfront to avoid ambiguity
-             * about sequence number zero
-             */
-            dma_seq_issued++;
+            /* Figure out which Issue DMA will receive this batch */
+            idma = (((queue >> NFD_IN_ISSUE_DMA_QSHIFT) & 1) ^
+                    NFD_IN_ISSUE_DMA_QXOR);
 
             /*
              * Compute desc_ring and PCIe offsets
@@ -305,13 +365,30 @@ gather()
              * queue. desc_ring offset depends on the batches processed, each
              * batch having it's own slot in the ring.
              */
-            dma_cmd_sz = sizeof(struct nfd_in_tx_desc);
             pcie_addr_off = (queue_data[queue].tx_s &
                              queue_data[queue].ring_sz_msk);
-            pcie_addr_off = pcie_addr_off * dma_cmd_sz;
-            desc_ring_off = ((dma_seq_issued * NFD_IN_MAX_BATCH_SZ *
-                             sizeof(struct nfd_in_tx_desc)) &
-                             (DESC_RING_SZ - 1));
+            pcie_addr_off = pcie_addr_off * sizeof(struct nfd_in_tx_desc);
+            if (idma == 0) {
+                dma_issued0++;
+                descr_tmp.cpp_addr_lo = desc_ring_base0 |
+                                        ((dma_issued0 * NFD_IN_MAX_BATCH_SZ *
+                                         sizeof(struct nfd_in_tx_desc)) &
+                                         (DESC_RING_SZ - 1));
+
+            } else {
+                dma_issued1++;
+                descr_tmp.cpp_addr_lo = desc_ring_base1 |
+                                        ((dma_issued1 * NFD_IN_MAX_BATCH_SZ *
+                                         sizeof(struct nfd_in_tx_desc)) &
+                                         (DESC_RING_SZ - 1));
+                idma_list |= 1 << (dma_seq_issued - gather_dma_seq_compl);
+            }
+
+            /*
+             * Increment dma_seq_issued upfront to avoid ambiguity
+             * about sequence number zero
+             */
+            dma_seq_issued++;
 
             /*
              * Populate the batch message
@@ -320,9 +397,7 @@ gather()
             batch.queue = queue;
             batch.num = tx_r_update_tmp;
             xbatch.__raw = batch.__raw;
-            /* REMOVE:  XOR 1 added for testing purposes */
-            ring = NFD_IN_BATCH_RING0_NUM + 
-                   (((queue >> ISSUE_DMA_QSHIFT) & ISSUE_DMA_QMASK) ^ 1);
+            ring = NFD_IN_BATCH_RING0_NUM + idma;
             cls_ring_put(ring, &xbatch, sizeof(xbatch), &batch_sig);
 
             /*
@@ -333,7 +408,6 @@ gather()
             descr_tmp.pcie_addr_hi = queue_data[queue].ring_base_hi;
             descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_lo +
                                       pcie_addr_off);
-            descr_tmp.cpp_addr_lo =  desc_ring_base | desc_ring_off;
             descr_tmp.rid = queue_data[queue].requester_id;
             /* Can replace with ld_field instruction if 8bit seqn is enough */
             dma_seqn_set_event(&descr_tmp, NFD_IN_GATHER_EVENT_TYPE, 0,

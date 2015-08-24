@@ -28,9 +28,18 @@
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
 
+/* TODO Make this test cover precache_bufs.c as well */
 #ifndef PCI_IN_ISSUE_DMA_IDX
 #warning "PCI_IN_ISSUE_DMA_IDX not defined.  Defaulting to 0.  Make sure there is only one instance"
 #define PCI_IN_ISSUE_DMA_IDX 0
+#endif
+
+#if (PCI_IN_ISSUE_DMA_IDX == 0)
+#define NFD_IN_DATA_EVENT_FILTER NFD_IN_DATA0_EVENT_FILTER
+#define NFD_IN_JUMBO_EVENT_FILTER NFD_IN_JUMBO0_EVENT_FILTER
+#else
+#define NFD_IN_DATA_EVENT_FILTER NFD_IN_DATA1_EVENT_FILTER
+#define NFD_IN_JUMBO_EVENT_FILTER NFD_IN_JUMBO1_EVENT_FILTER
 #endif
 
 struct _tx_desc_batch {
@@ -71,9 +80,6 @@ NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
 
 #define NFD_IN_DESC_RING_SZ (NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ * \
                       sizeof(struct nfd_in_tx_desc))
-__export __shared __cls __align(NFD_IN_DESC_RING_SZ) struct nfd_in_tx_desc
-    desc_ring[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
-
 static __shared __gpr unsigned int desc_ring_base;
 
 
@@ -95,15 +101,39 @@ __shared __gpr unsigned int jumbo_dma_seq_compl = 0;
 /* TODO: use generic resource management to sanity check these rings */
 #if (PCI_IN_ISSUE_DMA_IDX == 0)
 
+__export __shared __cls __align(NFD_IN_DESC_RING_SZ) struct nfd_in_tx_desc
+    desc_ring0[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
+
 __export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING0_SZ)
     struct nfd_in_issued_desc nfd_in_issued_ring0[NFD_IN_ISSUED_RING0_SZ];
+
+/* Signals and transfer registers for managing
+ * gather_dma_seq_compl updates */
+__visible volatile __xread unsigned int nfd_in_gather_compl_refl_in0;
+__visible volatile SIGNAL nfd_in_gather_compl_refl_sig0;
+
+#define nfd_in_gather_compl_refl_in nfd_in_gather_compl_refl_in0
+#define nfd_in_gather_compl_refl_sig nfd_in_gather_compl_refl_sig0
+#define desc_ring desc_ring0
 #define nfd_in_issued_ring nfd_in_issued_ring0
 #define NFD_IN_ISSUED_RING_NUM NFD_IN_ISSUED_RING0_NUM
 
 #elif (PCI_IN_ISSUE_DMA_IDX == 1)
 
+__export __shared __cls __align(NFD_IN_DESC_RING_SZ) struct nfd_in_tx_desc
+    desc_ring1[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
+
 __export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING1_SZ)
     struct nfd_in_issued_desc nfd_in_issued_ring1[NFD_IN_ISSUED_RING1_SZ];
+
+/* Signals and transfer registers for managing
+ * gather_dma_seq_compl updates */
+__visible volatile __xread unsigned int nfd_in_gather_compl_refl_in1;
+__visible volatile SIGNAL nfd_in_gather_compl_refl_sig1;
+
+#define nfd_in_gather_compl_refl_in nfd_in_gather_compl_refl_in1
+#define nfd_in_gather_compl_refl_sig nfd_in_gather_compl_refl_sig1
+#define desc_ring desc_ring1
 #define nfd_in_issued_ring nfd_in_issued_ring1
 #define NFD_IN_ISSUED_RING_NUM NFD_IN_ISSUED_RING1_NUM
 
@@ -112,11 +142,6 @@ __export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING1_S
 #error "Invalid PCI_IN_ISSUE_DMA_IDX.  Must be 0 or 1."
 
 #endif
-
-/* Signals and transfer registers for managing
- * gather_dma_seq_compl updates*/
-__visible volatile __xread unsigned int nfd_in_gather_compl_refl_in;
-__visible volatile SIGNAL nfd_in_gather_compl_refl_sig;
 
 /* DMA descriptor template */
 static __gpr unsigned int cpp_hi_no_sig_part;
@@ -303,7 +328,8 @@ issue_dma_setup()
     cpp_hi_no_sig_part = (NFP_PCIE_DMA_CMD_MODE_SEL(0) |
                           NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN) |
                           NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG));
-    cpp_hi_event_part = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE, 1);
+    cpp_hi_event_part = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,
+                                            PCI_IN_ISSUE_DMA_IDX);
     cpp_hi_event_part |= (NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN) |
                           NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG));
 
@@ -328,6 +354,8 @@ issue_dma_gather_seq_recv()
 {
     if (signal_test(&nfd_in_gather_compl_refl_sig)) {
         gather_dma_seq_compl = nfd_in_gather_compl_refl_in;
+        /* REMOVE ME */
+        local_csr_write(local_csr_mailbox_2, local_csr_read(local_csr_mailbox_2) + 1);
     }
 }
 
@@ -389,7 +417,8 @@ do {                                                                    \
                                                                         \
     dma_out.pkt##_pkt##.__raw[0] = cpp_addr_lo + NFD_IN_DATA_OFFSET;    \
                                                                         \
-    cpp_hi_word = dma_seqn_init_event(NFD_IN_JUMBO_EVENT_TYPE, 1);      \
+    cpp_hi_word = dma_seqn_init_event(NFD_IN_JUMBO_EVENT_TYPE,          \
+                                      PCI_IN_ISSUE_DMA_IDX);            \
     cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, jumbo_dma_seq_issued); \
     cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);   \
     cpp_hi_word |=                                                      \
@@ -518,9 +547,9 @@ do {                                                                    \
         batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];           \
                                                                         \
         /* Handle the DMA sequence numbers for the batch */             \
-        /* XXX add _last_pkt parameter to avoid race? */                \
         if (_type == NFD_IN_DATA_EVENT_TYPE) {                          \
-            cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE, 1); \
+            cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,   \
+                                              PCI_IN_ISSUE_DMA_IDX);    \
             cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, _src);         \
             cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN); \
             cpp_hi_word |=                                              \
@@ -653,6 +682,9 @@ issue_dma()
     }
 
     reorder_done_opt(&next_ctx, &desc_order_sig);
+
+    /* REMOVE ME */
+    local_csr_write(local_csr_mailbox_3, local_csr_read(local_csr_mailbox_3) + 1);
 
     /*
      * Increment gather_dma_seq_serv upfront to avoid ambiguity

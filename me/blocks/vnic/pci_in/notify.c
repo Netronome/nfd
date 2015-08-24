@@ -474,11 +474,11 @@ distr_notify()
         data_dma_seq_sent0 = data_dma_seq_served0;
 
         nfd_in_data_served_refl_out0 = data_dma_seq_sent0;
-        reflect_data(NFD_IN_DATA_DMA_ME,
+        reflect_data(NFD_IN_DATA_DMA_ME0,
                      __xfer_reg_number(&nfd_in_data_served_refl_in0,
-                                       NFD_IN_DATA_DMA_ME),
+                                       NFD_IN_DATA_DMA_ME0),
                      __signal_number(&nfd_in_data_served_refl_sig0,
-                                     NFD_IN_DATA_DMA_ME),
+                                     NFD_IN_DATA_DMA_ME0),
                      &nfd_in_data_served_refl_out0,
                      sizeof nfd_in_data_served_refl_out0);
     }
@@ -491,11 +491,11 @@ distr_notify()
         data_dma_seq_sent1 = data_dma_seq_served1;
 
         nfd_in_data_served_refl_out1 = data_dma_seq_sent1;
-        reflect_data(NFD_IN_DATA_DMA_ME,
+        reflect_data(NFD_IN_DATA_DMA_ME1,
                      __xfer_reg_number(&nfd_in_data_served_refl_in1,
-                                       NFD_IN_DATA_DMA_ME),
+                                       NFD_IN_DATA_DMA_ME1),
                      __signal_number(&nfd_in_data_served_refl_sig1,
-                                     NFD_IN_DATA_DMA_ME),
+                                     NFD_IN_DATA_DMA_ME1),
                      &nfd_in_data_served_refl_out1,
                      sizeof nfd_in_data_served_refl_out1);
     }

@@ -95,7 +95,7 @@ cls_ring_put(unsigned int rnum, __xwrite void *data, size_t size,
     unsigned int ring_addr = rnum << 2;
 
     ctassert(__is_write_reg(data));
-    ctassert(rnum < 16);
+    try_ctassert(rnum < 16);
     ctassert(__is_ct_const(size));
     ctassert(__is_aligned(size, 4));
     ctassert(size <= (16*4));
@@ -123,7 +123,7 @@ cls_ring_get(unsigned int rnum, __xread void *data, size_t size,
     unsigned int ring_addr = rnum << 2;
 
     ctassert(__is_read_reg(data));
-    ctassert(rnum < 16);
+    try_ctassert(rnum < 16);
     ctassert(__is_ct_const(size));
     ctassert(__is_aligned(size, 4));
     ctassert(size <= (16*4));

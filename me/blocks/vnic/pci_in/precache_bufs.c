@@ -25,6 +25,14 @@
 #define PCI_IN_ISSUE_DMA_IDX 0
 #endif
 
+#if (PCI_IN_ISSUE_DMA_IDX == 0)
+#define NFD_IN_DATA_EVENT_FILTER NFD_IN_DATA0_EVENT_FILTER
+#define NFD_IN_JUMBO_EVENT_FILTER NFD_IN_JUMBO0_EVENT_FILTER
+#else
+#define NFD_IN_DATA_EVENT_FILTER NFD_IN_DATA1_EVENT_FILTER
+#define NFD_IN_JUMBO_EVENT_FILTER NFD_IN_JUMBO1_EVENT_FILTER
+#endif
+
 /* Configure *l$index3 to be a global pointer, and
  * set up a convenience define */
 #define NFD_IN_BUF_STORE_PTR *l$index3
@@ -356,12 +364,12 @@ void
 distr_precache_bufs_setup_shared()
 {
     dma_seqn_ap_setup(NFD_IN_DATA_EVENT_FILTER, NFD_IN_DATA_EVENT_FILTER,
-                      NFD_IN_DATA_EVENT_TYPE, 1, &nfd_in_data_event_xfer,
-                      &nfd_in_data_event_sig);
+                      NFD_IN_DATA_EVENT_TYPE, PCI_IN_ISSUE_DMA_IDX,
+                      &nfd_in_data_event_xfer, &nfd_in_data_event_sig);
 
     dma_seqn_ap_setup(NFD_IN_JUMBO_EVENT_FILTER, NFD_IN_JUMBO_EVENT_FILTER,
-                      NFD_IN_JUMBO_EVENT_TYPE, 1, &nfd_in_jumbo_event_xfer,
-                      &nfd_in_jumbo_event_sig);
+                      NFD_IN_JUMBO_EVENT_TYPE, PCI_IN_ISSUE_DMA_IDX,
+                      &nfd_in_jumbo_event_xfer, &nfd_in_jumbo_event_sig);
 }
 
 
