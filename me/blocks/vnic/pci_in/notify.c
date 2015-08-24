@@ -430,11 +430,11 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
 __forceinline void
 notify(int side)
 {
-    if (side) {
-        _notify(&data_dma_seq_compl0, &data_dma_seq_served0, 
+    if (side == 0) {
+        _notify(&data_dma_seq_compl0, &data_dma_seq_served0,
                 NFD_IN_ISSUED_RING0_NUM);
     } else {
-        _notify(&data_dma_seq_compl1, &data_dma_seq_served1, 
+        _notify(&data_dma_seq_compl1, &data_dma_seq_served1,
                 NFD_IN_ISSUED_RING1_NUM);
     }
 }
@@ -524,15 +524,23 @@ main(void)
 
         for (;;) {
             distr_notify();
+#ifdef NFD_IN_HAS_ISSUE0
             notify(0);
+#endif
+#ifdef NFD_IN_HAS_ISSUE1
             notify(1);
+#endif
         }
 
     } else {
 
         for (;;) {
+#ifdef NFD_IN_HAS_ISSUE0
             notify(0);
+#endif
+#ifdef NFD_IN_HAS_ISSUE1
             notify(1);
+#endif
         }
 
     }
