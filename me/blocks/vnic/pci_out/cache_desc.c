@@ -443,13 +443,6 @@ _fetch_fl(__gpr unsigned int *queue)
             /* Indicate work done on queue */
             return 0;
         }
-
-        /* REMOVE ME: for some reason returning after reading the
-         * FL write pointer seems to reduce the likelihood of encountering
-         * NFDH-138.  This probably doesn't avoid the issue, just change
-         * the conditions under which it triggers.  Nevertheless, it
-         * will help development to continue in the short term. */
-        return 0;
     }
 
     /* We have a batch available, is there space to put it?
