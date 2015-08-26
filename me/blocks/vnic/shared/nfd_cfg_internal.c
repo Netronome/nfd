@@ -32,6 +32,11 @@
 #include <nfp_net_ctrl.h>
 
 
+#ifndef NFD_OUT_RX_OFFSET
+#warning "NFD_OUT_RX_OFFSET not defined: defaulting to NFP_NET_RX_OFFSET which is sub-optimal"
+#define NFD_OUT_RX_OFFSET NFP_NET_RX_OFFSET
+#endif /* NFD_OUT_RX_OFFSET */
+
 #define NFD_CFG_DECLARE(_sig, _next_sig)  \
     __visible SIGNAL _sig;                \
     __remote SIGNAL _next_sig;
@@ -394,12 +399,17 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
+    __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 
     mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_EXN,
                sizeof exn_lsc);
+
+    mem_write8(&rx_off,
+               NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_RX_OFFSET_ADDR,
+               sizeof rx_off);
 #endif
 }
 
@@ -415,6 +425,7 @@ _nfd_cfg_init_pf_ctrl_bar()
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
+    __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
 
     mem_write64(&cfg,
                 (NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
@@ -424,6 +435,11 @@ _nfd_cfg_init_pf_ctrl_bar()
     mem_write8(&exn_lsc,
                NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
+
+    mem_write8(&rx_off,
+               NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
+                    NFP_NET_CFG_RX_OFFSET_ADDR,
+               sizeof rx_off);
 #endif
 }
 

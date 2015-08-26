@@ -13,6 +13,11 @@
 
 #include <nfp6000/nfp_pcie.h>
 
+#ifndef NFD_OUT_RX_OFFSET
+#warning "NFD_OUT_RX_OFFSET not defined: defaulting to NFP_NET_RX_OFFSET which is sub-optimal"
+#define NFD_OUT_RX_OFFSET NFP_NET_RX_OFFSET
+#endif /* NFD_OUT_RX_OFFSET */
+
 // Send sequence numbers for send_desc
 #if (NFD_OUT_MAX_QUEUES < 64)
 #error "NFD_OUT_MAX_QUEUES must be >= 64 for nfd_out_send_cntrs optimization to work"
@@ -320,14 +325,24 @@ ctm_only#:
     alu[out_dma0[1], word, OR, (&dma_sig), <<PCIE_DMA_SIGNUM_shf]
 
     // Word 2
-    wsm_extract(tmp2, in_work, SB_WQ_METALEN)
-    alu[tmp, NFP_NET_RX_OFFSET, -, tmp2]
-    alu[out_dma0[2], tmp, +, in_work[SB_WQ_HOST_ADDR_LO_wrd]]
+    #if NFD_OUT_RX_OFFSET > 0
+
+        wsm_extract(tmp2, in_work, SB_WQ_METALEN)
+        alu[tmp, NFD_OUT_RX_OFFSET, -, tmp2]
+        alu[out_dma0[2], tmp, +, in_work[SB_WQ_HOST_ADDR_LO_wrd]]
+
+    #else /* NFD_OUT_RX_OFFSET > 0 */
+
+        alu[out_dma0[2], --, B, in_work[SB_WQ_HOST_ADDR_LO_wrd]]
+
+    #endif /* NFD_OUT_RX_OFFSET > 0 */
 
     // Word 3
-    // OPTIMIZE:  4G boundary cross impossible?
     alu[word, g_dma_word3_vals, +8, in_work[SB_WQ_HOST_ADDR_HI_wrd]], no_cc
-    alu[word, word, +carry, 0]
+    #if NFD_OUT_RX_OFFSET > 0
+        alu[word, word, +carry, 0]
+        // FIXME: possibly carry past 40-bit address into traffic class?
+    #endif /* NFD_OUT_RX_OFFSET > 0 */
     wsm_extract(tmp, in_work,  SB_WQ_RID)
     sm_set_noclr(word, PCIE_DMA_RID, tmp)
     wsm_extract(len, in_work, SB_WQ_DATALEN)
@@ -349,15 +364,28 @@ ctm_only#:
 
 not_ctm_only#:
     // Prepare data that is required for all further branches:
+
     // (1) the start address in host mem
-    wsm_extract(tmp2, in_work, SB_WQ_METALEN)
-    alu[tmp, NFP_NET_RX_OFFSET, -, tmp2]
-    alu[pcie_lo_start, tmp, +, in_work[SB_WQ_HOST_ADDR_LO_wrd]]
+    #if NFD_OUT_RX_OFFSET > 0
+
+        wsm_extract(tmp2, in_work, SB_WQ_METALEN)
+        alu[tmp, NFD_OUT_RX_OFFSET, -, tmp2]
+        alu[pcie_lo_start, tmp, +, in_work[SB_WQ_HOST_ADDR_LO_wrd]]
+
+    #else /* NFD_OUT_RX_OFFSET > 0 */
+
+        alu[pcie_lo_start, --, B, in_work[SB_WQ_HOST_ADDR_LO_wrd]]
+
+    #endif /* NFD_OUT_RX_OFFSET > 0 */
 
     // (2) the partial word 3 (pcie_hi_word).  Aside from the DMA length,
     // it is constant for all DMAs
     alu[pcie_hi_word, g_dma_word3_vals, +8, in_work[SB_WQ_HOST_ADDR_HI_wrd]], no_cc
-    alu[pcie_hi_word, pcie_hi_word, +carry, 0]
+    #if NFD_OUT_RX_OFFSET > 0
+        alu[pcie_hi_word, pcie_hi_word, +carry, 0]
+        // FIXME: possibly carry past 40-bit address into traffic class?
+    #endif /* NFD_OUT_RX_OFFSET > 0 */
+
     wsm_extract(tmp, in_work,  SB_WQ_RID)
     sm_set_noclr(pcie_hi_word, PCIE_DMA_RID, tmp)
 
