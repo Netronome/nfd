@@ -176,7 +176,7 @@ static __shared unsigned int wq_num_base;
 #ifdef NFD_IN_ADD_SEQN
 #if (NFD_IN_NUM_WQS == 1)
 /* Add sequence numbers, using a shared GPR to store */
-static __shared __gpr dst_q_seqn = 0;
+static __shared __gpr unsigned int dst_q_seqn = 0;
 
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
@@ -186,7 +186,7 @@ do {                                                                    \
 
 #else
 /* Add sequence numbers, using a LM to store */
-static __shared __lmem dst_q_seqn[NFD_IN_NUM_WQS];
+static __shared __lmem unsigned int dst_q_seqn[NFD_IN_NUM_WQS];
 
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
