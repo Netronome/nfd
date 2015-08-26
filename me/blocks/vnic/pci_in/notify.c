@@ -95,7 +95,7 @@ static SIGNAL_MASK wait_msk;
 static unsigned int next_ctx;
 
 __xwrite struct _pkt_desc_batch batch_out;
-__xwrite unsigned int qc_xfer;
+__xread unsigned int qc_xfer;
 
 /* XXX declare dst_q counters in LM */
 
@@ -380,6 +380,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         __implicit_read(&msg_sig0);
         __implicit_read(&msg_sig1);
         __implicit_read(&msg_order_sig);
+        __implicit_read(&qc_xfer);
 
         reorder_done_opt(&next_ctx, &msg_order_sig);
 

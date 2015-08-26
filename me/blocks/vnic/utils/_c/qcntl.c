@@ -150,13 +150,14 @@ qc_ping_queue(unsigned char pcie_isl, unsigned int queue,
 __intrinsic void
 __qc_add_to_ptr(unsigned char pcie_isl, unsigned int queue,
                 enum qc_ptr_type ptr, unsigned int value,
-                __xwrite unsigned int *xfer, sync_t sync, SIGNAL *sig)
+                __xread unsigned int *xfer, sync_t sync, SIGNAL *sig)
 {
+    __gpr unsigned int addr_hi = pcie_isl << 30;
     struct nfp_qc_add_rptr val_str;
     unsigned int ptr_offset;
 
     ctassert(ptr == QC_WPTR || ptr == QC_RPTR);
-    try_ctassert(value < (1<<18)); /* RPTR and WPTR are max 18bits */
+    try_ctassert(value < 64); /* We are using the address bits to pass value */
 
     if (ptr == QC_WPTR) {
         ptr_offset = NFP_QC_ADD_WPTR;
@@ -164,23 +165,31 @@ __qc_add_to_ptr(unsigned char pcie_isl, unsigned int queue,
         ptr_offset = NFP_QC_ADD_RPTR;
     }
 
-    /* NB: nfp_qc_add_rptr and nfp_qc_add_wptr place
-     * the count field in the same bits */
-    val_str.__raw = 0;
-    val_str.val = value;
-    *xfer = val_str.__raw;
+    /* Code the value to add into the ptr_offset
+     * The value is taken from bits [9:4], and bit 10 must be set to
+     * indicate that we are using this access mode. */
+    ptr_offset |= (value << 4);
+    ptr_offset |= (1 << 10);
 
-    /* Write data to specified address to initiate add */
-    __qc_write(pcie_isl, queue, xfer, ptr_offset, sync, sig);
+    ptr_offset |= NFP_PCIE_QUEUE(queue);
+
+    if (sync == sig_done) {
+        __asm pcie[read_pci, *xfer, addr_hi, <<8, ptr_offset, 1], \
+            sig_done[*sig];
+    } else {
+        __asm pcie[read_pci, *xfer, addr_hi, <<8, ptr_offset, 1], \
+            ctx_swap[*sig];
+    }
 }
 
 __intrinsic void
 qc_add_to_ptr(unsigned char pcie_isl, unsigned int queue,
               enum qc_ptr_type ptr, unsigned int value)
 {
-    __xwrite unsigned int xfer;
+    __xread unsigned int xfer;
     SIGNAL sig;
 
     __qc_add_to_ptr(pcie_isl, queue, ptr, value, &xfer, ctx_swap, &sig);
+    __implicit_read(&xfer);
 }
 
