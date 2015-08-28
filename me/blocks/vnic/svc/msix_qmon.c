@@ -692,8 +692,7 @@ msix_imod_irq_issued(const unsigned int pcie_isl, int qnum, int rx_queue)
             msix_tx_irqc_state[pcie_isl][qnum].usecs = 0;
             msix_tx_irqc_state[pcie_isl][qnum].frames = 0;
         }
-    }
-    else {
+    } else {
         msix_tx_irqc_state[pcie_isl][qnum].usecs = 0;
         msix_tx_irqc_state[pcie_isl][qnum].frames = 0;
         /* clear RX timestamp too if vector is shared */
@@ -716,7 +715,8 @@ msix_imod_irq_issued(const unsigned int pcie_isl, int qnum, int rx_queue)
  * Returns number of new RX/TX packets 
  */
 __intrinsic static unsigned int
-msix_update_packet_count(const unsigned int pcie_isl, int qnum, int rx_queue, unsigned int count)
+msix_update_packet_count(const unsigned int pcie_isl, int qnum,
+                         int rx_queue, unsigned int count)
 {
     uint32_t oldpkts;
     uint32_t newpkts;
@@ -873,8 +873,8 @@ msix_qmon_loop(const unsigned int pcie_isl)
             enabled &= ~qmask;
 
             /* Check if queue got new packets and try to send MSI-X if so */
-            count = qc_read(pcie_isl, NFD_NATQ2QC(qnum, NFD_IN_TX_QUEUE),
-                            QC_RPTR);
+            count = qc_read(pcie_isl,
+                            NFD_NATQ2QC(qnum, NFD_IN_TX_QUEUE), QC_RPTR);
             count = NFP_QC_STS_LO_READPTR_of(count);
             if (count != msix_prev_tx_cnt[pcie_isl][qnum]) {
                 newpkts = msix_update_packet_count(pcie_isl, qnum, 0, count);
