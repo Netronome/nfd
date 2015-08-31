@@ -402,7 +402,7 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 
-    mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_EXN,
+    mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
 
     mem_write8(&rx_off,
