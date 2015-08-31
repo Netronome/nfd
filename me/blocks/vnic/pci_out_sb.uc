@@ -202,7 +202,11 @@
     .reg currently_up
     .reg base_addr
 
-    alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_VF_QUEUES))]
+    #if (NFD_MAX_VF_QUEUES > 0)
+        alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_VF_QUEUES))]
+    #else
+        move(qid, in_q)
+    #endif
 
     // Load the queue state for that queue
     alu[lma, --, B, qid, <<LM_QSTATE_SIZE_lg2]
