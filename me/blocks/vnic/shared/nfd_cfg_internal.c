@@ -185,8 +185,6 @@ send_interthread_sig(unsigned int dst_me, unsigned int ctx, unsigned int sig_no)
     addr = ((dst_me & 0x3F0)<<20 | (dst_me & 15)<<9 | (ctx & 7) << 6 |
             (sig_no & 15)<<2);
 
-    // REMOVE ME
-    local_csr_write(local_csr_mailbox_0, addr);
     __asm ct[interthread_signal, --, addr, 0, --];
 }
 

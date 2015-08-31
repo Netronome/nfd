@@ -396,8 +396,6 @@ issue_dma_gather_seq_recv()
 {
     if (signal_test(&nfd_in_gather_compl_refl_sig)) {
         gather_dma_seq_compl = nfd_in_gather_compl_refl_in;
-        /* REMOVE ME */
-        local_csr_write(local_csr_mailbox_2, local_csr_read(local_csr_mailbox_2) + 1);
     }
 }
 
@@ -727,9 +725,6 @@ issue_dma()
     }
 
     reorder_done_opt(&next_ctx, &desc_order_sig);
-
-    /* REMOVE ME */
-    local_csr_write(local_csr_mailbox_3, local_csr_read(local_csr_mailbox_3) + 1);
 
     /*
      * Increment gather_dma_seq_serv upfront to avoid ambiguity
