@@ -488,6 +488,8 @@ nfd_cfg_flr_setup()
         ((unsigned int) __MEID>>4), NFP_EVENT_PROVIDER_INDEX_PCIE);
     unsigned int event_mask, event_match;
 
+    __assign_relative_register(&flr_ap_sig, NFD_CFG_FLR_AP_SIG_NO);
+
     __implicit_write(&flr_ap_sig);
     __implicit_write(&flr_ap_xfer);
 
