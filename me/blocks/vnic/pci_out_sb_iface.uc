@@ -4,9 +4,7 @@
 #include <nfd_common.h>
 #include <nfd_out.uc>   /* for NFD_OUT_MAX_QUEUES only */
 
-#ifndef NFD_OUT_SB_WQ_SIZE_LW
 #define NFD_OUT_SB_WQ_SIZE_LW  1024
-#endif
 
 /* Debug parameter */
 #ifndef SB_USE_MU_WORK_QUEUES
@@ -39,25 +37,16 @@
 
     #else /* SB_USE_MU_WORK_QUEUES */
 
-        // CLS work queues
-        #ifndef NFD_OUT_SB_WQ_ADDR
-        #error "NFD_OUT_SB_WQ_ADDR must be defined in stage batch and packet DMA MEs"
-        #endif
-
         #ifndef NFD_OUT_SB_WQ_NUM
         #error "NFD_OUT_SB_WQ_NUM must be defined in stage batch and packet DMA MEs"
         #endif
 
-        #if ((NFD_OUT_SB_WQ_ADDR & (NFD_OUT_SB_WQ_SIZE_LW*4 - 1)) != 0)
-        #error "NFD_OUT_SB_WQ_ADDR is not aligned to NFD_OUT_SB_WQ_SIZE_LW*4"
-        #endif
-
-        .alloc_mem nfd_out_sb_wq_mem/**/PCIE_ISL cls+NFD_OUT_SB_WQ_ADDR \
+        .alloc_mem nfd_out_sb_wq_mem/**/PCIE_ISL cls \
             island (NFD_OUT_SB_WQ_SIZE_LW * 4) (NFD_OUT_SB_WQ_SIZE_LW * 4)
         .alloc_resource nfd_out_sb_ring_num/**/PCIE_ISL \
             cls_rings+NFD_OUT_SB_WQ_NUM island 1 1
         .init_csr cls:Rings.RingBase/**/NFD_OUT_SB_WQ_NUM \
-            (((NFD_OUT_SB_WQ_ADDR >> 7) << 0) | \
+            (((nfd_out_sb_wq_mem/**/PCIE_ISL >> 7) << 0) | \
              ((log2(NFD_OUT_SB_WQ_SIZE_LW) - 5) << 16))
         .init_csr cls:Rings.RingPtrs/**/NFD_OUT_SB_WQ_NUM 0
 
