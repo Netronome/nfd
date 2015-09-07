@@ -1016,7 +1016,12 @@ main#:
     .reg tmp
 
     /* Global initialization */
-    issue_dma_setup_shared()
+    // WIP:SDN-1331 Don't write DMA CFG_REG from the PD MEs
+    // There are multiple PD MEs and the configuration should
+    // only be written once.  It is also unsafe to touch PCIe
+    // InternalTargets if the PCIe link is not clocked.
+    // cache_desc.c provides the required configuration.
+    // issue_dma_setup_shared()
 
 
     /*

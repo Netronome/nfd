@@ -249,6 +249,31 @@ cache_desc_setup_shared()
     cfg.cpp_target  = 7;
     pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_FL_CFG_REG, cfg);
 
+    /*
+     * Set up NFD_OUT_DATA_CFG_REG DMA Config Register
+     * This register is used by the pci_out_pd.uc MEs.  As
+     * there are multiple PD MEs and they are not within
+     * the PCIe island, cache_desc takes ownership of the
+     * configuration register.  FL descriptors must be
+     * cached before credits can be issued for packets,
+     * so this configuration must have completed before
+     * the PD MEs can attempt to DMA.
+     */
+    cfg.__raw = 0;
+#ifdef NFD_VNIC_NO_HOST
+    /* Use signal_only for seqn num generation
+     * Don't actually DMA data */
+    cfg.signal_only = 1;
+#else
+    cfg.signal_only = 0;
+#endif
+    cfg.end_pad     = 0;
+    cfg.start_pad   = 0;
+    /* Ordering settings? */
+    cfg.target_64   = 1;
+    cfg.cpp_target  = 7;
+    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DATA_CFG_REG, cfg);
+
 
     /*
      * Initialise a DMA descriptor template
