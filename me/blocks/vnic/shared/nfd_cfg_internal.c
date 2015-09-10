@@ -580,6 +580,7 @@ nfd_cfg_check_flr_ap()
         __xread unsigned int pf_csr;
         __xread unsigned int vf_csr[2];
         unsigned int state_change_ack;
+        unsigned int int_mgr_status;
         int vf;
 
         local_csr_write(local_csr_mailbox_0, flr_ap_xfer);
@@ -594,6 +595,18 @@ nfd_cfg_check_flr_ap()
         if (state_change_ack) {
             xpb_write(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT,
                       state_change_ack);
+        }
+
+        /* Recheck InterruptManager.Status  */
+        int_mgr_status = xpb_read(NFP_PCIEX_PCIE_INT_MGR_STATUS);
+        if ((int_mgr_status & ~NFP_PCIEX_PCIE_INT_MGR_STATUS_FLR_msk) != 0) {
+            /* We have a non-zero status that is NOT due to outstanding FLRs.
+             * Therefore, we flag the AP signal again so that the interrupt
+             * status is rechecked.
+             * The FLR bits are excluded as they take time to complete, and
+             * the FLR acknowledgement methods reset the AP signal as well.
+             */
+            signal_ctx(NFD_CFG_FLR_AP_CTX_NO, NFD_CFG_FLR_AP_SIG_NO);
         }
 
         /* Mark the autopush signal and xfer as used

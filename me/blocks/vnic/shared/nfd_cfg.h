@@ -169,7 +169,8 @@ NFD_CFG_RINGS_DECL(3);
 #define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1           0x00100084
 #define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc
 #define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk         0x3f
-
+#define NFP_PCIEX_PCIE_INT_MGR_STATUS                        0x00130000
+#define NFP_PCIEX_PCIE_INT_MGR_STATUS_FLR_msk                0x300
 
 #define NFD_CFG_EMEM_IND1(_emem) __LoadTimeConstant("__addr_" #_emem)
 #define NFD_CFG_EMEM_IND0(_emem) NFD_CFG_EMEM_IND1(_emem)
