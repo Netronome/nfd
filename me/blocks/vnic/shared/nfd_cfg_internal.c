@@ -579,6 +579,7 @@ nfd_cfg_check_flr_ap()
         __xread unsigned int pcie_state_change_stat;
         __xread unsigned int pf_csr;
         __xread unsigned int vf_csr[2];
+        unsigned int vendor_msg;
         unsigned int state_change_ack;
         unsigned int int_mgr_status;
         int vf;
@@ -588,6 +589,14 @@ nfd_cfg_check_flr_ap()
         /* Call nfd_flr.c API to update the FLR pending state */
         nfd_flr_check_pf(PCIE_ISL, &flr_pend_status);
         nfd_flr_check_vfs(PCIE_ISL, &flr_pend_status, flr_pend_vf);
+
+        /* Acknowledge PCIE vendor defined messages */
+        vendor_msg = xpb_read(NFP_PCIEX_COMPCFG_CFG0);
+        if (vendor_msg & (1 << NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf)) {
+            /* "PcieMsgValid" is write one to clear */
+            vendor_msg |= (1 << NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf);
+            xpb_write(NFP_PCIEX_COMPCFG_CFG0, vendor_msg);
+        }
 
         /* Acknowledge PCIe state changes */
         state_change_ack = xpb_read(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT);
