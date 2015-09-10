@@ -123,9 +123,6 @@ ASM(.alloc_mem fl_cache_mem3 i7.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
 static __gpr unsigned int fl_cache_mem_addr_lo;
 
 
-volatile __shared __gpr unsigned int qc_queue0_cnt = 0;
-
-
 /*
  * send_desc variables
  */
@@ -507,10 +504,6 @@ _fetch_fl(__gpr unsigned int *queue)
          * it once it has used the FL descriptor and written the RX descriptor.
          */
         queue_data[*queue].fl_s += NFD_OUT_FL_BATCH_SZ;
-
-        if ((qc_queue & 63) == 0) {
-            qc_queue0_cnt++;
-        }
         __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, NFD_OUT_FL_BATCH_SZ,
                         &qc_xfer, sig_done, &qc_sig);
 
@@ -536,12 +529,6 @@ _fetch_fl(__gpr unsigned int *queue)
 
         /* Indicate no work done on queue */
         ret = -1;
-    }
-
-    /* XXX Remove me! */
-    if ((int)(queue_data[*queue].fl_w - queue_data[*queue].fl_s) < 0) {
-        local_csr_write(local_csr_mailbox_0, 0xaaaabbbb);
-        halt();
     }
 
     return ret;
