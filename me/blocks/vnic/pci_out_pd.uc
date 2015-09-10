@@ -904,58 +904,6 @@ ticket_error#:
 #endm
 
 
-#macro issue_dma_setup_shared()
-.begin
-    .if (ctx() == 0)
-
-        .reg $cfg
-        .sig pcie_sig
-        .reg addr_lo
-        .reg addr_hi
-        .reg new_cfg
-        .reg tmp
-        .reg odd
-
-        move(odd, NFD_OUT_DATA_CFG_REG & 1)
-        move(addr_lo, NFP_PCIE_DMA_CFG0 + (((NFD_OUT_DATA_CFG_REG >> 1) & 0x7) << 2))
-        move(addr_hi, (PCIE_ISL << 30))
-
-        pcie[read_pci, $cfg, addr_hi, <<8, addr_lo, 1], ctx_swap[pcie_sig]
-
-        #define_eval CPP_TARGET     NFP_PCIE_DMA_CFG_CPP_TARGET_EVEN(7)
-        #define_eval SIGNAL_ONLY    NFP_PCIE_DMA_CFG_SIGNAL_ONLY_EVEN
-        #define_eval TARGET_64      NFP_PCIE_DMA_CFG_TARGET_64_EVEN
-    #ifdef NFD_VNIC_NO_HOST
-        #define_eval DMA_CFG ( SIGNAL_ONLY | TARGET_64 | CPP_TARGET )
-    #else
-        #define_eval DMA_CFG ( TARGET_64 | CPP_TARGET )
-    #endif
-
-        move(tmp, DMA_CFG)
-
-    .if (odd)
-        ld_field_w_clr[new_cfg, 0011, $cfg]
-        alu_shf[new_cfg, new_cfg, OR, tmp, <<16]
-    .else
-        ld_field_w_clr[new_cfg, 1100, $cfg]
-        alu[new_cfg, new_cfg, OR, tmp]
-    .endif
-
-        alu[$cfg, --, B, new_cfg]
-
-        pcie[write_pci, $cfg, addr_hi, <<8, addr_lo, 1], ctx_swap[pcie_sig]
-
-    .endif
-
-    #undef DMA_CFG
-    #undef CPP_TARGET
-    #undef SIGNAL_ONLY
-    #undef TARGET_64
-
-.end
-#endm
-
-
 main#:
 
     /*
@@ -1015,14 +963,10 @@ main#:
     // General GPRs for initialization
     .reg tmp
 
-    /* Global initialization */
-    // WIP:SDN-1331 Don't write DMA CFG_REG from the PD MEs
-    // There are multiple PD MEs and the configuration should
-    // only be written once.  It is also unsafe to touch PCIe
-    // InternalTargets if the PCIe link is not clocked.
-    // cache_desc.c provides the required configuration.
-    // issue_dma_setup_shared()
-
+    /*
+     * Global initialization
+     */
+    /* XXX placeholder for any global initialization required */
 
     /*
      * PER CONTEXT INITIALIZATION
@@ -1040,6 +984,12 @@ main#:
 
     /*
      * Values to OR into word 1 of a DMA descriptor
+     */
+    /* XXX cache_desc.c configures the NFD_OUT_DATA_CFG_REG DMA register
+     * on behalf of the pci_out_pd.uc MEs.  The PD MEs are not allowed
+     * to touch the PCIe island until they receive work from SB, which
+     * guarantees that the PCIe link must be clocked and is safe to
+     * access.
      */
     /* Valid only for CTM addresses! */
     move(g_dma_word1_vals, 0x80)
