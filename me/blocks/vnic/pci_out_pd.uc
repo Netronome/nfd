@@ -156,7 +156,7 @@
 
 #define PCIE_DMA_SIZE_LW        4
 
-#define PCIE_DMA_MAX_LEN        4096
+#define PCIE_DMA_MAX_LEN        2048
 
 #define PCIE_DMA_WORD1_NOSIG_val \
     (NFD_OUT_DATA_CFG_REG | (NFD_OUT_DATA_DMA_TOKEN << 4))
@@ -478,7 +478,7 @@ ctm_and_mu_dma#:
             .endw
         .endif
 
-        // Finish second DMA which must be 4096 bytes long
+        // Finish second DMA which must be g_dma_max bytes long
 
         // Word 3: length, RID, PCIE address HI
         alu[tmp, g_dma_max, -, 1]
@@ -489,82 +489,55 @@ ctm_and_mu_dma#:
         pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
         #pragma warning(default:5117)
 
-        // Swap on the DMA completion, which implicitly signals the xfers
-        // are free again
-        ctx_arb[dma_sig]
-        .io_completed out_dma0[0]
-        .io_completed out_dma0[1]
-        .io_completed out_dma0[2]
-        .io_completed out_dma0[3]
-        .io_completed out_dma1[0]
-        .io_completed out_dma1[1]
-        .io_completed out_dma1[2]
-        .io_completed out_dma1[3]
-
-        // Now start the remaining 1 or 2 DMAs
-
         // Adjust offsets and lengths
         alu[len, len, -, g_dma_max]
         alu[mu_lo_start, mu_lo_start, +, g_dma_max]
         alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
         alu[pcie_hi_word, pcie_hi_word, +carry, 0]
 
-        // out_dma0: word0
-        alu[out_dma0[0], --, B, mu_lo_start]
+        .repeat
 
-        // out_dma0: word2
-        alu[out_dma0[2], --, B, pcie_lo_start]
+            // Swap on the DMA completion, which implicitly signals the xfers
+            // are free again
+            ctx_arb[dma_sig]
+            .io_completed out_dma0[0]
+            .io_completed out_dma0[1]
+            .io_completed out_dma0[2]
+            .io_completed out_dma0[3]
+            .io_completed out_dma1[0]
+            .io_completed out_dma1[1]
+            .io_completed out_dma1[2]
+            .io_completed out_dma1[3]
 
-        .if (len <= g_dma_max)
+            // DMA0 word 0
+            alu[out_dma0[0], --, B, mu_lo_start]
 
             // DMA0 Word 1
             _build_mu_dma_word1(out_dma0, in_work, dma_sig)
 
+            // DMA0 Word 2
+            alu[out_dma0[2], --, B, pcie_lo_start]
+
             // DMA0 Word 3
-            alu[tmp, len, -, 1]
-            sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+            .if (len <= g_dma_max)
+                alu[tmp, len, -, 1]
+                sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+                move(len, 0)
+            .else 
+                alu[tmp, g_dma_max, -, 1]
+                sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+                alu[len, len, -, g_dma_max]
+                alu[mu_lo_start, mu_lo_start, +, g_dma_max]
+                alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
+                alu[pcie_hi_word, pcie_hi_word, +carry, 0]
+            .endif
 
             #pragma warning(disable:5117)
             pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
             #pragma warning(default:5117)
 
-        .else
 
-            // DMA0 Word 1
-            _build_mu_dma_word1(out_dma0, in_work, NOSIG)
-
-            // DMA0 Word 3
-            alu[tmp, g_dma_max, -, 1]
-            sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
-
-            #pragma warning(disable:5117)
-            pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-            #pragma warning(default:5117)
-
-            // Adjust offsets and lengths
-            alu[len, len, -, g_dma_max]
-            alu[mu_lo_start, mu_lo_start, +, g_dma_max]
-            alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
-            alu[pcie_hi_word, pcie_hi_word, +carry, 0]
-
-            // DMA1 Word 0
-            alu[out_dma1[0], --, B, mu_lo_start]
-
-            // DMA1 Word 1
-            _build_mu_dma_word1(out_dma1, in_work, dma_sig)
-
-            // DMA1 Word 2
-            alu[out_dma1[2], --, B, pcie_lo_start]
-
-            // DMA1 Word 3
-            alu[tmp, len, -, 1]
-            sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
-
-            #pragma warning(disable:5117)
-            pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-            #pragma warning(default:5117)
-
-        .endif
+        .until (len == 0)
 
     .endif
 
@@ -580,13 +553,13 @@ mu_only_dma#:
     // DMA0 Word 0
     move(out_dma0[0], mu_lo_start)
 
+    // DMA0 Word 1: MU address hi and signal
+    _build_mu_dma_word1(out_dma0, in_work, dma_sig)
+
     // DMA0 Word 2: PCIE address low
     move(out_dma0[2], pcie_lo_start)
 
     .if (len <= g_dma_max)
-
-        // DMA0 Word 1: MU address hi and signal
-        _build_mu_dma_word1(out_dma0, in_work, dma_sig)
 
         // DMA0 Word 3: PCIE address high + data length
         alu[tmp, len, -, 1]
@@ -606,11 +579,6 @@ mu_only_dma#:
             .endw
         .endif
 
-        // Fire off DMA0 with no signal
-
-        // DMA0 Word 1: MU address hi and NO signal
-        _build_mu_dma_word1(out_dma0, in_work, NOSIG)
-
         // DMA0 Word 3: PCIE address high + data length
         alu[tmp, g_dma_max, -, 1]
         sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
@@ -625,35 +593,10 @@ mu_only_dma#:
         alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
         alu[pcie_hi_word, pcie_hi_word, +carry, 0]
 
-        // DMA1 Word 0
-        move(out_dma1[0], mu_lo_start)
+        .repeat
 
-        // DMA1 Word 1: MU address hi and signal
-        _build_mu_dma_word1(out_dma1, in_work, dma_sig)
-
-        // DMA0 Word 2: PCIE address low
-        move(out_dma1[2], pcie_lo_start)
-
-        .if (len <= g_dma_max)
-
-            // DMA1 Word 3: PCIE address high + data length
-            alu[tmp, len, -, 1]
-            sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
-
-            #pragma warning(disable:5117)
-            pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-            #pragma warning(default:5117)
-
-        .else   /* 3 DMAs needed */
-
-            // DMA1 Word 3: PCIE address high + data length
-            alu[tmp, g_dma_max, -, 1]
-            sm_set_noclr_to(out_dma1[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
-
-            #pragma warning(disable:5117)
-            pcie[write_pci, out_dma1[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
-            #pragma warning(default:5117)
-
+            // Swap on the DMA completion, which implicitly signals the xfers
+            // are free again
             ctx_arb[dma_sig]
             .io_completed out_dma0[0]
             .io_completed out_dma0[1]
@@ -664,30 +607,34 @@ mu_only_dma#:
             .io_completed out_dma1[2]
             .io_completed out_dma1[3]
 
-            // Adjust offsets and lengths
-            alu[len, len, -, g_dma_max]
-            alu[mu_lo_start, mu_lo_start, +, g_dma_max]
-            alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
-            alu[pcie_hi_word, pcie_hi_word, +carry, 0]
-
-            // DMA0 Word 0
+            // DMA0 word 0
             alu[out_dma0[0], --, B, mu_lo_start]
 
-            // DMA0 Word 1: MU address hi and signal
+            // DMA0 Word 1
             _build_mu_dma_word1(out_dma0, in_work, dma_sig)
 
-            // DMA0 Word 2: PCIE address low
+            // DMA0 Word 2
             alu[out_dma0[2], --, B, pcie_lo_start]
 
-            // DMA1 Word 3: PCIE address high + data length
-            alu[tmp, len, -, 1]
-            sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+            // DMA0 Word 3
+            .if (len <= g_dma_max)
+                alu[tmp, len, -, 1]
+                sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+                move(len, 0)
+            .else 
+                alu[tmp, g_dma_max, -, 1]
+                sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
+                alu[len, len, -, g_dma_max]
+                alu[mu_lo_start, mu_lo_start, +, g_dma_max]
+                alu[pcie_lo_start, pcie_lo_start, +, g_dma_max]
+                alu[pcie_hi_word, pcie_hi_word, +carry, 0]
+            .endif
 
             #pragma warning(disable:5117)
             pcie[write_pci, out_dma0[0], g_pcie_addr_hi, <<8, g_pcie_addr_lo, 4]
             #pragma warning(default:5117)
 
-        .endif
+        .until (len == 0)
 
     .endif
 
