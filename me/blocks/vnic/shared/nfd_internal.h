@@ -7,7 +7,9 @@
 #ifndef _BLOCKS__SHARED_NFD_INTERNAL_H_
 #define _BLOCKS__SHARED_NFD_INTERNAL_H_
 
-//#include <std/cntrs.h>
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+#include <std/cntrs.h>
+#endif
 
 /* Tuning constants */
 

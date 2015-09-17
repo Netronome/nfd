@@ -393,6 +393,21 @@ issue_dma_gather_seq_recv()
 #endif
 
 #ifdef TX_LSO_ENABLE
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+#define _LSO_TX_DESC_TYPE_CNTR(_pkt)                                \
+    if (tx_desc.pkt##_pkt##.eop) {                                  \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
+                          NFD_IN_LSO_CNTR_T_ISSUED_LSO_EOP_TX_DESC);\
+    } else {                                                        \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
+                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TX_DESC);\
+    }
+#else
+#define _LSO_TX_DESC_TYPE_CNTR(_pkt)
+#endif
+#endif
+
+#ifdef TX_LSO_ENABLE
 #if NFD_IN_MAX_BATCH_SZ > 8
 /* XXX commented out jumbo support for code store for now */
 #define _ISSUE_PROC_JUMBO(_pkt, _sig) do {} while(0)
@@ -459,23 +474,13 @@ do {                                                                         \
     __addr40 void *hdr_pkt_ptr;                                              \
     unsigned int hdr_offset;                                                 \
     unsigned int header_to_read;                                             \
-    NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
-                        NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS);              \
-    NFD_IN_LSO_CNTR_ADD(nfd_in_lso_cntr_addr,                                \
-                       NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS,                \
-                       tx_desc.pkt##_pkt##.lso);                             \
-    NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
-                        NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET);        \
-    NFD_IN_LSO_CNTR_ADD(nfd_in_lso_cntr_addr,                                \
-                        NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET,         \
-                        tx_desc.pkt##_pkt##.l4_offset);                      \
     queue_data[queue].cont = 0;                                              \
     /* if we do not have a header or all the header */                       \
     if (queue_data[queue].lso_hdr_len != tx_desc.pkt##_pkt##.l4_offset) {    \
         /* DMA in the header and save it */                                  \
         buf_addr = &lso_hdr_data[(queue << __log2(NFD_IN_MAX_LSO_HDR_SZ)) +  \
                                  queue_data[queue].lso_hdr_len];             \
-        descr_tmp.cpp_addr_hi = (__ISLAND|(2 <<6));                          \
+        descr_tmp.cpp_addr_hi = (__ISLAND | (2 << 6));                       \
         descr_tmp.cpp_addr_lo = buf_addr & 0xFFFFFFFF;                       \
         descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;            \
         descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;            \
@@ -710,6 +715,16 @@ do {                                                                         \
         queue_data[queue].offset = 0;                                        \
         __wait_for_all(&lso_journal_sig);                                    \
     }                                                                        \
+    NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
+                        NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS);              \
+    NFD_IN_LSO_CNTR_ADD(nfd_in_lso_cntr_addr,                                \
+                       NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS,                \
+                       tx_desc.pkt##_pkt##.lso);                             \
+    NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
+                        NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET);        \
+    NFD_IN_LSO_CNTR_ADD(nfd_in_lso_cntr_addr,                                \
+                        NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET,         \
+                        tx_desc.pkt##_pkt##.l4_offset);                      \
     /* prep batch_out for LSO segment info */                                \
     issued_tmp.eop = 0;                                                      \
     issued_tmp.sp0 = lso_issued_index & 0xFF;                                \
@@ -763,7 +778,7 @@ do {                                                                    \
         __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                    \
                        NFD_IN_DATA_DMA_QUEUE,                           \
                        sig_done, &dma_sig##_pkt);                       \
-                                                                        \
+        _LSO_TX_DESC_TYPE_CNTR(_pkt);                                   \
     } else if (!queue_data[queue].up) {                                 \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
                              NFD_IN_LSO_CNTR_T_ISSUED_NOT_Q_UP_TX_DESC);\
@@ -813,6 +828,8 @@ do {                                                                    \
         }                                                               \
     } else {                                                            \
         if (tx_desc.pkt##_pkt##.eop && !queue_data[queue].cont) {       \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
+                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_TX_DESC);\
             /* Fast path, use buf_store data */                         \
             __critical_path();                                          \
             /* Set NFP buffer address and offset */                     \
@@ -846,6 +863,8 @@ do {                                                                    \
             issued_tmp.buf_addr = curr_buf;                             \
                                                                         \
             if (tx_desc.pkt##_pkt##.eop) {                              \
+                NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,              \
+                          NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);\
                 /* Clear continuation data on EOP */                    \
                                                                         \
                 /* XXX check this is done in two cycles */              \

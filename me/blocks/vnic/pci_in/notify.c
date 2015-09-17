@@ -269,6 +269,18 @@ notify_setup()
 #define _NOTIFY_MU_CHK
 #endif
 
+#ifdef TX_LSO_ENABLE
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)                              \
+        if (_flags & PCIE_DESC_TX_LSO) {                          \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
+                         NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ);\
+        }
+#else
+#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)
+#endif
+#endif
+
 //        _NOTIFY_MU_CHK;                       \
 
 #ifdef TX_LSO_ENABLE
@@ -346,6 +358,7 @@ do {                                                                         \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                             NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ); \
             i++;                                                             \
+            _LSO_END_PKTS_TO_ME_WQ_CNTR(lso_pkt.flags);                      \
         }                                                                    \
     } else {                                                                 \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
