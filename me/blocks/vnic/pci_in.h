@@ -82,25 +82,37 @@
 
 #endif /* NFD_IN_WQ_SHARED */
 
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem)                            \
+    _emem##_queues_DECL                                                 \
+    ASM(.alloc_resource nfd_in_issued_lso_ring_num##_isl##0 _emem##_queues global 1 1)
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, _emem)    \
+    NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem)
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl)                       \
+    NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, NFD_PCIE##_isl##_EMEM)
+#define NFD_IN_ISSUED_LSO_RING_DECL(_isl) NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl)
 
 #ifdef NFD_PCIE0_EMEM
     NFD_IN_RINGS_DECL(0);
     NFD_IN_RING_NUM_ALLOC(0, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
     NFD_IN_RINGS_DECL(1);
     NFD_IN_RING_NUM_ALLOC(1, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
     NFD_IN_RINGS_DECL(2);
     NFD_IN_RING_NUM_ALLOC(2, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
     NFD_IN_RINGS_DECL(3);
     NFD_IN_RING_NUM_ALLOC(3, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(3);
 #endif
 
 

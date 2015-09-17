@@ -56,6 +56,7 @@ enum pcie_cpp2pcie_bar {
  * "_isl" is a constant island number, "_comp" is either "nfd_out" or
  * "nfd_in", and "_num" is the ring number.  For "nfd_out", "_num"
  * must be zero.  For "nfd_in", "_num" may be [0 .. (NFD_IN_NUM_WQS-1)]. */
+ /* Added "nfd_in_issued_lso" "_num" should always for 0 */
 #define NFD_RING_LINK_IND(_isl, _comp, _num) \
     _link_sym(_comp##_ring_num##_isl##_num)
 #define NFD_RING_LINK(_isl, _comp, _num) NFD_RING_LINK_IND(_isl, _comp, _num)
