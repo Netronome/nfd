@@ -1067,6 +1067,9 @@ nfd_cfg_next_queue(struct nfd_cfg_msg *cfg_msg, unsigned int *queue)
  * Check the ClockResetControl for the PCIe island to ensure PCIe link is up
  * If the PCIe link is not up, it is not safe to run NFD on the island, so
  * halt the ME immediately.
+ *
+ * This function "busy waits" on the PCIe link check to ensure that no other
+ * contexts can execute while it tests the link.
  */
 __intrinsic void
 nfd_cfg_check_pcie_link()
@@ -1076,12 +1079,20 @@ nfd_cfg_check_pcie_link()
 #define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf     16
 #define NFP_PCIEX_CLOCK_RESET_CTRL_ACTIVE           0xf
 
-    unsigned int pcie_sts_raw;
+    __xread unsigned int pcie_sts_raw;
     unsigned int pcie_sts;
+    unsigned int pcie_sts_addr;
+    SIGNAL pcie_sts_sig;
 
     /* Check the ClockResetControl value */
-    pcie_sts_raw = xpb_read(NFP_PCIEX_CLOCK_RESET_CTRL |
-                            (PCIE_ISL << NFP_PCIEX_ISL_shf));
+    pcie_sts_addr = (NFP_PCIEX_CLOCK_RESET_CTRL |
+                     (PCIE_ISL << NFP_PCIEX_ISL_shf));
+    __asm ct[xpb_read, pcie_sts_raw, pcie_sts_addr, 0,  \
+             1], sig_done[pcie_sts_sig];
+
+    /* Busy wait on the read signal to prevent other threads executing */
+    while (!signal_test(&pcie_sts_sig));
+
     pcie_sts = ((pcie_sts_raw >> NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf) &
                 NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk);
 
