@@ -516,9 +516,8 @@ do {                                                                         \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                           NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);\
             }                                                                \
-/*            queue_data[queue].curr_buf = precache_bufs_use();          */      \
-            _ISSUE_PROC_MU_CHK(queue_data[queue].curr_buf);                  \
             queue_data[queue].curr_buf = mu_buf_xread;                       \
+            _ISSUE_PROC_MU_CHK(queue_data[queue].curr_buf);                  \
             queue_data[queue].lso_payload_len = 0;                           \
             queue_data[queue].offset = NFD_IN_DATA_OFFSET -                  \
                 tx_desc.pkt##_pkt.offset;                                    \
