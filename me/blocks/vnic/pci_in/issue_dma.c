@@ -15,8 +15,10 @@
 #include <nfp/mem_ring.h>
 #include <std/reg_utils.h>
 #include <std/cntrs.h>
+#ifdef TX_LSO_ENABLE
 #include <blm/libblm.h>
 #include <blm/libblm_pkt_fl.h>
+#endif
 
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
