@@ -39,6 +39,22 @@
 #define NFD_IN_MAX_QUEUES       64
 
 
+#ifndef NFD_IN_NUM_SEQRS
+#define NFD_IN_NUM_SEQRS 1
+#endif
+
+#ifndef NFD_IN_SEQR_QSHIFT
+#define NFD_IN_SEQR_QSHIFT 0
+#endif
+
+#if (NFD_IN_NUM_SEQRS < 1 || NFD_IN_NUM_SEQRS > 64 || \
+    (NFD_IN_NUM_SEQRS & (NFD_IN_NUM_SEQRS - 1)) != 0)
+#error "NFD_IN_NUM_SEQRS must be a power of 2 between 1 and 64"
+#endif
+
+#define NFD_IN_SEQR_NUM(_qnum) \
+    (((_qnum) >> NFD_IN_SEQR_QSHIFT) & (NFD_IN_NUM_SEQRS - 1))
+
 
 /**
  * PCI.in Packet descriptor format
@@ -245,6 +261,22 @@
     bitfield_insert(BF_A(out_pkt_meta, PKT_META_LEN_bf), v, tmp, BF_ML(PKT_META_LEN_bf))
     bitfield_extract(v, BF_AML(in_nfd_meta, NFD_IN_BUFADDR_fld))
     bitfield_insert(BF_A(out_pkt_meta, PKT_META_MUPTR_bf), 0, v, BF_ML(PKT_META_MUPTR_bf))
+.end
+#endm
+
+
+#macro nfd_in_qid_to_seqr(out_seqr, in_qid)
+.begin
+    alu[out_seqr, (NFD_IN_NUM_SEQRS - 1), AND, in_qid, >>NFD_IN_SEQR_QSHIFT]
+.end
+#endm
+
+
+#macro nfd_in_get_seqr(out_seqr, in_nfd_meta)
+.begin
+    .reg qid
+    nfd_in_get_qid(qid, in_nfd_meta)
+    nfd_in_qid_to_seqr(out_seqr, qid)
 .end
 #endm
 

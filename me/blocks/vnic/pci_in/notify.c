@@ -176,7 +176,8 @@ static __gpr unsigned int dst_q;
 
 
 #ifdef NFD_IN_ADD_SEQN
-#if (NFD_IN_NUM_WQS == 1)
+
+#if (NFD_IN_NUM_SEQRS == 1)
 /* Add sequence numbers, using a shared GPR to store */
 static __shared __gpr unsigned int dst_q_seqn = 0;
 
@@ -186,25 +187,35 @@ do {                                                                    \
     dst_q_seqn++;                                                       \
 } while (0)
 
-#else
-/* Add sequence numbers, using a LM to store */
-static __shared __lmem unsigned int dst_q_seqn[NFD_IN_NUM_WQS];
+#else /* (NFD_IN_NUM_SEQRS == 1) */
 
+/* Add sequence numbers, using a LM to store */
+static __shared __lmem unsigned int seq_nums[NFD_IN_NUM_SEQRS];
+
+/*
+ * XXX this ugly bit of code was the best way I could find to make the
+ * compiler generate intelligent assembly here.  This should just be
+ * a shift + AND operation to get the LM address.  But if I use the
+ * NFD_IN_SEQR_NUM(q), I get 2-4 extra instructions and this is on the
+ * fast path in a potentially down-clocked ME.
+ */
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
-    pkt_desc_tmp.reserved = dst_q_seqn[dst_q];                          \
-    dst_q_seqn[dst_q]++;                                                \
+    pkt_desc_tmp.reserved =                                             \
+        seq_nums[(pkt_desc_tmp.__raw[0] >> NFD_IN_SEQR_QSHIFT) &        \
+                 (NFD_IN_NUM_SEQRS - 1)]++;                             \
 } while (0)
 
-#endif
+#endif /* (NFD_IN_NUM_SEQRS == 1) */
 
-#else
+#else /* NFD_IN_ADD_SEQN */
+
 /* Null sequence number add */
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
 } while (0)
 
-#endif
+#endif /* NFD_IN_ADD_SEQN */
 
 #if (NFD_IN_NUM_WQS == 1)
 #define _SET_DST_Q(_pkt)                                                \

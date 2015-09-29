@@ -43,6 +43,23 @@
 #define NFD_IN_MAX_QUEUES   64
 
 
+#ifndef NFD_IN_NUM_SEQRS
+#define NFD_IN_NUM_SEQRS 1
+#endif
+
+#ifndef NFD_IN_SEQR_QSHIFT
+#define NFD_IN_SEQR_QSHIFT 0
+#endif
+
+#if (NFD_IN_NUM_SEQRS < 1 || NFD_IN_NUM_SEQRS > 64 || \
+    (NFD_IN_NUM_SEQRS & (NFD_IN_NUM_SEQRS - 1)) != 0)
+#error "NFD_IN_NUM_SEQRS must be a power of 2 between 1 and 64"
+#endif
+
+#define NFD_IN_SEQR_NUM(_qnum) \
+    (((_qnum) >> NFD_IN_SEQR_QSHIFT) & (NFD_IN_NUM_SEQRS - 1))
+
+
 #ifdef NFD_IN_WQ_SHARED
 
 #define NFD_IN_RINGS_DECL_IND2(_isl, _emem)                             \
