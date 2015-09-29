@@ -171,6 +171,8 @@ NFD_IN_RINGS_MEM(PCIE_ISL);
 
 static __shared mem_ring_addr_t wq_raddr;
 static __shared unsigned int wq_num_base;
+static __gpr unsigned int dst_q;
+
 
 
 #ifdef NFD_IN_ADD_SEQN
@@ -203,6 +205,17 @@ do {                                                                    \
 } while (0)
 
 #endif
+
+#if (NFD_IN_NUM_WQS == 1)
+#define _SET_DST_Q(_pkt)                                                \
+do {                                                                    \
+} while (0)
+#else /* (NFD_IN_NUM_WQS == 1) */
+#define _SET_DST_Q(_pkt)                                                \
+do {                                                                    \
+    dst_q = (batch_in.pkt##_pkt##.lso & NFD_IN_DSTQ_MSK) | wq_num_base; \
+} while (0)
+#endif /* (NFD_IN_NUM_WQS == 1) */
 
 
 /* XXX Move to some sort of CT reflect library */
@@ -265,6 +278,7 @@ notify_setup_shared()
 void
 notify_setup()
 {
+    dst_q = wq_num_base;
     wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
     next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX,
                                     NFD_IN_NOTIFY_END_CTX);
@@ -296,14 +310,13 @@ do {                                                                    \
         _NOTIFY_MU_CHK(_pkt)                                            \
         pkt_desc_tmp.sp0 = 0;                                           \
         pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;              \
-        dst_q = (batch_in.pkt##_pkt##.lso & NFD_IN_DSTQ_MSK);           \
         NFD_IN_ADD_SEQN_PROC;                                           \
-        dst_q |= wq_num_base;                                           \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];         \
         batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1]; \
         batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2]; \
         batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3]; \
                                                                         \
+        _SET_DST_Q(_pkt);                                               \
         __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,     \
                              out_msg_sz, out_msg_sz, sig_done, &wq_sig##_pkt); \
     } else {                                                            \
@@ -333,7 +346,6 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
     unsigned int q_batch;
     unsigned int qc_queue;
 
-    unsigned int dst_q;
     unsigned int out_msg_sz = sizeof(struct nfd_in_pkt_desc);
 
     __xread struct _issued_pkt_batch batch_in;
