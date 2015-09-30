@@ -411,10 +411,6 @@ issue_dma_gather_seq_recv()
 #endif
 
 #ifdef TX_LSO_ENABLE
-#if NFD_IN_MAX_BATCH_SZ > 8
-/* XXX commented out jumbo support for code store for now */
-#define _ISSUE_PROC_JUMBO(_pkt, _sig) do {} while(0)
-#else
 #define _ISSUE_PROC_JUMBO(_pkt, _enq_sig, _dma_sig)                     \
 do {                                                                    \
     /* Issue DMA for 4k of segment, updating processing state */        \
@@ -431,7 +427,6 @@ do {                                                                    \
     descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;                           \
     dma_len -= PCIE_DMA_MAX_SZ;                                         \
 } while (0)
-#endif
 #else
 #define _ISSUE_PROC_JUMBO(_pkt, _sig)                                   \
 do {                                                                    \
@@ -806,25 +801,26 @@ do {                                                                    \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_TX_DESC); \
         _ISSUE_PROC_LSO(_pkt);                                          \
-    if (_type == NFD_IN_DATA_EVENT_TYPE) {                              \
-        descr_tmp.cpp_addr_hi = 0;                                      \
-        descr_tmp.cpp_addr_lo = 0;                                      \
-        descr_tmp.pcie_addr_hi = 0;                                     \
-        descr_tmp.pcie_addr_lo = 0;                                     \
-        /* mode_sel and dma_mode set replaced pcie_dma_set_event */     \
-        descr_tmp.mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;               \
-        descr_tmp.dma_mode = (((_type & 0xF) << 12)  | (_src & 0xFFF)); \
-        descr_tmp.length = 0;                                           \
+        if (_type == NFD_IN_DATA_EVENT_TYPE) {                          \
+            descr_tmp.cpp_addr_hi = 0;                                  \
+            descr_tmp.cpp_addr_lo = 0;                                  \
+            descr_tmp.pcie_addr_hi = 0;                                 \
+            descr_tmp.pcie_addr_lo = 0;                                 \
+            /* mode_sel and dma_mode set replaced pcie_dma_set_event */ \
+            descr_tmp.mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;           \
+            descr_tmp.dma_mode = (((_type & 0xF) << 12) |               \
+                                   (_src & 0xFFF));                     \
+            descr_tmp.length = 0;                                       \
                                                                         \
-        descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG_SIG_ONLY;         \
-        dma_out.pkt##_pkt = descr_tmp;                                  \
-        descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG;                  \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                    \
-                       NFD_IN_DATA_DMA_QUEUE,                           \
-                       sig_done, &dma_sig##_pkt);                       \
-    } else{  \
-        wait_msk &= ~__signals(&dma_sig##_pkt##);                       \
-    }     \
+            descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG_SIG_ONLY;     \
+            dma_out.pkt##_pkt = descr_tmp;                              \
+            descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG;              \
+            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                \
+                           NFD_IN_DATA_DMA_QUEUE,                       \
+                           sig_done, &dma_sig##_pkt);                   \
+        } else {                                                        \
+            wait_msk &= ~__signals(&dma_sig##_pkt##);                   \
+        }                                                               \
         _LSO_TX_DESC_TYPE_CNTR(_pkt);                                   \
     } else if (!queue_data[queue].up) {                                 \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
