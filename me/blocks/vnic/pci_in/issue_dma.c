@@ -137,8 +137,10 @@ static SIGNAL tx_desc_sig, msg_sig, desc_order_sig, dma_order_sig;
 static SIGNAL dma_sig0, dma_sig1, dma_sig2, dma_sig3;
 static SIGNAL_MASK wait_msk;
 
+#ifndef TX_LSO_ENABLE
 static SIGNAL jumbo0, jumbo1;
 static SIGNAL_MASK jumbo_msk = 0;
+#endif
 unsigned int next_ctx;
 
 /* Configure the NN ring */
@@ -413,22 +415,21 @@ issue_dma_gather_seq_recv()
 /* XXX commented out jumbo support for code store for now */
 #define _ISSUE_PROC_JUMBO(_pkt, _sig) do {} while(0)
 #else
-#define _ISSUE_PROC_JUMBO(_pkt, _sig)                                   \
+#define _ISSUE_PROC_JUMBO(_pkt, _enq_sig, _dma_sig)                     \
 do {                                                                    \
     /* Issue DMA for 4k of segment, updating processing state */        \
     pcie_dma_set_sig(&descr_tmp, __MEID, ctx(),                         \
-                     __signal_number(&_sig));                           \
+                     __signal_number(&_dma_sig));                       \
     dma_out.pkt##_pkt## = descr_tmp;                                    \
                                                                         \
     __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                      \
                    NFD_IN_DATA_DMA_QUEUE,                               \
-                   ctx_swap, &dma_sig##_pkt##);                         \
-    __implicit_write(&_sig);                                            \
+                   sig_done, &_enq_sig);                                \
+    __implicit_write(&_dma_sig);                                        \
                                                                         \
     _add_to_pcie_addr(descr_tmp.__raw, PCIE_DMA_MAX_SZ);                \
     descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;                           \
     dma_len -= PCIE_DMA_MAX_SZ;                                         \
-    jumbo_msk |= __signals(&_sig);                                      \
 } while (0)
 #endif
 #else
@@ -450,6 +451,24 @@ do {                                                                    \
     jumbo_msk |= __signals(&_sig);                                      \
 } while (0)
 #endif
+
+#define _ISSUE_PROC_LSO_JUMBO(_pkt, _enq_sig, _dma_sig)                 \
+do {                                                                    \
+    pcie_dma_set_sig(&descr_tmp, __MEID, ctx(),                         \
+                     __signal_number(&_dma_sig));                       \
+    dma_out.pkt##_pkt## = descr_tmp;                                    \
+                                                                        \
+    __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                      \
+                   NFD_IN_DATA_DMA_QUEUE,                               \
+                   sig_done, &_enq_sig);                                \
+    __implicit_write(&_dma_sig);                                        \
+                                                                        \
+    _add_to_pcie_addr(descr_tmp.__raw, PCIE_DMA_MAX_SZ);                \
+    descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;                           \
+    dma_length -= PCIE_DMA_MAX_SZ;                                      \
+    lso_dma_index += PCIE_DMA_MAX_SZ;                                   \
+    amount_extra_dmaed += PCIE_DMA_MAX_SZ;                              \
+} while (0)
 
 #define _ISSUE_PROC_LSO(_pkt)                                                \
 do {                                                                         \
@@ -475,6 +494,8 @@ do {                                                                         \
     __addr40 void *hdr_pkt_ptr;                                              \
     unsigned int hdr_offset;                                                 \
     unsigned int header_to_read;                                             \
+    unsigned int dma_length = 0;                                             \
+    unsigned int amount_extra_dmaed = 0;                                     \
     queue_data[queue].cont = 0;                                              \
     /* if we do not have a header or all the header */                       \
     if (queue_data[queue].lso_hdr_len != tx_desc.pkt##_pkt##.l4_offset) {    \
@@ -519,7 +540,6 @@ do {                                                                         \
                           NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);\
             }                                                                \
             queue_data[queue].curr_buf = mu_buf_xread;                       \
-            _ISSUE_PROC_MU_CHK(queue_data[queue].curr_buf);                  \
             queue_data[queue].lso_payload_len = 0;                           \
             queue_data[queue].offset = NFD_IN_DATA_OFFSET -                  \
                 tx_desc.pkt##_pkt.offset;                                    \
@@ -541,15 +561,16 @@ do {                                                                         \
         /* more to dma than we have buffer for */                            \
         if (mu_buf_left <= dma_left) {                                       \
             /* fill in descriptor length to dma */                           \
-            descr_tmp.length = mu_buf_left;                                  \
+            dma_length = mu_buf_left;                                        \
         }                                                                    \
         /* more mu buffer than we have dma for */                            \
         else {                                                               \
             /* fill in descriptor length to dma */                           \
-            descr_tmp.length = dma_left;                                     \
+            dma_length = dma_left;                                           \
         }                                                                    \
-        descr_tmp.length--;                                                  \
-        if (descr_tmp.length != 0) {                                         \
+        amount_extra_dmaed = 0;                                              \
+        /* if the amount needed to dma is larger than max dma limit */       \
+        if (dma_length > PCIE_DMA_MAX_SZ) {                                  \
             buf_addr = queue_data[queue].curr_buf;                           \
             /* set up the descr_tmp dma values */                            \
             descr_tmp.cpp_addr_hi = buf_addr >> 21;                          \
@@ -557,125 +578,145 @@ do {                                                                         \
             descr_tmp.cpp_addr_lo += queue_data[queue].offset;               \
             descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;        \
             descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;        \
-            descr_tmp.pcie_addr_lo += lso_dma_index;                         \
+            _add_to_pcie_addr(descr_tmp.__raw, lso_dma_index);               \
             descr_tmp.rid = queue_data[queue].rid;                           \
-                                                                             \
-            pcie_dma_set_sig(&descr_tmp, __MEID, ctx(),                      \
-                             __signal_number(&lso_dma_sig));                 \
-            dma_out.pkt##_pkt## = descr_tmp;                                 \
-            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                   \
-                           NFD_IN_DATA_DMA_QUEUE, sig_done, &lso_enq_sig);   \
-            /* copy header into packet while we have fired the DMA */        \
-            /* XXX Optimize this with ctm dma to mu from flowenv */          \
-            if (lso_hdr_mask != 0) {                                         \
-                wait_sig_mask(lso_hdr_mask);                                 \
-                lso_hdr_mask = 0;                                            \
-                __implicit_read(&lso_hdr_enq_sig);                           \
-                __implicit_read(&lso_hdr_dma_sig);                           \
-            }                                                                \
-            i = 0;                                                           \
-            if (queue_data[queue].lso_payload_len == 0) {                    \
-                hdr_remainder = queue_data[queue].lso_hdr_len & 0xF;         \
-                header_to_read = (queue_data[queue].lso_hdr_len -            \
-                                                            hdr_remainder);  \
-                /* copy main part of header */                               \
-                while (i < header_to_read) {                                 \
-                    __mem_read64((void *)&lso_hdr_xread[0],                  \
-                                (__mem void *)&lso_hdr_data[                 \
-                                ((queue << __log2(NFD_IN_MAX_LSO_HDR_SZ)) +  \
-                                i)],                                         \
-                                sizeof(lso_hdr_xread), sizeof(lso_hdr_xread),\
-                                sig_done, &lso_hdr_sig);                     \
-                    __wait_for_all(&lso_hdr_sig);                            \
-                    lso_hdr_xwrite[0] = lso_hdr_xread[0];                    \
-                    lso_hdr_xwrite[1] = lso_hdr_xread[1];                    \
-                    lso_hdr_xwrite[2] = lso_hdr_xread[2];                    \
-                    lso_hdr_xwrite[3] = lso_hdr_xread[3];                    \
-                    __mem_write64((void *)&lso_hdr_xwrite[0],                \
-                                  (__mem void *)hdr_pkt_ptr,                 \
-                                  sizeof(lso_hdr_xwrite),                    \
-                                  sizeof(lso_hdr_xwrite), sig_done,          \
-                                  &lso_hdr_sig);                             \
-                    i += sizeof(lso_hdr_xwrite);                             \
-                    hdr_pkt_ptr = (__addr40 void *)(((uint64_t)              \
-                           queue_data[queue].curr_buf << 11) | hdr_offset +  \
-                           i);                                               \
-                    __wait_for_all(&lso_hdr_sig);                            \
-                }                                                            \
-                /* copy remainder portion of header 1-15 bytes*/             \
-                if (hdr_remainder > 0) {                                     \
-                    __mem_read8((void *)&lso_hdr_xread[0],                   \
-                               (__mem void *)&lso_hdr_data[((queue <<        \
-                               __log2(NFD_IN_MAX_LSO_HDR_SZ)) + i)],         \
-                               hdr_remainder,                                \
-                               sizeof(lso_hdr_xread),                        \
-                               sig_done, &lso_hdr_sig);                      \
-                    __wait_for_all(&lso_hdr_sig);                            \
-                                                                             \
-                    lso_hdr_xwrite[0] = lso_hdr_xread[0];                    \
-                    lso_hdr_xwrite[1] = lso_hdr_xread[1];                    \
-                    lso_hdr_xwrite[2] = lso_hdr_xread[2];                    \
-                    lso_hdr_xwrite[3] = lso_hdr_xread[3];                    \
-                                                                             \
-                    __mem_write8((void *)&lso_hdr_xwrite[0],                 \
-                                (__mem void *)hdr_pkt_ptr,                   \
-                                hdr_remainder,                               \
-                                sizeof(lso_hdr_xwrite), sig_done,            \
-                                &lso_hdr_sig);                               \
-                    __wait_for_all(&lso_hdr_sig);                            \
-                }                                                            \
-            }                                                                \
-            /* account for how much was read */                              \
-            descr_tmp.length++;                                              \
-            lso_dma_index += descr_tmp.length;                               \
-            mu_buf_left -= descr_tmp.length;                                 \
-            queue_data[queue].lso_payload_len += descr_tmp.length;           \
-            queue_data[queue].offset += descr_tmp.length;                    \
-            __wait_for_all(&lso_enq_sig, &lso_dma_sig);                      \
-            /* if we are at end of mu_buf */                                 \
-            if (queue_data[queue].lso_payload_len >=                         \
-                tx_desc.pkt##_pkt##.lso) {                                   \
-                pkt_ptr = (__addr40 void *)(((uint64_t)                      \
-                            queue_data[queue].curr_buf << 11) |              \
-                            queue_data[queue].offset);                       \
-                /* put finished mu buffer on lso_ring to notify */           \
-                issued_tmp.eop = 1;                                          \
-                issued_tmp.sp1 = 0;                                          \
-                issued_tmp.offset = tx_desc.pkt##_pkt##.offset;              \
-                issued_tmp.buf_addr = queue_data[queue].curr_buf;            \
-                issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];          \
-                issued_tmp.l4_offset = ++queue_data[queue].lso_seq_cnt;      \
-                /* if last of LSO segment set lso end flag and we have no */ \
-                /* more dma data */                                          \
-                if ((lso_dma_index == tx_desc.pkt##_pkt##.dma_len) &&        \
-                    tx_desc.pkt##_pkt##.eop) {                               \
-                    issued_tmp.flags |= PCIE_DESC_TX_LSO;                    \
-                    NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,               \
-                        NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING);\
-                    queue_data[queue].lso_hdr_len = 0;                       \
-                }                                                            \
-                issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];          \
-                issued_tmp.data_len = queue_data[queue].offset -             \
-                             (NFD_IN_DATA_OFFSET - tx_desc.pkt##_pkt.offset);\
-                /* set that we do not have a curr_buf */                     \
-                queue_data[queue].curr_buf = 0;                              \
-                queue_data[queue].offset = 0;                                \
-                /* send the lso pkt desc to the lso ring */                  \
-                batch_out.pkt##_pkt## = issued_tmp;                          \
-                __mem_ring_journal(nfd_in_issued_lso_ring_num,               \
-                                nfd_in_issued_lso_ring_addr,                 \
-                                &batch_out.pkt##_pkt##,                      \
-                                sizeof(struct nfd_in_issued_desc),           \
-                                sizeof(struct nfd_in_issued_desc), sig_done, \
-                                &lso_journal_sig);                           \
+            descr_tmp.length = PCIE_DMA_MAX_SZ - 1;                          \
+            /* issue a dma for max size */                                   \
+            _ISSUE_PROC_LSO_JUMBO(_pkt, lso_jumbo_enq_sig,                   \
+                                  lso_jumbo_dma_sig);                        \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
+                                 NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_TX_DESC);\
+            __wait_for_all(&lso_jumbo_enq_sig, &lso_jumbo_dma_sig);          \
+            if (dma_length > PCIE_DMA_MAX_SZ) {                              \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
-                        NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING);\
-                /* used to track how many desc we have put on ring will */   \
-                /* set value in the batch out sp0 for the packet so that */  \
-                /* notify hnow how many to read in  */                       \
-                lso_issued_index++;                                          \
-                __wait_for_all(&lso_journal_sig);                            \
+                                 NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_DBL_DMA);\
+                /* issue a dma for max size */                               \
+                _ISSUE_PROC_LSO_JUMBO(_pkt, lso_jumbo_enq_sig,               \
+                                      lso_jumbo_dma_sig);                    \
+                __wait_for_all(&lso_jumbo_enq_sig, &lso_jumbo_dma_sig);      \
             }                                                                \
+        }                                                                    \
+        buf_addr = queue_data[queue].curr_buf;                               \
+        /* set up the descr_tmp dma values */                                \
+        descr_tmp.cpp_addr_hi = buf_addr >> 21;                              \
+        descr_tmp.cpp_addr_lo = buf_addr << 11;                              \
+        descr_tmp.cpp_addr_lo += queue_data[queue].offset +                  \
+                                 amount_extra_dmaed;                         \
+        descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;            \
+        descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;            \
+        _add_to_pcie_addr(descr_tmp.__raw, lso_dma_index);                   \
+        descr_tmp.rid = queue_data[queue].rid;                               \
+        dma_length--;                                                        \
+        descr_tmp.length = dma_length;                                       \
+                                                                             \
+        pcie_dma_set_sig(&descr_tmp, __MEID, ctx(),                          \
+                         __signal_number(&lso_dma_sig));                     \
+        dma_out.pkt##_pkt## = descr_tmp;                                     \
+        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                       \
+                       NFD_IN_DATA_DMA_QUEUE, sig_done, &lso_enq_sig);       \
+        /* copy header into packet while we have fired the DMA */            \
+        /* XXX Optimize this with ctm dma to mu from flowenv */              \
+        if (lso_hdr_mask != 0) {                                             \
+            wait_sig_mask(lso_hdr_mask);                                     \
+            lso_hdr_mask = 0;                                                \
+            __implicit_read(&lso_hdr_enq_sig);                               \
+            __implicit_read(&lso_hdr_dma_sig);                               \
+        }                                                                    \
+        i = 0;                                                               \
+        if (queue_data[queue].lso_payload_len == 0) {                        \
+            hdr_remainder = queue_data[queue].lso_hdr_len & 0xF;             \
+            header_to_read = (queue_data[queue].lso_hdr_len - hdr_remainder);\
+            /* copy main part of header */                                   \
+            while (i < header_to_read) {                                     \
+                __mem_read64((void *)&lso_hdr_xread[0],                      \
+                            (__mem void *)&lso_hdr_data[                     \
+                            ((queue << __log2(NFD_IN_MAX_LSO_HDR_SZ)) +      \
+                            i)],                                             \
+                            sizeof(lso_hdr_xread), sizeof(lso_hdr_xread),    \
+                            sig_done, &lso_hdr_sig);                         \
+                __wait_for_all(&lso_hdr_sig);                                \
+                lso_hdr_xwrite[0] = lso_hdr_xread[0];                        \
+                lso_hdr_xwrite[1] = lso_hdr_xread[1];                        \
+                lso_hdr_xwrite[2] = lso_hdr_xread[2];                        \
+                lso_hdr_xwrite[3] = lso_hdr_xread[3];                        \
+                __mem_write64((void *)&lso_hdr_xwrite[0],                    \
+                              (__mem void *)hdr_pkt_ptr,                     \
+                              sizeof(lso_hdr_xwrite), sizeof(lso_hdr_xwrite),\
+                              sig_done, &lso_hdr_sig);                       \
+                i += sizeof(lso_hdr_xwrite);                                 \
+                hdr_pkt_ptr = (__addr40 void *)(((uint64_t)                  \
+                       queue_data[queue].curr_buf << 11) | hdr_offset +  i); \
+                __wait_for_all(&lso_hdr_sig);                                \
+            }                                                                \
+            /* copy remainder portion of header 1-15 bytes*/                 \
+            if (hdr_remainder > 0) {                                         \
+                __mem_read8((void *)&lso_hdr_xread[0],                       \
+                           (__mem void *)&lso_hdr_data[((queue <<            \
+                           __log2(NFD_IN_MAX_LSO_HDR_SZ)) + i)],             \
+                           hdr_remainder, sizeof(lso_hdr_xread), sig_done,   \
+                           &lso_hdr_sig);                                    \
+                __wait_for_all(&lso_hdr_sig);                                \
+                                                                             \
+                lso_hdr_xwrite[0] = lso_hdr_xread[0];                        \
+                lso_hdr_xwrite[1] = lso_hdr_xread[1];                        \
+                lso_hdr_xwrite[2] = lso_hdr_xread[2];                        \
+                lso_hdr_xwrite[3] = lso_hdr_xread[3];                        \
+                                                                             \
+                __mem_write8((void *)&lso_hdr_xwrite[0],                     \
+                            (__mem void *)hdr_pkt_ptr, hdr_remainder,        \
+                            sizeof(lso_hdr_xwrite), sig_done, &lso_hdr_sig); \
+                __wait_for_all(&lso_hdr_sig);                                \
+            }                                                                \
+        }                                                                    \
+            /* account for how much was read */                              \
+        lso_dma_index += (descr_tmp.length + 1);                             \
+        queue_data[queue].lso_payload_len += (descr_tmp.length + 1 +         \
+                                             amount_extra_dmaed);            \
+        queue_data[queue].offset += (descr_tmp.length + 1 +                  \
+                                     amount_extra_dmaed);                    \
+        __wait_for_all(&lso_enq_sig, &lso_dma_sig);                          \
+        /* if we are at end of mu_buf */                                     \
+        if (queue_data[queue].lso_payload_len >=  tx_desc.pkt##_pkt##.lso) { \
+            pkt_ptr = (__addr40 void *)(((uint64_t)                          \
+                        queue_data[queue].curr_buf << 11) |                  \
+                        queue_data[queue].offset);                           \
+            /* put finished mu buffer on lso_ring to notify */               \
+            issued_tmp.eop = 1;                                              \
+            issued_tmp.sp1 = 0;                                              \
+            issued_tmp.offset = tx_desc.pkt##_pkt##.offset;                  \
+            issued_tmp.buf_addr = queue_data[queue].curr_buf;                \
+            issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
+            issued_tmp.l4_offset = ++queue_data[queue].lso_seq_cnt;          \
+            /* if last of LSO segment set lso end flag and we have no */     \
+            /* more dma data */                                              \
+            if ((lso_dma_index == tx_desc.pkt##_pkt##.dma_len) &&            \
+                tx_desc.pkt##_pkt##.eop) {                                   \
+                issued_tmp.flags |= PCIE_DESC_TX_LSO;                        \
+                NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
+                        NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING);\
+                queue_data[queue].lso_hdr_len = 0;                           \
+            }                                                                \
+            issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
+            issued_tmp.data_len = queue_data[queue].offset -                 \
+                             (NFD_IN_DATA_OFFSET - tx_desc.pkt##_pkt.offset);\
+            /* set that we do not have a curr_buf */                         \
+            queue_data[queue].curr_buf = 0;                                  \
+            queue_data[queue].offset = 0;                                    \
+            /* send the lso pkt desc to the lso ring */                      \
+            batch_out.pkt##_pkt## = issued_tmp;                              \
+            __mem_ring_journal(nfd_in_issued_lso_ring_num,                   \
+                            nfd_in_issued_lso_ring_addr,                     \
+                            &batch_out.pkt##_pkt##,                          \
+                            sizeof(struct nfd_in_issued_desc),               \
+                            sizeof(struct nfd_in_issued_desc), sig_done,     \
+                            &lso_journal_sig);                               \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
+                        NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING);\
+            /* used to track how many desc we have put on ring will */       \
+            /* set value in the batch out sp0 for the packet so that */      \
+            /* notify how how many to read in  */                            \
+            lso_issued_index++;                                              \
+            __wait_for_all(&lso_journal_sig);                                \
         }                                                                    \
     } /* while */                                                            \
     if (lso_hdr_mask != 0) {                                                 \
@@ -750,6 +791,8 @@ do {                                                                         \
 #ifdef TX_LSO_ENABLE
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
+    SIGNAL lso_jumbo_dma_sig;                                           \
+    SIGNAL lso_jumbo_enq_sig;                                           \
     unsigned int dma_len;                                               \
     unsigned int buf_addr;                                              \
     unsigned int curr_buf;                                              \
@@ -763,6 +806,7 @@ do {                                                                    \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_TX_DESC); \
         _ISSUE_PROC_LSO(_pkt);                                          \
+    if (_type == NFD_IN_DATA_EVENT_TYPE) {                              \
         descr_tmp.cpp_addr_hi = 0;                                      \
         descr_tmp.cpp_addr_lo = 0;                                      \
         descr_tmp.pcie_addr_hi = 0;                                     \
@@ -778,6 +822,9 @@ do {                                                                    \
         __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                    \
                        NFD_IN_DATA_DMA_QUEUE,                           \
                        sig_done, &dma_sig##_pkt);                       \
+    } else{  \
+        wait_msk &= ~__signals(&dma_sig##_pkt##);                       \
+    }     \
         _LSO_TX_DESC_TYPE_CNTR(_pkt);                                   \
     } else if (!queue_data[queue].up) {                                 \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
@@ -900,23 +947,20 @@ do {                                                                    \
             /* precache_bufs_compute_seq_safe will give a pessimistic */\
             /* safe count. */                                           \
             data_dma_seq_issued--;                                      \
-            /* Wait for previous jumbo frame on ctx to complete */      \
-            if (jumbo_msk != 0) {                                       \
-                wait_sig_mask(jumbo_msk);                               \
-                jumbo_msk = 0;                                          \
-                __implicit_read(&jumbo0);                               \
-                __implicit_read(&jumbo1);                               \
-            }                                                           \
                                                                         \
             /* Always DMA PCIE_DMA_MAX_SZ segments for jumbos */        \
             descr_tmp.length = PCIE_DMA_MAX_SZ - 1;                     \
                                                                         \
             /* Handle first PCIE_DMA_MAX_SZ */                          \
-            _ISSUE_PROC_JUMBO(_pkt, jumbo0);                            \
+            _ISSUE_PROC_JUMBO(_pkt, lso_jumbo_enq_sig,                  \
+                              lso_jumbo_dma_sig);                       \
+            __wait_for_all(&lso_jumbo_enq_sig, &lso_jumbo_dma_sig);     \
                                                                         \
             if (dma_len > PCIE_DMA_MAX_SZ) {                            \
                 /* Handle second PCIE_DMA_MAX_SZ */                     \
-                _ISSUE_PROC_JUMBO(_pkt, jumbo1);                        \
+                _ISSUE_PROC_JUMBO(_pkt, lso_jumbo_enq_sig,              \
+                                  lso_jumbo_dma_sig);                   \
+                __wait_for_all(&lso_jumbo_enq_sig, &lso_jumbo_dma_sig); \
             }                                                           \
             /* Re-increment data_dma_seq_issued */                      \
             data_dma_seq_issued++;                                      \
@@ -1206,8 +1250,10 @@ issue_dma()
                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
 #endif
 
+#ifndef TX_LSO_ENABLE
     __implicit_write(&jumbo0);
     __implicit_write(&jumbo1);
+#endif
 
     reorder_test_swap(&desc_order_sig);
 
@@ -1306,6 +1352,7 @@ issue_dma()
         _ISSUE_CLR(2);
         _ISSUE_CLR(3);
     } else {
+        local_csr_write(local_csr_mailbox_0, 0xDEEDBEEF);
         halt();
     }
 
