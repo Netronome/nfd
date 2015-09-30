@@ -86,7 +86,7 @@
 #ifdef TX_LSO_ENABLE
 /* LSO defines */
 #define NFD_IN_ISSUED_LSO_RING_NUM  0
-#define NFD_IN_ISSUED_LSO_RING_SZ   8192  /* 2K * 4LW */
+#define NFD_IN_ISSUED_LSO_RING_SZ   32768  /* ring needs 1000B per batch * number Queues */
 #define NFD_IN_MAX_LSO_HDR_SZ       256
 #endif
 
