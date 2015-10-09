@@ -122,7 +122,7 @@
 #endif
 
 
-/**
+/*
  * PCI.in TX descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
@@ -137,6 +137,9 @@
  *       +-------------------------------+-------------------------------+
  *
  *      E -> End of packet
+ */
+/**
+ * Descriptor of data to be transmitted passed from the host driver to the NFP.
  */
 struct nfd_in_tx_desc {
     union {
@@ -160,7 +163,7 @@ struct nfd_in_tx_desc {
 };
 
 
-/**
+/*
  * PCI.in Packet descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
@@ -176,6 +179,10 @@ struct nfd_in_tx_desc {
  *
  *      S -> sp0 (spare)
  *    itf -> intf
+ */
+/**
+ * Descriptor of data to be transmitted passed from the NFD microcode to
+ * the rest of the NFP application.
  */
 struct nfd_in_pkt_desc {
     union {
@@ -262,13 +269,13 @@ __intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,
 
 /**
  * Populate a nfd_in_pkt_desc struct from the NFD meta data
- * @param desc      PCI.IN descriptor for the packet
- * @param pkt_info  nbi_meta_pkt_info struct for the packet
+ * @param pkt_info     nbi_meta_pkt_info struct for the packet
+ * @param nfd_in_meta  PCI.IN descriptor for the packet
  *
  * "pkt_info->isl", "pkt_info->pnum", and "pkt_info->split" are set to zero
  * as PCI.IN returns an "MU only" packet.
  */
-__intrinsic void nfd_in_fill_meta(void *pkt_info,
+__intrinsic void nfd_in_fill_meta(void *pkt_info pkt_info,
                                   __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
 
