@@ -83,12 +83,10 @@
 #define NFD_IN_DBG_GATHER_INTVL     1000000
 #define NFD_IN_DBG_ISSUE_DMA_INTVL  1000000
 
-#ifdef TX_LSO_ENABLE
 /* LSO defines */
 #define NFD_IN_ISSUED_LSO_RING_NUM  0
 #define NFD_IN_ISSUED_LSO_RING_SZ   32768  /* ring needs 1000B per batch * number Queues */
 #define NFD_IN_MAX_LSO_HDR_SZ       256
-#endif
 
 /* NFD IN LSO Debug Counters. */
 enum NFD_IN_LSO_CNTR_IDX {
@@ -261,7 +259,6 @@ struct nfd_in_queue_info {
 };
 
 
-#ifdef TX_LSO_ENABLE
 struct nfd_in_dma_state {
     union {
         struct {
@@ -285,23 +282,6 @@ struct nfd_in_dma_state {
         unsigned int __raw[4];
     };
 };
-#else
-struct nfd_in_dma_state {
-    union {
-        struct {
-            unsigned int sp0:24;
-            unsigned int rid:8;
-            unsigned int cont:1;
-            unsigned int up:1;
-            unsigned int sp1:1;
-            unsigned int curr_buf:29;
-            unsigned int offset;
-            unsigned int sp2;
-        };
-        unsigned int __raw[4];
-    };
-};
-#endif
 
 
 struct nfd_in_batch_desc {

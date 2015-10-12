@@ -52,10 +52,8 @@ __remote volatile SIGNAL nfd_in_data_served_refl_sig;
 static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
 
 static unsigned int nfd_in_lso_cntr_addr = 0;
-#ifdef TX_LSO_ENABLE
 static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr;
 static __gpr unsigned int nfd_in_issued_lso_ring_num;
-#endif
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
 static SIGNAL msg_sig, qc_sig;
@@ -148,70 +146,36 @@ static __shared mem_ring_addr_t wq_raddr;
 static __shared unsigned int wq_num_base;
 
 
-#ifdef TX_LSO_ENABLE
-    #ifdef NFD_IN_ADD_SEQN
-    #if (NFD_IN_NUM_WQS == 1)
-    /* Add sequence numbers, using a shared GPR to store */
-    static __shared __gpr dst_q_seqn = 0;
+#ifdef NFD_IN_ADD_SEQN
+#if (NFD_IN_NUM_WQS == 1)
+/* Add sequence numbers, using a shared GPR to store */
+static __shared __gpr dst_q_seqn = 0;
 
-    #define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                                  \
-    do {                                                                    \
-        _seq = dst_q_seqn;                                 \
-        dst_q_seqn += _num_seq;                                             \
+#define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                            \
+    do {                                                                \
+        _seq = dst_q_seqn;                                              \
+        dst_q_seqn += _num_seq;                                         \
     } while (0)
-
-    #else
-    /* Add sequence numbers, using a LM to store */
-    static __shared __lmem dst_q_seqn[NFD_IN_NUM_WQS];
-
-    #define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                                  \
-    do {                                                                    \
-        _seq = dst_q_seqn[dst_q];                          \
-        dst_q_seqn[dst_q] += _num_seq;                                      \
-    } while (0)
-
-    #endif
-
-    #else
-    /* Null sequence number add */
-    #define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                                  \
-    do {                                                                    \
-        _seq = 0; \
-    } while (0)
-
-    #endif
 
 #else
-    #ifdef NFD_IN_ADD_SEQN
-    #if (NFD_IN_NUM_WQS == 1)
-    /* Add sequence numbers, using a shared GPR to store */
-    static __shared __gpr dst_q_seqn = 0;
+/* Add sequence numbers, using a LM to store */
+static __shared __lmem dst_q_seqn[NFD_IN_NUM_WQS];
 
-    #define NFD_IN_ADD_SEQN_PROC                                            \
-    do {                                                                    \
-        pkt_desc_tmp.reserved = dst_q_seqn;                                 \
-        dst_q_seqn++;                                                       \
+#define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                            \
+    do {                                                                \
+        _seq = dst_q_seqn[dst_q];                                       \
+        dst_q_seqn[dst_q] += _num_seq;                                  \
     } while (0)
 
-    #else
-    /* Add sequence numbers, using a LM to store */
-    static __shared __lmem dst_q_seqn[NFD_IN_NUM_WQS];
+#endif
 
-    #define NFD_IN_ADD_SEQN_PROC                                            \
-    do {                                                                    \
-        pkt_desc_tmp.reserved = dst_q_seqn[dst_q];                          \
-        dst_q_seqn[dst_q]++;                                                \
+#else
+/* Null sequence number add */
+#define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                            \
+    do {                                                                \
+        _seq = 0;                                                       \
     } while (0)
 
-    #endif
-
-    #else
-    /* Null sequence number add */
-    #define NFD_IN_ADD_SEQN_PROC                                            \
-    do {                                                                    \
-    } while (0)
-
-    #endif
 #endif
 
 
@@ -234,12 +198,10 @@ notify_setup_shared()
     wq_raddr = (unsigned long long) NFD_EMEM_LINK(PCIE_ISL) >> 8;
 #endif
 
-#ifdef TX_LSO_ENABLE
     nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
                                                0);
     nfd_in_issued_lso_ring_addr = ((((unsigned long long)
                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
-#endif
 
     /* Kick off ordering */
     reorder_start(NFD_IN_NOTIFY_START_CTX, &msg_order_sig);
@@ -269,7 +231,6 @@ notify_setup()
 #define _NOTIFY_MU_CHK
 #endif
 
-#ifdef TX_LSO_ENABLE
 #ifdef NFD_IN_LSO_CNTR_ENABLE
 #define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)                              \
         if (_flags & PCIE_DESC_TX_LSO) {                          \
@@ -279,11 +240,9 @@ notify_setup()
 #else
 #define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)
 #endif
-#endif
 
 //        _NOTIFY_MU_CHK;                       \
 
-#ifdef TX_LSO_ENABLE
 #define _NOTIFY_PROC(_pkt)                                                   \
 do {                                                                         \
     unsigned int i;                                                          \
@@ -366,29 +325,6 @@ do {                                                                         \
         wait_msk &= ~__signals(&wq_sig##_pkt);                               \
     }                                                                        \
 } while (0)
-#else
-#define _NOTIFY_PROC(_pkt)                                              \
-do {                                                                    \
-    if (batch_in.pkt##_pkt##.eop) {                                     \
-        __critical_path();                                              \
-        pkt_desc_tmp.sp0 = 0;                                           \
-        pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;              \
-        dst_q = 0;                                                      \
-        NFD_IN_ADD_SEQN_PROC;                                           \
-        dst_q |= wq_num_base;                                           \
-        batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];         \
-        batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1]; \
-        batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2]; \
-        batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3]; \
-                                                                        \
-        __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,     \
-                             out_msg_sz, out_msg_sz, sig_done, &wq_sig##_pkt); \
-    } else {                                                            \
-        /* Remove the wq signal from the wait mask */                   \
-        wait_msk &= ~__signals(&wq_sig##_pkt);                          \
-    }                                                                   \
-} while (0)
-#endif
 
 
 /**
@@ -417,7 +353,6 @@ notify()
     struct _pkt_desc_batch batch_tmp;
     struct nfd_in_pkt_desc pkt_desc_tmp;
 
-#ifdef TX_LSO_ENABLE
 #ifdef NFD_IN_LSO_CNTR_ENABLE
     /* get the location of LSO statistics */
     if (nfd_in_lso_cntr_addr == 0) {
@@ -429,7 +364,6 @@ notify()
                                                0);
     nfd_in_issued_lso_ring_addr = ((((unsigned long long)
                                      NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
-#endif
 
     /* Reorder before potentially issuing a ring get */
     wait_for_all(&get_order_sig);

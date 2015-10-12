@@ -15,10 +15,8 @@
 #include <nfp/mem_ring.h>
 #include <std/reg_utils.h>
 #include <std/cntrs.h>
-#ifdef TX_LSO_ENABLE
 #include <blm/libblm.h>
 #include <blm/libblm_pkt_fl.h>
-#endif
 
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
@@ -80,7 +78,6 @@ __shared __lmem struct nfd_in_dma_state queue_data[NFD_IN_MAX_QUEUES];
 
 static unsigned int nfd_in_lso_cntr_addr = 0;
 
-#ifdef TX_LSO_ENABLE
 /* storage for LSO header on a per queue basis */
 #define NFD_IN_MAX_LSO_HDR_SZ 256
 __export __shared __ctm __align(NFD_IN_MAX_LSO_HDR_SZ) unsigned char
@@ -111,8 +108,6 @@ NFD_IN_ISSUED_LSO_RING_INIT(PCIE_ISL);
 static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr;
 static __gpr unsigned int nfd_in_issued_lso_ring_num;
 
-#endif
-
 /* Sequence number declarations */
 __shared __gpr unsigned int gather_dma_seq_compl = 0;
 __shared __gpr unsigned int gather_dma_seq_serv = 0;
@@ -137,10 +132,6 @@ static SIGNAL tx_desc_sig, msg_sig, desc_order_sig, dma_order_sig;
 static SIGNAL dma_sig0, dma_sig1, dma_sig2, dma_sig3;
 static SIGNAL_MASK wait_msk;
 
-#ifndef TX_LSO_ENABLE
-static SIGNAL jumbo0, jumbo1;
-static SIGNAL_MASK jumbo_msk = 0;
-#endif
 unsigned int next_ctx;
 
 /* Configure the NN ring */
@@ -193,10 +184,8 @@ issue_dma_setup_shared()
 {
     struct nfp_pcie_dma_cfg cfg_tmp;
     __xwrite struct nfp_pcie_dma_cfg cfg;
-#ifdef TX_LSO_ENABLE
     __xwrite uint32_t lso_hdr_data_init_xw = 0xDEAD0000;
     __gpr uint32_t i;
-#endif
 
     /* XXX THS-50 workaround */
     /* cls_ring_setup(NFD_IN_ISSUED_RING_NUM, nfd_in_issued_ring,
@@ -216,7 +205,6 @@ issue_dma_setup_shared()
      */
     desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;
 
-#ifdef TX_LSO_ENABLE
     /* Initialize the CLS LSO header data */
     lso_hdr_data_base = ((unsigned int) &lso_hdr_data) & 0xFFFFFFFF;
     for (i = 0; i < ((NFD_IN_MAX_LSO_HDR_SZ >> 2) * NFD_IN_MAX_QUEUES); i++) {
@@ -228,7 +216,6 @@ issue_dma_setup_shared()
                                                0);
     nfd_in_issued_lso_ring_addr = ((((unsigned long long)
                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
-#endif
 
     /*
      * Setup the DMA configuration registers
@@ -290,12 +277,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
         /* Initialise queue state */
         queue_data[bmsk_queue].sp0 = 0;
-#ifdef TX_LSO_ENABLE
         queue_data[bmsk_queue].lso_hdr_len = 0;
         queue_data[bmsk_queue].lso_payload_len = 0;
-#else
-        queue_data[bmsk_queue].sp2 = 0;
-#endif
         queue_data[bmsk_queue].rid = 0;
         if (cfg_msg->vnic != NFD_MAX_VFS) {
             queue_data[bmsk_queue].rid = cfg_msg->vnic + NFD_CFG_VF_OFFSET;
@@ -322,12 +305,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 
         /* Clear queue state */
         queue_data[bmsk_queue].sp0 = 0;
-#ifdef TX_LSO_ENABLE
         queue_data[bmsk_queue].lso_hdr_len = 0;
         queue_data[bmsk_queue].lso_payload_len = 0;
-#else
-        queue_data[bmsk_queue].sp2 = 0;
-#endif
         /* Leave RID configured after first set */
         /* "cont" is used as part of the "up" signalling,
          * to move the "up" test off the fast path. */
@@ -395,7 +374,6 @@ issue_dma_gather_seq_recv()
 #define _ISSUE_PROC_MU_CHK(_val)
 #endif
 
-#ifdef TX_LSO_ENABLE
 #ifdef NFD_IN_LSO_CNTR_ENABLE
 #define _LSO_TX_DESC_TYPE_CNTR(_pkt)                                \
     if (tx_desc.pkt##_pkt##.eop) {                                  \
@@ -408,9 +386,7 @@ issue_dma_gather_seq_recv()
 #else
 #define _LSO_TX_DESC_TYPE_CNTR(_pkt)
 #endif
-#endif
 
-#ifdef TX_LSO_ENABLE
 #define _ISSUE_PROC_JUMBO(_pkt, _enq_sig, _dma_sig)                     \
 do {                                                                    \
     /* Issue DMA for 4k of segment, updating processing state */        \
@@ -427,25 +403,6 @@ do {                                                                    \
     descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;                           \
     dma_len -= PCIE_DMA_MAX_SZ;                                         \
 } while (0)
-#else
-#define _ISSUE_PROC_JUMBO(_pkt, _sig)                                   \
-do {                                                                    \
-    /* Issue DMA for 4k of segment, updating processing state */        \
-    pcie_dma_set_sig(&descr_tmp, __MEID, ctx(),                         \
-                     __signal_number(&_sig));                           \
-    dma_out.pkt##_pkt## = descr_tmp;                                    \
-                                                                        \
-    __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                      \
-                   NFD_IN_DATA_DMA_QUEUE,                               \
-                   ctx_swap, &dma_sig##_pkt##);                         \
-    __implicit_write(&_sig);                                            \
-                                                                        \
-    _add_to_pcie_addr(descr_tmp.__raw, PCIE_DMA_MAX_SZ);                \
-    descr_tmp.cpp_addr_lo += PCIE_DMA_MAX_SZ;                           \
-    dma_len -= PCIE_DMA_MAX_SZ;                                         \
-    jumbo_msk |= __signals(&_sig);                                      \
-} while (0)
-#endif
 
 #define _ISSUE_PROC_LSO_JUMBO(_pkt, _enq_sig, _dma_sig)                 \
 do {                                                                    \
@@ -783,7 +740,6 @@ do {                                                                         \
 #define _ISSUE_PROC_A0_SUPPORT(_len)
 #endif
 
-#ifdef TX_LSO_ENABLE
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     SIGNAL lso_jumbo_dma_sig;                                           \
@@ -975,230 +931,6 @@ do {                                                                    \
                                                                         \
     }                                                                   \
 } while (0)
-#else
-#define _ISSUE_PROC(_pkt, _type, _src)                                  \
-do {                                                                    \
-    unsigned int dma_len;                                               \
-    __gpr unsigned int buf_addr;                                        \
-    __gpr unsigned int curr_buf;                                        \
-                                                                        \
-    dma_len = tx_desc.pkt##_pkt##.dma_len;                              \
-    _ISSUE_PROC_A0_SUPPORT(dma_len);                                    \
-                                                                        \
-    if (tx_desc.pkt##_pkt##.eop && !queue_data[queue].cont) {           \
-        /* Fast path, use buf_store data */                             \
-        __critical_path();                                              \
-                                                                        \
-        /* Set NFP buffer address and offset */                         \
-        buf_addr = precache_bufs_use();                                 \
-        issued_tmp.buf_addr = buf_addr;                                 \
-        _ISSUE_PROC_MU_CHK(buf_addr);                                   \
-        descr_tmp.cpp_addr_hi = buf_addr>>21;                           \
-        descr_tmp.cpp_addr_lo = buf_addr<<11;                           \
-        descr_tmp.cpp_addr_lo += NFD_IN_DATA_OFFSET;                    \
-        descr_tmp.cpp_addr_lo -= tx_desc.pkt##_pkt##.offset;            \
-                                                                        \
-        /* Set up notify message */                                     \
-        /* NB: EOP is required for all packets */                       \
-        /*     q_num is must be set on pkt0 */                          \
-        /*     notify technically doesn't use the rest unless */        \
-        /*     EOP is set */                                            \
-        issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                       \
-        issued_tmp.offset = tx_desc.pkt##_pkt##.offset;                 \
-                                                                        \
-        /* Apply a standard "recipe" to complete the DMA issue */       \
-        batch_out.pkt##_pkt## = issued_tmp;                             \
-        batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];  \
-        batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
-                                                                        \
-        descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;       \
-        descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;       \
-                                                                        \
-        descr_tmp.rid = queue_data[queue].rid;                          \
-                                                                        \
-        if (dma_len > PCIE_DMA_MAX_SZ) {                                \
-            /* data_dma_seq_issued was pre-incremented once we could */ \
-            /* process batch.  Since we are going to swap, we */        \
-            /* decrement it temporarily to ensure */                    \
-            /* precache_bufs_compute_seq_safe will give a pessimistic */ \
-            /* safe count. */                                           \
-            data_dma_seq_issued--;                                      \
-                                                                        \
-            /* Wait for previous jumbo frame on ctx to complete */      \
-            if (jumbo_msk != 0) {                                       \
-                wait_sig_mask(jumbo_msk);                               \
-                jumbo_msk = 0;                                          \
-                __implicit_read(&jumbo0);                               \
-                __implicit_read(&jumbo1);                               \
-            }                                                           \
-                                                                        \
-            /* Always DMA PCIE_DMA_MAX_SZ segments for jumbos */        \
-            descr_tmp.length = PCIE_DMA_MAX_SZ - 1;                     \
-                                                                        \
-            /* Handle first PCIE_DMA_MAX_SZ */                          \
-            _ISSUE_PROC_JUMBO(_pkt, jumbo0);                            \
-                                                                        \
-            if (dma_len > PCIE_DMA_MAX_SZ) {                            \
-                /* Handle second PCIE_DMA_MAX_SZ */                     \
-                _ISSUE_PROC_JUMBO(_pkt, jumbo1);                        \
-            }                                                           \
-                                                                        \
-            /* Re-increment data_dma_seq_issued */                      \
-            data_dma_seq_issued++;                                      \
-        }                                                               \
-                                                                        \
-        /* Issue final DMA for the packet */                            \
-        /* mode_sel and dma_mode set replaced pcie_dma_set_event */     \
-        descr_tmp.mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;               \
-        descr_tmp.dma_mode = (((_type & 0xF) << 12) | (_src & 0xFFF));  \
-        descr_tmp.length = dma_len - 1;                                 \
-        dma_out.pkt##_pkt## = descr_tmp;                                \
-                                                                        \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                  \
-                       NFD_IN_DATA_DMA_QUEUE,                           \
-                       sig_done, &dma_sig##_pkt##);                     \
-                                                                        \
-    } else if (!queue_data[queue].up) {                                 \
-        /* Handle down queues off the fast path. */                     \
-        /* As all packets in a batch come from one queue and are */     \
-        /* processed without swapping, all the packets in the batch */  \
-        /* will receive the same treatment.  The batch will still */    \
-        /* use its slot in the DMA sequence numbers and the */          \
-        /* nfd_in_issued_ring. */                                       \
-                                                                        \
-        /* Setting "cont" when the queue is down ensures */             \
-        /* that this processing happens off the fast path. */           \
-                                                                        \
-        /* Flag the packet for notify. */                               \
-        /* Zero EOP and num_batch so that the notify block will not */  \
-        /* produce output to the work queues, and will have no */       \
-        /* effect on the queue controller queue. */                     \
-        /* NB: the rest of the message will be stale. */                \
-        issued_tmp.eop = 0;                                             \
-        issued_tmp.offset = 0;                                          \
-        issued_tmp.sp0 = 0;                                             \
-        issued_tmp.num_batch = 0;                                       \
-        issued_tmp.sp1 = 0;                                             \
-        batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];           \
-                                                                        \
-        /* Handle the DMA sequence numbers for the batch */             \
-        if (_pkt == 0) {                                                \
-            descr_tmp.cpp_addr_hi = 0;                                  \
-            descr_tmp.cpp_addr_lo = 0;                                  \
-            descr_tmp.pcie_addr_hi = 0;                                 \
-            descr_tmp.pcie_addr_lo = 0;                                 \
-            /* mode_sel and dma_mode set replaced pcie_dma_set_event */ \
-            descr_tmp.mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;           \
-            descr_tmp.dma_mode = (((NFD_IN_DATA_EVENT_TYPE & 0xF) << 12)\
-                                    | (data_dma_seq_issued & 0xFFF));   \
-            descr_tmp.length = 0;                                       \
-                                                                        \
-            descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG_SIG_ONLY;     \
-            dma_out.pkt##_pkt = descr_tmp;                              \
-            descr_tmp.dma_cfg_index = NFD_IN_DATA_CFG_REG;              \
-            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                \
-                           NFD_IN_DATA_DMA_QUEUE,                       \
-                           sig_done, &dma_sig##_pkt);                   \
-                                                                        \
-        } else {                                                        \
-            wait_msk &= ~__signals(&dma_sig##_pkt##);                   \
-        }                                                               \
-                                                                        \
-    } else {                                                            \
-        if (!queue_data[queue].cont) {                                  \
-            /* Initialise continuation data */                          \
-                                                                        \
-            /* XXX check efficiency */                                  \
-            curr_buf = precache_bufs_use();                             \
-            _ISSUE_PROC_MU_CHK(curr_buf);                               \
-            queue_data[queue].cont = 1;                                 \
-            queue_data[queue].offset = NFD_IN_DATA_OFFSET;              \
-            queue_data[queue].offset -= tx_desc.pkt##_pkt##.offset;     \
-            queue_data[queue].curr_buf = curr_buf;                      \
-        }                                                               \
-        curr_buf = queue_data[queue].curr_buf;                          \
-                                                                        \
-        /* Use continuation data */                                     \
-        descr_tmp.cpp_addr_hi = curr_buf>>21;                           \
-        descr_tmp.cpp_addr_lo = curr_buf<<11;                           \
-        descr_tmp.cpp_addr_lo += queue_data[queue].offset;              \
-        queue_data[queue].offset += dma_len;                            \
-                                                                        \
-        issued_tmp.buf_addr = curr_buf;                                 \
-                                                                        \
-        if (tx_desc.pkt##_pkt##.eop) {                                  \
-            /* Clear continuation data on EOP */                        \
-                                                                        \
-            /* XXX check this is done in two cycles */                  \
-            queue_data[queue].cont = 0;                                 \
-            queue_data[queue].sp1 = 0;                                  \
-            queue_data[queue].curr_buf = 0;                             \
-            queue_data[queue].offset = 0;                               \
-        }                                                               \
-                                                                        \
-        /* Set up notify message */                                     \
-        /* NB: EOP is required for all packets */                       \
-        /*     q_num is must be set on pkt0 */                          \
-        /*     notify technically doesn't use the rest unless */        \
-        /*     EOP is set */                                            \
-        issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                       \
-        issued_tmp.offset = tx_desc.pkt##_pkt##.offset;                 \
-                                                                        \
-        /* Apply a standard "recipe" to complete the DMA issue */       \
-        batch_out.pkt##_pkt## = issued_tmp;                             \
-        batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];  \
-        batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
-                                                                        \
-        descr_tmp.pcie_addr_hi = tx_desc.pkt##_pkt##.dma_addr_hi;       \
-        descr_tmp.pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;       \
-                                                                        \
-        descr_tmp.rid = queue_data[queue].rid;                          \
-                                                                        \
-        if (dma_len > PCIE_DMA_MAX_SZ) {                                \
-            /* data_dma_seq_issued was pre-incremented once we could */ \
-            /* process batch.  Since we are going to swap, we */        \
-            /* decrement it temporarily to ensure */                    \
-            /* precache_bufs_compute_seq_safe will give a pessimistic */ \
-            /* safe count. */                                           \
-            data_dma_seq_issued--;                                      \
-                                                                        \
-            /* Wait for previous jumbo frame on ctx to complete */      \
-            if (jumbo_msk != 0) {                                       \
-                wait_sig_mask(jumbo_msk);                               \
-                jumbo_msk = 0;                                          \
-                __implicit_read(&jumbo0);                               \
-                __implicit_read(&jumbo1);                               \
-            }                                                           \
-                                                                        \
-            /* Always DMA PCIE_DMA_MAX_SZ segments for jumbos */        \
-            descr_tmp.length = PCIE_DMA_MAX_SZ - 1;                     \
-                                                                        \
-            /* Handle first PCIE_DMA_MAX_SZ */                          \
-            _ISSUE_PROC_JUMBO(_pkt, jumbo0);                            \
-                                                                        \
-            if (dma_len > PCIE_DMA_MAX_SZ) {                            \
-                /* Handle second PCIE_DMA_MAX_SZ */                     \
-                _ISSUE_PROC_JUMBO(_pkt, jumbo1);                        \
-            }                                                           \
-                                                                        \
-            /* Re-increment data_dma_seq_issued */                      \
-            data_dma_seq_issued++;                                      \
-        }                                                               \
-                                                                        \
-        /* Issue final DMA for the packet */                            \
-        /* mode_sel and dma_mode set replaced pcie_dma_set_event */     \
-        descr_tmp.mode_sel = NFP_PCIE_DMA_CMD_DMA_MODE_2;               \
-        descr_tmp.dma_mode = (((_type & 0xF) << 12) | (_src & 0xFFF));  \
-        descr_tmp.length = dma_len - 1;                                 \
-        dma_out.pkt##_pkt## = descr_tmp;                                \
-                                                                        \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                  \
-                       NFD_IN_DATA_DMA_QUEUE,                           \
-                       sig_done, &dma_sig##_pkt##);                     \
-    }                                                                   \
-                                                                        \
-} while (0)
-#endif
 
 
 #define _ISSUE_CLR(_pkt)                                                \
@@ -1232,7 +964,6 @@ issue_dma()
     unsigned int queue;
     unsigned int num;
 
-#ifdef TX_LSO_ENABLE
 #ifdef NFD_IN_LSO_CNTR_ENABLE
     /* get the location of LSO statistics */
     if (nfd_in_lso_cntr_addr == 0) {
@@ -1244,12 +975,6 @@ issue_dma()
                                                0);
     nfd_in_issued_lso_ring_addr = ((((unsigned long long)
                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
-#endif
-
-#ifndef TX_LSO_ENABLE
-    __implicit_write(&jumbo0);
-    __implicit_write(&jumbo1);
-#endif
 
     reorder_test_swap(&desc_order_sig);
 
