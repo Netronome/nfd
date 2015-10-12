@@ -159,8 +159,7 @@ const char *nfd_in_lso_cntr_names[] = {
 };
 
 /* XXX remove counter enable when done developing LSO */
-//#define NFD_IN_LSO_CNTR_ENABLE
-#if defined(NFD_IN_LSO_CNTR_ENABLE) && defined(TX_LSO_ENABLE)
+#if defined(NFD_IN_LSO_CNTR_ENABLE)
     CNTRS64_DECLARE(nfd_in_lso_cntrs, NFD_IN_LSO_CNTR_LENGTH, __emem_n(0));
     #define NFD_IN_LSO_CNTR_INCR(_addr, _idx) cntr64_incr(_addr, _idx)
     #define NFD_IN_LSO_CNTR_CLR(_addr, _idx) cntr64_clr(_addr, _idx)
