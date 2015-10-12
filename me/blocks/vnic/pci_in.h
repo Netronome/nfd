@@ -275,7 +275,7 @@ __intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,
  * "pkt_info->isl", "pkt_info->pnum", and "pkt_info->split" are set to zero
  * as PCI.IN returns an "MU only" packet.
  */
-__intrinsic void nfd_in_fill_meta(void *pkt_info pkt_info,
+__intrinsic void nfd_in_fill_meta(void *pkt_info,
                                   __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
 
