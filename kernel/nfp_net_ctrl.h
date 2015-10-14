@@ -150,6 +150,12 @@
  */
 #define NFP_NET_CFG_SPARE_ADDR          0x0050
 
+#define NFP_NET_CFG_VXLAN_PORT          0x0060
+#define NFP_NET_CFG_VXLAN_SZ            0x0008
+
+/* Offload definitions */
+#define NFP_NET_N_VXLAN_PORTS  (NFP_NET_CFG_VXLAN_SZ / sizeof(uint16_t))
+
 /**
  * 64B reserved for future use (0x0080 - 0x00c0)
  */
