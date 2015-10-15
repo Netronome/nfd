@@ -13,7 +13,7 @@
 #define NFD_OUT_MAX_QUEUES              64
 
 /**
- * RX descriptor format
+ * NFP-to-Host (RX) packet descriptor
  *
  * The fields "data_len" and "queue" are used by PCI.OUT when DMA'ing packet
  * data.  The "queue" field is seen as a reserved field by the host.
@@ -35,7 +35,7 @@ struct nfd_out_rx_desc {
 
 
 /**
- * CPP address descriptor format
+ * App-to-NFD packet CPP descriptor
  *
  * If the "isl" field is zero, the packet is handled as "MU only".  It is the
  * user's responsibility to free the CTM buffer associated with packets that
@@ -71,7 +71,7 @@ struct nfd_out_cpp_desc {
 
 
 /**
- * PCI.OUT descriptors consist of a CPP descriptor and an RX descriptor
+ * App-to-NFD packet descriptor
  */
 struct nfd_out_input {
     struct nfd_out_cpp_desc cpp;        /**< NFP portion of the desriptor */
@@ -134,20 +134,21 @@ struct nfd_out_input {
 /** \endcond */
 
 /**
- * Prepare ME data structures required to send packets to NFD
+ * Prepare ME data structures required to send packets to NFD.
  *
- * This method should be called from a single context, during initialisation.
+ * This method should be called from a single context, during initialization.
  */
 __intrinsic void nfd_out_send_init(void);
 
 
 /**
- * Map a vnic, queue number pair to a bitmask queue
- * @param vnic      vNIC as seen by the host
- * @param queue     queue number within the vNIC
+ * Map a VNIC, queue number pair to an NFD queue number.
+ * @param vnic      VNIC as seen by the host
+ * @param queue     Queue number within the VNIC
+ * @return          The corresponding NFD queue number
  *
- * This method returns a "bitmask" queue number (the numbering system used
- * internally in PCI.OUT and PCI.IN) from a vNIC, queue number pair.
+ * This method returns an NFD queue number (the numbering system used
+ * internally in PCI.OUT and PCI.IN) from a VNIC, queue number pair.
  */
 __intrinsic unsigned int nfd_out_map_queue(unsigned int vnic,
                                            unsigned int queue);
@@ -155,7 +156,7 @@ __intrinsic unsigned int nfd_out_map_queue(unsigned int vnic,
 
 /**
  * Request credits from specified queue.
- * @param pcie_isl      The PCIe island to acquire credits for
+ * @param pcie_isl      PCIe island
  * @param queue         Queue to acquire credits for
  * @param num           Number of credits to request
  * @param data          Transfer register to use for the request
@@ -175,7 +176,7 @@ __intrinsic void __nfd_out_get_credit(unsigned int pcie_isl,
 
 /**
  * Request credits from specified queue.
- * @param pcie_isl      The PCIe island to acquire credits for
+ * @param pcie_isl      PCIe island
  * @param queue         Queue to acquire credits for
  * @param num           Number of credits to request
  *
@@ -191,16 +192,16 @@ __intrinsic unsigned int nfd_out_get_credit(unsigned int pcie_isl,
 
 /**
  * Packets and Bytes count for PCI.OUT queues.
- * @param pcie_isl      PCIe island to access
- * @param queue         Rx queue number
+ * @param pcie_isl      PCIe island
+ * @param queue         RX queue number
  * @param byte_count    The bytes count to add
  * @param sync          Type of synchronization
  * @param sig           Signal to report completion
  *
- * This function uses the stats engine pkt and byte counters
- * to log the packet and bytes count per Rx queue.
- * The values are accumulated in the nfd_out_cntrsX memory and needs
- * to be pushed to the CFG BAR using the "__nfd_out_push_pkt_cnt" function.
+ * This function uses the stats engine to log the packet and byte counts per
+ * RX queue.  The values are accumulated in the nfd_out_cntrsX memory (where X
+ * is the PCIe unit number) and needs to be pushed to the CFG BAR using the 
+ * __nfd_out_push_pkt_cnt() function.
  */
 __intrinsic void __nfd_out_cnt_pkt(unsigned int pcie_isl,
                                    unsigned int queue,
@@ -209,22 +210,22 @@ __intrinsic void __nfd_out_cnt_pkt(unsigned int pcie_isl,
 
 /**
  * Push Packets and Bytes count for PCI.OUT queue into the CFG BAR.
- * @param pcie_isl      PCIe island to access
- * @param queue         Rx queue number
- * @param sync          type of synchronization
- * @param sig           signal to report completion
+ * @param pcie_isl      PCIe island
+ * @param queue         RX queue number
+ * @param sync          Type of synchronization
+ * @param sig           Signal to report completion
  *
- * This function updates the per Rx Q packets and bytes counter
- * in the CFG BAR. It reads and clears the packets and bytes
- * count from the relevant nfd_in_cntrsX memory and updates the
- * CFG BAR counters using the read values.
+ * This function updates the per RX queue packet and byte counters
+ * in the CFG BAR. It reads and clears the packet and byte
+ * counts from the relevant nfd_in_cntrsX memory (where X is the 
+ * PCIe unit number) and updates the CFG BAR counters using the read values.
  */
 __intrinsic void __nfd_out_push_pkt_cnt(unsigned int pcie_isl,
                                         unsigned int queue,
                                         sync_t sync, SIGNAL *sig);
 
 /**
- * Populate the address fields of the CPP descriptor for a packet
+ * Populate the buffer address fields of the CPP descriptor for a packet.
  * @param desc          PCI.OUT descriptor to fill
  * @param pkt_info      Up to date nbi_meta_pkt_info struct for the packet
  * @param nbi           NBI that received the packet
@@ -234,7 +235,7 @@ __intrinsic void __nfd_out_push_pkt_cnt(unsigned int pcie_isl,
  *
  * If both NBIs share BLM pools, set "nbi" to zero.  For MU only packets,
  * "pkt_info->isl" must be zero.  "ctm_split" must be encoded as for the
- * "NbiDmaBPCfg" register (see DB).
+ * "NbiDmaBPCfg" register (see the NFP Databook).
  */
 __intrinsic void nfd_out_fill_desc(__gpr struct nfd_out_input *desc,
                                    void *pkt_info,
@@ -259,9 +260,9 @@ __intrinsic void nfd_out_check_ctm_only(__gpr struct nfd_out_input *desc);
 /**
  * Fill the VLAN and flag parameters in the PCI.OUT descriptor.
  *
- * @param desc          The descriptor to modify.
- * @param vlan          The VLAN field value.
- * @param flags         The flags field value.
+ * @param desc          The descriptor to modify
+ * @param vlan          The VLAN field value
+ * @param flags         The flags field value
  */
 __intrinsic void nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc,
                                     unsigned int vlan, unsigned int flags);
@@ -269,10 +270,10 @@ __intrinsic void nfd_out_dummy_vlan(__gpr struct nfd_out_input *desc,
 
 /**
  * Add descriptor(s) to the PCI.OUT ring.
- * @param pcie_isl      PCIe island to send the descriptors to
- * @param queue         Queue to send the packets
+ * @param pcie_isl      PCIe island
+ * @param queue         Queue to send the packets to
  * @param desc_out      Write transfer registers to hold the descriptors
- * @param desc          The actual descriptor for the packet
+ * @param desc          RX descriptor for the packet
  * @param sync          Type of synchronisation to use
  * @param sig           Signal on send completion
  *
@@ -285,9 +286,9 @@ __intrinsic void __nfd_out_send(unsigned int pcie_isl, unsigned int queue,
 
 /**
  * Enqueue descriptor(s) to PCI.OUT ring
- * @param pcie_isl      PCIe island to send the descriptors to
- * @param queue         Queue to send the packets (bitmask numbered)
- * @param desc          Write transfer registers to hold the descriptors
+ * @param pcie_isl      PCIe island
+ * @param queue         Queue to send the packets to
+ * @param desc          RX packet descriptor for the packet
  *
  */
 __intrinsic void nfd_out_send(unsigned int pcie_isl, unsigned int queue,

@@ -143,7 +143,7 @@
 
 
 /*
- * PCI.in TX descriptor format
+ * PCI.IN TX descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+-------------------------------+---------------+
@@ -159,7 +159,7 @@
  *      E -> End of packet
  */
 /**
- * Descriptor of data to be transmitted passed from the host driver to the NFP.
+ * Host-to-NFD (TX) packet descriptor
  */
 struct nfd_in_tx_desc {
     union {
@@ -202,8 +202,7 @@ struct nfd_in_tx_desc {
  *    itf -> intf
  */
 /**
- * Descriptor of data to be transmitted passed from the NFD microcode to
- * the rest of the NFP application.
+ * NFD-to-App (TX) packet descriptor
  */
 struct nfd_in_pkt_desc {
     union {
@@ -233,18 +232,18 @@ struct nfd_in_pkt_desc {
 /**
  * Prepare ME data structures required to receive packets from NFD
  *
- * This method should be called from a single context, during initialisation.
+ * This method should be called from a single context, during initialization.
  */
 __intrinsic void nfd_in_recv_init(void);
 
 
 /**
  * Receive a packet from PCI.IN
- * @param pcie_isl      PCIe island to access
- * @param workq         work queue from the given island to access
+ * @param pcie_isl      PCIe island
+ * @param workq         Work queue from the given island to access
  * @param nfd_in_meta   PCI.IN descriptor for the packet
- * @param sync          type of synchronization
- * @param sig           signal to report completion
+ * @param sync          Type of synchronization
+ * @param sig           Signal to report completion
  */
 __intrinsic void __nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
                                __xread struct nfd_in_pkt_desc *nfd_in_meta,
@@ -252,7 +251,7 @@ __intrinsic void __nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
 
 /**
  * Receive a packet from PCI.IN
- * @param pcie_isl      PCIe island to access
+ * @param pcie_isl      PCIe island
  * @param workq         Work queue from the given island to access
  *                      (must be 0)
  * @param nfd_in_meta   PCI.IN descriptor for the packet
@@ -262,17 +261,17 @@ __intrinsic void nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
 
 
 /**
- * Packets and Bytes count for PCI.IN queues.
- * @param pcie_isl      PCIe island to access
- * @param queue         Tx queue number
+ * Increment packet and byte counts for PCI.IN queues.
+ * @param pcie_isl      PCIe island
+ * @param queue         TX queue number
  * @param byte_count    The bytes count to add
  * @param sync          Type of synchronization
  * @param sig           Signal to report completion
  *
- * This function uses the stats engine pkt and byte counters
- * to log the packet and bytes count per Tx queue.
- * The values are accumulated in the nfd_in_cntrsX memory and needs
- * to be pushed to the CFG BAR using the "__nfd_in_push_pkt_cnt" function.
+ * This function uses the stats engine to log the packet and byte 
+ * counts per TX queue.  The values are accumulated in the nfd_in_cntrsX
+ * memory (where X is the PCIe unit number) and needs to be pushed to the
+ * CFG BAR using the "__nfd_in_push_pkt_cnt" function.
  */
 __intrinsic void __nfd_in_cnt_pkt(unsigned int pcie_isl,
                                   unsigned int queue,
@@ -280,16 +279,16 @@ __intrinsic void __nfd_in_cnt_pkt(unsigned int pcie_isl,
                                   sync_t sync, SIGNAL *sig);
 
 /**
- * Push Packets and Bytes count for PCI.IN queue into the CFG BAR.
- * @param pcie_isl      PCIe island to access
- * @param queue         Tx queue number
- * @param sync          type of synchronization
- * @param sig           signal to report completion
+ * Push packet and bytes counts for PCI.IN queue into the CFG BAR.
+ * @param pcie_isl      PCIe island
+ * @param queue         TX queue number
+ * @param sync          Type of synchronization
+ * @param sig           Signal to report completion
  *
- * This function updates the per Tx Q packets and bytes counter
- * in the CFG BAR. It reads and clears the packets and bytes
- * count from the relevant nfd_in_cntrsX memory and updates the
- * CFG BAR counters using the read values.
+ * This function updates the per TX queue packets and bytes counter
+ * in the CFG BAR. It reads and clears the packet and byte
+ * counts from the relevant nfd_in_cntrsX memory (where X is the 
+ * PCIe unit number) and updates the CFG BAR counters using the read values.
  */
 __intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,
                                        unsigned int queue,
@@ -298,7 +297,7 @@ __intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,
 
 
 /**
- * Populate a nfd_in_pkt_desc struct from the NFD meta data
+ * Populate a nbi_meta_pkt_info structure from the NFD meta data.
  * @param pkt_info     nbi_meta_pkt_info struct for the packet
  * @param nfd_in_meta  PCI.IN descriptor for the packet
  *
@@ -310,10 +309,10 @@ __intrinsic void nfd_in_fill_meta(void *pkt_info,
 
 
 /**
- * Map an NFD bitmask queue to a vnic, queue number pair
- * @param vnic      vNIC as seen by the host
- * @param queue     queue number within the vNIC
- * @param nfd_queue queue number within NFD "bitmask" numbering system
+ * Map an NFD bitmask queue to a vnic, queue number pair.
+ * @param vnic      VNIC as seen by the host
+ * @param queue     Queue number within the vNIC
+ * @param nfd_queue Queue number within NFD numbering system
  */
 __intrinsic void nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
                                   unsigned int nfd_queue);
@@ -328,7 +327,7 @@ __intrinsic unsigned int nfd_in_pkt_len(
 
 
 /**
- * Get the sequence number (if NFD is configured to add it)
+ * Get the sequence number for a PCI.IN sourced packet.
  * @param nfd_in_meta   PCI.IN descriptor for the packet
  * @return              The sequence number of the packet
  */
