@@ -105,8 +105,8 @@ NFD_IN_ISSUED_LSO_RING_INIT(PCIE_ISL);
     NFD_IN_ISSUED_LSO_RING_ADDR_IND(_isl)
 
 
-static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr;
-static __gpr unsigned int nfd_in_issued_lso_ring_num;
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num = 0;
 
 /* Sequence number declarations */
 __shared __gpr unsigned int gather_dma_seq_compl = 0;
@@ -212,10 +212,6 @@ issue_dma_setup_shared()
         mem_write32(&lso_hdr_data_init_xw, (__mem void *)&lso_hdr_data[i * 4],
                     sizeof(lso_hdr_data_init_xw));
     }
-    nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
-                                               0);
-    nfd_in_issued_lso_ring_addr = ((((unsigned long long)
-                                      NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
 
     /*
      * Setup the DMA configuration registers
@@ -338,6 +334,14 @@ issue_dma_setup()
      * No DMAs or messages have been issued at this stage */
     wait_msk = __signals(&tx_desc_sig, &dma_order_sig);
     next_ctx = reorder_get_next_ctx(NFD_IN_ISSUE_START_CTX);
+
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+    nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *) nfd_in_lso_cntrs);
+#endif
+    nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                               0);
+    nfd_in_issued_lso_ring_addr = ((((unsigned long long)
+                                      NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
 }
 
 
@@ -963,18 +967,6 @@ issue_dma()
     struct nfd_in_batch_desc batch;
     unsigned int queue;
     unsigned int num;
-
-#ifdef NFD_IN_LSO_CNTR_ENABLE
-    /* get the location of LSO statistics */
-    if (nfd_in_lso_cntr_addr == 0) {
-        nfd_in_lso_cntr_addr = cntr64_get_addr(
-            (__mem void *)nfd_in_lso_cntrs);
-    }
-#endif
-    nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
-                                               0);
-    nfd_in_issued_lso_ring_addr = ((((unsigned long long)
-                                      NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
 
     reorder_test_swap(&desc_order_sig);
 

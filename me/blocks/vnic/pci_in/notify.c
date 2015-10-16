@@ -52,8 +52,8 @@ __remote volatile SIGNAL nfd_in_data_served_refl_sig;
 static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
 
 static unsigned int nfd_in_lso_cntr_addr = 0;
-static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr;
-static __gpr unsigned int nfd_in_issued_lso_ring_num;
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num = 0;
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
 static SIGNAL msg_sig, qc_sig;
@@ -198,11 +198,6 @@ notify_setup_shared()
     wq_raddr = (unsigned long long) NFD_EMEM_LINK(PCIE_ISL) >> 8;
 #endif
 
-    nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
-                                               0);
-    nfd_in_issued_lso_ring_addr = ((((unsigned long long)
-                                      NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
-
     /* Kick off ordering */
     reorder_start(NFD_IN_NOTIFY_START_CTX, &msg_order_sig);
     reorder_start(NFD_IN_NOTIFY_START_CTX, &get_order_sig);
@@ -219,8 +214,15 @@ notify_setup()
         wait_msk = __signals(&msg_sig, &msg_order_sig);
         next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX);
     }
-}
 
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+    nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *) nfd_in_lso_cntrs);
+#endif
+    nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                               0);
+    nfd_in_issued_lso_ring_addr = ((((unsigned long long)
+                                     NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
+}
 
 #ifdef NFD_VNIC_DBG_CHKS
 #define _NOTIFY_MU_CHK                                                  \
@@ -352,18 +354,6 @@ notify()
     __xread struct _issued_pkt_batch batch_in;
     struct _pkt_desc_batch batch_tmp;
     struct nfd_in_pkt_desc pkt_desc_tmp;
-
-#ifdef NFD_IN_LSO_CNTR_ENABLE
-    /* get the location of LSO statistics */
-    if (nfd_in_lso_cntr_addr == 0) {
-        nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *)
-                                               nfd_in_lso_cntrs);
-    }
-#endif
-    nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
-                                               0);
-    nfd_in_issued_lso_ring_addr = ((((unsigned long long)
-                                     NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
 
     /* Reorder before potentially issuing a ring get */
     wait_for_all(&get_order_sig);
