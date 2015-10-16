@@ -310,7 +310,7 @@ __intrinsic void nfd_in_fill_meta(void *pkt_info,
 
 /**
  * Map an NFD bitmask queue to a vnic, queue number pair.
- * @param vnic      VNIC as seen by the host
+ * @param vnic      vNIC as seen by the host
  * @param queue     Queue number within the vNIC
  * @param nfd_queue Queue number within NFD numbering system
  */

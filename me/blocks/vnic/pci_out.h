@@ -142,13 +142,13 @@ __intrinsic void nfd_out_send_init(void);
 
 
 /**
- * Map a VNIC, queue number pair to an NFD queue number.
- * @param vnic      VNIC as seen by the host
- * @param queue     Queue number within the VNIC
+ * Map a vNIC, queue number pair to an NFD queue number.
+ * @param vnic      vNIC as seen by the host
+ * @param queue     Queue number within the vNIC
  * @return          The corresponding NFD queue number
  *
  * This method returns an NFD queue number (the numbering system used
- * internally in PCI.OUT and PCI.IN) from a VNIC, queue number pair.
+ * internally in PCI.OUT and PCI.IN) from a vNIC, queue number pair.
  */
 __intrinsic unsigned int nfd_out_map_queue(unsigned int vnic,
                                            unsigned int queue);
