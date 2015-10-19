@@ -365,9 +365,14 @@ gather()
                 }
             }
 
-            /* Figure out which Issue DMA will receive this batch */
+            /* Figure out which Issue DMA will receive this batch
+             * Must be 0 if only one issue_dma ME in use */
+#ifdef NFD_IN_HAS_ISSUE1
             idma = (((queue >> NFD_IN_ISSUE_DMA_QSHIFT) & 1) ^
                     NFD_IN_ISSUE_DMA_QXOR);
+#else
+            idma = 0;
+#endif
 
             /*
              * Compute desc_ring and PCIe offsets
