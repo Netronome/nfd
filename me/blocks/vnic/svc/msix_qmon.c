@@ -261,7 +261,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
 
         /* Make sure the ICR is reset */
         tmp_w = 0;
-        mem_write8_le(&tmp_w, cfg_bar + NFP_NET_CFG_ICR(entry), sizeof(tmp_w));
+        mem_write8_le(&tmp_w, cfg_bar + NFP_NET_CFG_ICR(entry), 1);
     }
 
     /* Convert VF ring bitmask into Queue mask */
@@ -795,7 +795,7 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
             goto out;
         }
         mask_w = NFP_NET_CFG_ICR_RXTX;
-        mem_write8_le(&mask_w, (__mem void *)cfg_bar, sizeof(mask_w));
+        mem_write8_le(&mask_w, (__mem void *)cfg_bar, 1);
     }
 
     if (fn >= NFD_MAX_VFS)
