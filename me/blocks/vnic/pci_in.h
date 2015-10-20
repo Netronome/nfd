@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2012-2015 Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/pci_in.h
  * @brief         Interface to PCI.IN
@@ -118,25 +118,41 @@
 
 #endif /* NFD_IN_WQ_SHARED */
 
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem, _num)                            \
+    _emem##_queues_DECL                                                 \
+    ASM(.alloc_resource nfd_in_issued_lso_ring_num##_isl##_num _emem##_queues global 1 1)
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, _emem, _num)    \
+    NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem, _num)
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl, _num)                       \
+    NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, NFD_PCIE##_isl##_EMEM, _num)
+#define NFD_IN_ISSUED_LSO_RING_DECL(_isl, _num) NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl, _num)
 
 #ifdef NFD_PCIE0_EMEM
     NFD_IN_RINGS_DECL(0);
     NFD_IN_RING_NUM_ALLOC(0, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(0, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(0, 1);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
     NFD_IN_RINGS_DECL(1);
     NFD_IN_RING_NUM_ALLOC(1, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(1, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(1, 1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
     NFD_IN_RINGS_DECL(2);
     NFD_IN_RING_NUM_ALLOC(2, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(2, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(2, 1);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
     NFD_IN_RINGS_DECL(3);
     NFD_IN_RING_NUM_ALLOC(3, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(3, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(3, 1);
 #endif
 
 /** @endcond */

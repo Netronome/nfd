@@ -79,11 +79,17 @@ __shared __gpr unsigned int data_dma_seq_served1 = 0;
 __shared __gpr unsigned int data_dma_seq_compl1 = 0;
 static __gpr unsigned int data_dma_seq_sent1 = 0;
 static __xwrite unsigned int nfd_in_data_served_refl_out1 = 0;
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr0 = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num0 = 0;
 
 /* Shared with issue DMA 1 */
 __visible volatile __xread unsigned int nfd_in_data_compl_refl_in1 = 0;
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in1;
 __remote volatile SIGNAL nfd_in_data_served_refl_sig1;
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr1 = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num1 = 0;
+
+static unsigned int nfd_in_lso_cntr_addr = 0;
 
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
@@ -224,7 +230,7 @@ do {                                                                    \
 #else /* (NFD_IN_NUM_WQS == 1) */
 #define _SET_DST_Q(_pkt)                                                \
 do {                                                                    \
-    dst_q = (batch_in.pkt##_pkt##.lso & NFD_IN_DSTQ_MSK) | wq_num_base; \
+    /* Removing dst_q support for driving pkts to specified wq */       \
 } while (0)
 #endif /* (NFD_IN_NUM_WQS == 1) */
 
@@ -293,6 +299,20 @@ notify_setup()
     wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
     next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX,
                                     NFD_IN_NOTIFY_END_CTX);
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+    /* get the location of LSO statistics */
+    nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *) nfd_in_lso_cntrs);
+#endif
+    nfd_in_issued_lso_ring_num0 = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                                NFD_IN_ISSUED_LSO_RING0_NUM);
+    nfd_in_issued_lso_ring_addr0 = ((((unsigned long long)
+                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
+
+    nfd_in_issued_lso_ring_num1 = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                                NFD_IN_ISSUED_LSO_RING1_NUM);
+    nfd_in_issued_lso_ring_addr1 = ((((unsigned long long)
+                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
+
 }
 
 #ifndef NFD_MU_PTR_DBG_MSK
@@ -312,6 +332,16 @@ notify_setup()
     }
 #else
 #define _NOTIFY_MU_CHK(_pkt)
+#endif
+
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)                              \
+        if (_flags & PCIE_DESC_TX_LSO) {                          \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
+                         NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ);\
+        }
+#else
+#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)
 #endif
 
 #define _NOTIFY_PROC(_pkt)                                              \
@@ -362,7 +392,6 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
     __xread struct _issued_pkt_batch batch_in;
     struct _pkt_desc_batch batch_tmp;
     struct nfd_in_pkt_desc pkt_desc_tmp;
-
 
     /* Reorder before potentially issuing a ring get */
     wait_for_all(&get_order_sig);

@@ -88,6 +88,13 @@ static __shared __gpr unsigned int desc_ring_base;
 /* Storage declarations */
 __shared __lmem struct nfd_in_dma_state queue_data[NFD_IN_MAX_QUEUES];
 
+static unsigned int nfd_in_lso_cntr_addr = 0;
+/* storage for LSO header on a per queue basis */
+__export __shared __ctm __align(NFD_IN_MAX_LSO_HDR_SZ) unsigned char
+    lso_hdr_data[NFD_IN_MAX_LSO_HDR_SZ * NFD_IN_MAX_QUEUES];
+
+static __shared __gpr unsigned int lso_hdr_data_base;
+
 /* Sequence number declarations */
 __shared __gpr unsigned int gather_dma_seq_compl = 0;
 __shared __gpr unsigned int gather_dma_seq_serv = 0;
@@ -119,6 +126,8 @@ __visible volatile SIGNAL nfd_in_gather_compl_refl_sig0;
 #define desc_ring desc_ring0
 #define nfd_in_issued_ring nfd_in_issued_ring0
 #define NFD_IN_ISSUED_RING_NUM NFD_IN_ISSUED_RING0_NUM
+#define NFD_IN_ISSUED_LSO_RING_NUM NFD_IN_ISSUED_LSO_RING0_NUM
+#define NFD_IN_ISSUED_LSO_RING_SZ NFD_IN_ISSUED_LSO_RING0_SZ
 
 #elif (PCI_IN_ISSUE_DMA_IDX == 1)
 
@@ -138,12 +147,38 @@ __visible volatile SIGNAL nfd_in_gather_compl_refl_sig1;
 #define desc_ring desc_ring1
 #define nfd_in_issued_ring nfd_in_issued_ring1
 #define NFD_IN_ISSUED_RING_NUM NFD_IN_ISSUED_RING1_NUM
+#define NFD_IN_ISSUED_LSO_RING_NUM NFD_IN_ISSUED_LSO_RING1_NUM
+#define NFD_IN_ISSUED_LSO_RING_SZ NFD_IN_ISSUED_LSO_RING1_SZ
 
 #else /* invalid PCI_IN_ISSUE_DMA_IDX */
 
 #error "Invalid PCI_IN_ISSUE_DMA_IDX.  Must be 0 or 1."
 
 #endif
+
+//#if (PCI_IN_ISSUE_DMA_IDX == 0)
+#define NFD_IN_ISSUED_LSO_RING_INIT_IND2(_isl, _emem, _num)                        \
+    ASM(.alloc_mem nfd_in_issued_lso_ring_mem##_isl##_num _emem global             \
+        NFD_IN_ISSUED_LSO_RING_SZ NFD_IN_ISSUED_LSO_RING_SZ)                 \
+    ASM(.init_mu_ring nfd_in_issued_lso_ring_num##_isl##_num                    \
+        nfd_in_issued_lso_ring_mem##_isl##_num)
+#define NFD_IN_ISSUED_LSO_RING_INIT_IND1(_isl, _emem, _num)                        \
+    NFD_IN_ISSUED_LSO_RING_INIT_IND2(_isl, _emem, _num)
+#define NFD_IN_ISSUED_LSO_RING_INIT_IND0(_isl, _num)                               \
+    NFD_IN_ISSUED_LSO_RING_INIT_IND1(_isl, NFD_PCIE##_isl##_EMEM, _num)
+#define NFD_IN_ISSUED_LSO_RING_INIT(_isl, _num)                                    \
+    NFD_IN_ISSUED_LSO_RING_INIT_IND0(_isl, _num)
+
+NFD_IN_ISSUED_LSO_RING_INIT(PCIE_ISL, NFD_IN_ISSUED_LSO_RING_NUM);
+
+#define NFD_IN_ISSUED_LSO_RING_ADDR_IND(_isl, _num)                                \
+    _link_sym(nfd_in_issued_lso_ring_mem##_isl##_num)
+#define NFD_IN_ISSUED_LSO_RING_ADDR(_isl, _num)                                    \
+    NFD_IN_ISSUED_LSO_RING_ADDR_IND(_isl, _num)
+//#endif
+
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num = 0;
 
 /* DMA descriptor template */
 static __gpr unsigned int cpp_hi_no_sig_part;
@@ -236,6 +271,8 @@ issue_dma_setup_shared()
 {
     struct nfp_pcie_dma_cfg cfg_tmp;
     __xwrite struct nfp_pcie_dma_cfg cfg;
+    __xwrite uint32_t lso_hdr_data_init_xw = 0xDEADBEEF;
+    __gpr uint32_t i;
 
     ctm_ring_setup(NFD_IN_ISSUED_RING_NUM, nfd_in_issued_ring,
                    sizeof nfd_in_issued_ring);
@@ -251,6 +288,14 @@ issue_dma_setup_shared()
      * Initialise the CLS TX descriptor ring
      */
     desc_ring_base = ((unsigned int) &desc_ring) & 0xFFFFFFFF;
+
+    /* Initialize the CTM LSO header data */
+    lso_hdr_data_base = ((unsigned int) &lso_hdr_data) & 0xFFFFFFFF;
+    for (i = 0; i < ((NFD_IN_MAX_LSO_HDR_SZ >> 2) * NFD_IN_MAX_QUEUES); i++) {
+        lso_hdr_data_init_xw = 0xDEADBEEF;
+        mem_write32(&lso_hdr_data_init_xw, (__mem void *)&lso_hdr_data[i * 4],
+                    sizeof(lso_hdr_data_init_xw));
+    }
 
     /*
      * Setup the DMA configuration registers
@@ -312,7 +357,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
         /* Initialise queue state */
         queue_data[bmsk_queue].sp0 = 0;
-        queue_data[bmsk_queue].zero = 0;
+        queue_data[bmsk_queue].lso_hdr_len = 0;
+        queue_data[bmsk_queue].lso_payload_len = 0;
         queue_data[bmsk_queue].rid = 0;
         if (cfg_msg->vnic != NFD_MAX_VFS) {
             queue_data[bmsk_queue].rid = cfg_msg->vnic + NFD_CFG_VF_OFFSET;
@@ -321,7 +367,6 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].up = 1;
         queue_data[bmsk_queue].curr_buf = 0;
         queue_data[bmsk_queue].offset = 0;
-        queue_data[bmsk_queue].sp1 = 0;
 
     } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* Free the MU buffer */
@@ -340,7 +385,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 
         /* Clear queue state */
         queue_data[bmsk_queue].sp0 = 0;
-        queue_data[bmsk_queue].zero = 0;
+        queue_data[bmsk_queue].lso_hdr_len = 0;
+        queue_data[bmsk_queue].lso_payload_len = 0;
         /* Leave RID configured after first set */
         /* "cont" is used as part of the "up" signalling,
          * to move the "up" test off the fast path. */
@@ -348,7 +394,6 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].up = 0;
         queue_data[bmsk_queue].curr_buf = 0;
         queue_data[bmsk_queue].offset = 0;
-        queue_data[bmsk_queue].sp1 = 0;
 
     }
 }
@@ -374,6 +419,14 @@ issue_dma_setup()
                                             PCI_IN_ISSUE_DMA_IDX);
     cpp_hi_event_part |= (NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN) |
                           NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG));
+
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+    nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *) nfd_in_lso_cntrs);
+#endif
+    nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                               NFD_IN_ISSUED_LSO_RING_NUM);
+    nfd_in_issued_lso_ring_addr = ((((unsigned long long)
+                                      NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
 
     /* wait_msk initially only needs batch_sig, tx_desc_sig and dma_order_sig
      * No DMAs or messages have been issued at this stage */
@@ -424,6 +477,18 @@ issue_dma_gather_seq_recv()
 #define _ISSUE_PROC_MU_CHK(_val)
 #endif
 
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+#define _LSO_TX_DESC_TYPE_CNTR(_pkt)                                \
+    if (tx_desc.pkt##_pkt##.eop) {                                  \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
+                          NFD_IN_LSO_CNTR_T_ISSUED_LSO_EOP_TX_DESC);\
+    } else {                                                        \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
+                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TX_DESC);\
+    }
+#else
+#define _LSO_TX_DESC_TYPE_CNTR(_pkt)
+#endif
 
 /* This macro issues a DMA for a NFD_IN_DMA_SPLIT_LEN chunk of the
  * current packet.  It assumes that the descr_tmp has been mostly

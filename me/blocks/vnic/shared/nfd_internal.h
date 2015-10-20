@@ -7,6 +7,9 @@
 #ifndef _BLOCKS__SHARED_NFD_INTERNAL_H_
 #define _BLOCKS__SHARED_NFD_INTERNAL_H_
 
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+#include <std/cntrs.h>
+#endif
 
 /* Tuning constants */
 
@@ -104,6 +107,96 @@
 #define NFD_IN_BATCH_RING1_SIZE_LW      64
 #define NFD_IN_BATCH_RING1_NUM          2
 
+/* LSO defines */
+#define NFD_IN_ISSUED_LSO_RING0_NUM 0
+#define NFD_IN_ISSUED_LSO_RING0_SZ  65536  /* ring needs 204B per batch * number Queues */
+#define NFD_IN_ISSUED_LSO_RING1_NUM 1
+#define NFD_IN_ISSUED_LSO_RING1_SZ  65536  /* ring needs 204B per batch * number Queues */
+#define NFD_IN_MAX_LSO_HDR_SZ       256
+
+#if defined(__NFP_LANG_MICROC)
+/* NFD IN LSO Debug Counters. */
+enum NFD_IN_LSO_CNTR_IDX {
+    NFD_IN_LSO_CNTR_T_ISSUED_ALL_TX_DESC = 0,
+    NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC,
+    NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_TX_DESC,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_TX_DESC,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_EOP_TX_DESC,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TX_DESC,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_TX_DESC,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_DBL_DMA,
+    NFD_IN_LSO_CNTR_T_ISSUED_NOT_Q_UP_TX_DESC,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING_END,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING_END,
+    NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS,
+    NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET,
+    NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC,
+    NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC,
+    NFD_IN_LSO_CNTR_T_NOTIFY_LSO_PKT_DESC,
+    NFD_IN_LSO_CNTR_T_NOTIFY_OTHER_PKT_DESC,
+    NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING,
+    NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING,
+    NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ,
+    NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ,
+    NFD_IN_LSO_CNTR_T_ME_ALL_HOST_PKTS,
+    NFD_IN_LSO_CNTR_T_ME_NON_LSO_HOST_PKTS,
+    NFD_IN_LSO_CNTR_T_ME_LSO_HOST_PKTS,
+    NFD_IN_LSO_CNTR_T_ME_FM_HOST_PKT_TX_TO_WIRE,
+    NFD_IN_LSO_CNTR_T_ME_FM_HOST_PROC_TO_WIRE_DROP,
+    NFD_IN_LSO_CNTR_T_ME_FM_HOST_PKT_TX_TO_WIRE_DROP,
+    NFD_IN_LSO_CNTR_LENGTH /*Last element indicates total number of counters*/
+};
+
+const char *nfd_in_lso_cntr_names[] = {
+    "NFD_IN_LSO_CNTR_T_ISSUED_ALL_TX_DESC",
+    "NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC",
+    "NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_TX_DESC",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_TX_DESC",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_EOP_TX_DESC",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TX_DESC",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_TX_DESC",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_DBL_DMA",
+    "NFD_IN_LSO_CNTR_T_ISSUED_NOT_Q_UP_TX_DESC",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING_END",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING_END",
+    "NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS",
+    "NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_LSO_PKT_DESC",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_OTHER_PKT_DESC",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ",
+    "NFD_IN_LSO_CNTR_T_ME_ALL_HOST_PKTS",
+    "NFD_IN_LSO_CNTR_T_ME_NON_LSO_HOST_PKTS",
+    "NFD_IN_LSO_CNTR_T_ME_LSO_HOST_PKTS",
+    "NFD_IN_LSO_CNTR_T_ME_FM_HOST_PKT_TX_TO_WIRE",
+    "NFD_IN_LSO_CNTR_T_ME_FM_HOST_PROC_TO_WIRE_DROP",
+    "NFD_IN_LSO_CNTR_T_ME_FM_HOST_PKT_TX_TO_WIRE_DROP"
+};
+
+/* XXX remove counter enable when done developing LSO */
+#if defined(NFD_IN_LSO_CNTR_ENABLE)
+    CNTRS64_DECLARE(nfd_in_lso_cntrs, NFD_IN_LSO_CNTR_LENGTH, __emem_n(0));
+    #define NFD_IN_LSO_CNTR_INCR(_addr, _idx) cntr64_incr(_addr, _idx)
+    #define NFD_IN_LSO_CNTR_CLR(_addr, _idx) cntr64_clr(_addr, _idx)
+    #define NFD_IN_LSO_CNTR_ADD(_addr, _idx, _val) cntr64_add(_addr, _idx, _val)
+#else
+    #define NFD_IN_LSO_CNTR_INCR(_addr, _idx)
+    #define NFD_IN_LSO_CNTR_CLR(_addr, _idx)
+    #define NFD_IN_LSO_CNTR_ADD(_addr, _idx, _val)
+#endif
+#endif
 
 /* nfd_out */
 #define NFD_OUT_MAX_BATCH_SZ            4
@@ -183,6 +276,7 @@ struct nfd_in_queue_info {
 };
 
 
+
 #define NFD_IN_DMA_STATE_UP   31
 #define NFD_IN_DMA_STATE_CONT 30
 
@@ -191,17 +285,23 @@ struct nfd_in_dma_state {
         struct {
             unsigned int up:1;
             unsigned int cont:1;
-            unsigned int sp0:10;
-            unsigned int zero:12;
+            unsigned int sp0:6;
+            unsigned int lso_hdr_len:8; /* length of header and if we have a header
+                                         * non-zero used in issue_dma */
+            unsigned int lso_seq_cnt:8; /* last sequence count for lso segments sent
+                                           to NFP. Used in notify. */
             unsigned int rid:8;
+
             unsigned int curr_buf;
+
             int offset;
-            unsigned int sp1;
+
+            unsigned int lso_payload_len; /* length of lso payload filled used in
+                                             issue_dma */
         };
         unsigned int __raw[4];
     };
 };
-
 
 struct nfd_in_batch_desc {
     union {
