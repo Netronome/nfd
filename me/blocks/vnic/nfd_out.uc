@@ -28,19 +28,61 @@
  */
 
 #define NFD_OUT_CTM_ISL_fld     0, 31, 26       /* Island of packet CTM buf */
+#define NFD_OUT_CTM_ISL_wrd     0
+#define NFD_OUT_CTM_ISL_shf     26
+#define NFD_OUT_CTM_ISL_msk     0x3F
 #define NFD_OUT_CTM_ONLY_fld    0, 25, 25       /* Packet data in CTM only */
+#define NFD_OUT_CTM_ONLY_wrd    0
+#define NFD_OUT_CTM_ONLY_shf    25
+#define NFD_OUT_CTM_ONLY_msk    0x1
 #define NFD_OUT_PKTNUM_fld      0, 24, 16       /* CTM packet number */
+#define NFD_OUT_PKTNUM_wrd      0
+#define NFD_OUT_PKTNUM_shf      16
+#define NFD_OUT_PKTNUM_msk      0x1FF
 #define NFD_OUT_SPLIT_fld       0, 15, 14       /* split length of packet */
+#define NFD_OUT_SPLIT_wrd       0
+#define NFD_OUT_SPLIT_shf       14
+#define NFD_OUT_SPLIT_msk       0x3
 #define NFD_OUT_OFFSET_fld      0, 12, 0        /* Offset where packet starts */
+#define NFD_OUT_OFFSET_wrd      0
+#define NFD_OUT_OFFSET_shf      0
+#define NFD_OUT_OFFSET_msk      0x1FFF
 #define NFD_OUT_NBI_fld         1, 31, 31       /* Receiving NBI (don't use) */
+#define NFD_OUT_NBI_wrd         1
+#define NFD_OUT_NBI_shf         31
+#define NFD_OUT_NBI_msk         0x1
 #define NFD_OUT_BLS_fld         1, 30, 29       /* Buffer list of MU buf */
+#define NFD_OUT_BLS_wrd         1
+#define NFD_OUT_BLS_shf         29
+#define NFD_OUT_BLS_msk         0x3
 #define NFD_OUT_MUADDR_fld      1, 28, 0        /* MU addr right-shifted 11 */
+#define NFD_OUT_MUADDR_wrd      1
+#define NFD_OUT_MUADDR_shf      0
+#define NFD_OUT_MUADDR_msk      0x1FFFFFFF
 #define NFD_OUT_DD_fld          2, 31, 31       /* Must be 1 */
+#define NFD_OUT_DD_wrd          2
+#define NFD_OUT_DD_shf          31
+#define NFD_OUT_DD_msk          0x1
 #define NFD_OUT_METALEN_fld     2, 30, 24       /* Length of prepended meta */
+#define NFD_OUT_METALEN_wrd     2
+#define NFD_OUT_METALEN_shf     24
+#define NFD_OUT_METALEN_msk     0x7F
 #define NFD_OUT_QID_fld         2, 23, 16       /* Queue to send to */
+#define NFD_OUT_QID_wrd         2
+#define NFD_OUT_QID_shf         16
+#define NFD_OUT_QID_msk         0xFF
 #define NFD_OUT_LEN_fld         2, 15, 0        /* Total length of packet */
+#define NFD_OUT_LEN_wrd         2
+#define NFD_OUT_LEN_shf         0
+#define NFD_OUT_LEN_msk         0xFFFF
 #define NFD_OUT_VLAN_fld        3, 31, 16       /* Stripped vlan of packet */
+#define NFD_OUT_VLAN_wrd        3
+#define NFD_OUT_VLAN_shf        16
+#define NFD_OUT_VLAN_msk        0xFFFF
 #define NFD_OUT_FLAGS_fld       3, 15, 0        /* RX flags */
+#define NFD_OUT_FLAGS_wrd       3
+#define NFD_OUT_FLAGS_shf       0
+#define NFD_OUT_FLAGS_msk       0xFFFF
 
 /**
  * Packet prepend format for packets going to the host that need to
@@ -55,9 +97,18 @@
  *       +---------------------------------------------------------------+
  */
 
-#define NFD_OUT_PRE_RSS_HASH_fld        1, 31, 0
 #define NFD_OUT_PRE_INPORT_fld          0, 31, 8
+#define NFD_OUT_PRE_INPORT_wrd          0
+#define NFD_OUT_PRE_INPORT_shf          8
+#define NFD_OUT_PRE_INPORT_msk          0xFFFFFF
 #define NFD_OUT_PRE_RSS_HTYPE_fld       0, 7, 0
+#define NFD_OUT_PRE_RSS_HTYPE_wrd       0
+#define NFD_OUT_PRE_RSS_HTYPE_shf       0
+#define NFD_OUT_PRE_RSS_HTYPE_msk       0xFF
+#define NFD_OUT_PRE_RSS_HASH_fld        1, 31, 0
+#define NFD_OUT_PRE_RSS_HASH_wrd        1
+#define NFD_OUT_PRE_RSS_HASH_shf        0
+#define NFD_OUT_PRE_RSS_HASH_msk        0xFFFFFFFF
 #define NFD_OUT_PRE_FULL_SIZE_LW        2
 #define NFD_OUT_PRE_FULL_SIZE           8
 

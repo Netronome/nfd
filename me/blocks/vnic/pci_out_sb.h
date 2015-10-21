@@ -2,7 +2,7 @@
 #define __PCI_OUT_SB_H
 
 /*
- * Work queue descriptor (to Issue DMA MEs):
+ * Work queue descriptor (to Packet DMA MEs):
  *
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
@@ -63,7 +63,7 @@
 #define SB_WQ_OFFSET_bf         2, 12, 0
 #define SB_WQ_OFFSET_wrd        2
 #define SB_WQ_OFFSET_shf        0
-#define SB_WQ_OFFSET_msk        0x7FF
+#define SB_WQ_OFFSET_msk        0x1FFF
 
 // Word 3
 #define SB_WQ_NBI_bf            3, 31, 31

@@ -213,7 +213,7 @@ __WSM_GET_MASKLEN(FLD)
     #endif
 
     sm_clear_to(out_word, in_word, FLD, __WSM_SET_NI)
-    sm_set_noclr(out_word, in_word, FLD, in_val, 1)
+    sm_set_noclr_to(out_word, in_word, FLD, in_val, 1)
 
     #undef __WSM_SET_NI
 

@@ -2,9 +2,9 @@
 #define __PCI_OUT_SB_UC
 
 #include <stdmac.uc>
-#include <bitfields.uc>
 #include <aggregate.uc>
 
+#include <wsm.uc>
 #include <nfd_common.h>
 #include <nfd_internal.h>
 #include <nfd_cfg_pf_bars.uc>
@@ -98,8 +98,23 @@
  */
 
 #define LM_QSTATE_SEQ_bf        0, 31, 0
+#define LM_QSTATE_SEQ_wrd       0
+#define LM_QSTATE_SEQ_shf       0
+#define LM_QSTATE_SEQ_msk       0xFFFFFFFF
 #define LM_QSTATE_ENABLED_bf    1, 8, 8
+#define LM_QSTATE_ENABLED_wrd   1
+#define LM_QSTATE_ENABLED_shf   8
+#define LM_QSTATE_ENABLED_msk   0x1
+#define LM_QSTATE_ENABLED_bit   8
 #define LM_QSTATE_RID_bf        1, 7, 0
+#define LM_QSTATE_RID_wrd       1
+#define LM_QSTATE_RID_shf       0
+#define LM_QSTATE_RID_msk       0xFF
+#define LM_QSTATE_CACHE_ADDR_RS8_bf  2, 31, 0
+#define LM_QSTATE_CACHE_ADDR_RS8_wrd 2
+#define LM_QSTATE_CACHE_ADDR_RS8_shf 0
+#define LM_QSTATE_CACHE_ADDR_RS8_msk 0xFFFFFFFF
+
 #define LM_QSTATE_SIZE          16
 #define LM_QSTATE_SIZE_LW       (LM_QSTATE_SIZE / 4)
 #define LM_QSTATE_SIZE_lg2      (log2(LM_QSTATE_SIZE))
@@ -108,13 +123,14 @@
 #define LM_QSTATE               LM_QSTATE_PTR
 #define LM_SEQ_wrd              0
 #define LM_STATUS_wrd           1
+#define LM_CACHE_ADDR_RS8_wrd   2
 #define LM_SEQ                  LM_QSTATE_PTR[LM_SEQ_wrd]
 #define LM_STATUS               LM_QSTATE_PTR[LM_STATUS_wrd]
-#define LM_CACHE_ADDR_RS8_wrd   2
+#define LM_CACHE_ADDR_RS8       LM_QSTATE_PTR[LM_CACHE_ADDR_RS8_wrd]
+
 #define LM_WQ_CREDIT_CSR        ACTIVE_LM_ADDR_1
 #define LM_WQ_CREDIT_PTR        *l$index1
 #define LM_WQ_CREDITS           LM_WQ_CREDIT_PTR
-#define LM_CACHE_ADDR_RS8       LM_QSTATE_PTR[LM_CACHE_ADDR_RS8_wrd]
 
 #define LM_DEBUG_CSR            ACTIVE_LM_ADDR_2
 #define LM_DEBUG_PTR            *l$index2
@@ -160,12 +176,33 @@
 
 // Config message field declarations
 #define NFD_CFG_MSG_VALID_bf            0, 31, 31
+#define NFD_CFG_MSG_VALID_wrd           0
+#define NFD_CFG_MSG_VALID_shf           31
+#define NFD_CFG_MSG_VALID_msk           0x1
 #define NFD_CFG_MSG_VALID_bit           31
 #define NFD_CFG_MSG_ERR_bf              0, 30, 30
+#define NFD_CFG_MSG_ERR_wrd             0
+#define NFD_CFG_MSG_ERR_shf             30
+#define NFD_CFG_MSG_ERR_msk             0x1
+#define NFD_CFG_MSG_ERR_bit             30
 #define NFD_CFG_MSG_INTERESTED_bf       0, 29, 29
+#define NFD_CFG_MSG_INTERESTED_wrd      0
+#define NFD_CFG_MSG_INTERESTED_shf      29
+#define NFD_CFG_MSG_INTERESTED_msk      0x1
+#define NFD_CFG_MSG_INTERESTED_bit      29
 #define NFD_CFG_MSG_UP_bf               0, 28, 28
+#define NFD_CFG_MSG_UP_wrd              0
+#define NFD_CFG_MSG_UP_shf              28
+#define NFD_CFG_MSG_UP_msk              0x1
+#define NFD_CFG_MSG_UP_bit              28
 #define NFD_CFG_MSG_QUEUE_bf            0, 15, 8
+#define NFD_CFG_MSG_QUEUE_wrd           0
+#define NFD_CFG_MSG_QUEUE_shf           8
+#define NFD_CFG_MSG_QUEUE_msk           0xFF
 #define NFD_CFG_MSG_VNIC_bf             0, 7, 0
+#define NFD_CFG_MSG_VNIC_wrd            0
+#define NFD_CFG_MSG_VNIC_shf            0
+#define NFD_CFG_MSG_VNIC_msk            0xFF
 
 
 #macro _reset_ticket_bitmap(in_qid)
@@ -216,14 +253,14 @@
     nop
 
     // If the queue state changed, then update the LM entry
-    bitfield_extract__sz1(currently_up, F_AML(LM_QSTATE, LM_QSTATE_ENABLED_bf))
+    wsm_extract(currently_up, LM_QSTATE, LM_QSTATE_ENABLED)
     .if (in_up != currently_up)
 
         .if (in_up != 0)
 
             alu[rid, in_vnic, +, NFD_CFG_VF_OFFSET]
-            bitfield_insert__sz1(F_AML(LM_QSTATE, LM_QSTATE_RID_bf), rid)
-            bitfield_insert__sz1(F_AML(LM_QSTATE, LM_QSTATE_ENABLED_bf), 1)
+            wsm_set(LM_QSTATE, LM_QSTATE_RID, rid)
+            wsm_set(LM_QSTATE, LM_QSTATE_ENABLED, 1)
             move(LM_SEQ, 0)
             // Precomputation to save cycles later
             move(base_addr, (fl_cache_mem/**/PCIE_ISL >> 8))
@@ -232,8 +269,8 @@
 
         .else
 
-            bitfield_clear__sz1(F_AML(LM_QSTATE, LM_QSTATE_RID_bf))
-            bitfield_clear__sz1(F_AML(LM_QSTATE, LM_QSTATE_ENABLED_bf))
+            wsm_clear(LM_QSTATE, LM_QSTATE_RID)
+            wsm_clear(LM_QSTATE, LM_QSTATE_ENABLED)
 
         .endif
 
@@ -399,7 +436,7 @@
         .endif
 
         // Extract the queue ID that is going up or down
-        bitfield_extract__sz1(vnic, F_AML($cmsg, NFD_CFG_MSG_VNIC_bf))
+        wsm_extract(vnic, $cmsg, NFD_CFG_MSG_VNIC)
 
         _check_vnic_state(vnic)
 
@@ -638,7 +675,7 @@ copy_loop#:
  *    required to send the ordering signal to the next worker in sequence
  *  - the queue state table is located in local memory at address 0
  *  - g_lm_qstate_mask must be set to a mask that can be applied to
- *    the queue ID shifted F_L(NFD_OUT_QID_bf) - LM_QSTATE_SIZE_lg2
+ *    the queue ID shifted NFD_OUT_QID_shf - LM_QSTATE_SIZE_lg2
  *    bits to the right to obtain the LM offset of the per-queue state.
  *  - g_cache_addr_lo_mask will mask down a shifted sequence number into an
  *    offset in the FL desc cache/RX desc cache
@@ -662,7 +699,7 @@ copy_loop#:
     .reg lma
     .reg credits
     .reg addr_lo
-    .reg addr_lo_10bit_seq
+    .reg out_word0
 
     .reg read $buf_desc[2]
     .xfer_order $buf_desc
@@ -678,12 +715,12 @@ test_ready_to_send#:
     local_csr_wr[SAME_ME_SIGNAL, g_sig_next_worker]
 
     // XXX Assumes that the queue state starts at address 0
-    alu[lma, g_lm_qstate_mask, AND, F_A(in_xfer, NFD_OUT_QID_fld),
-        >>(F_L(NFD_OUT_QID_fld) - LM_QSTATE_SIZE_lg2)]
+    alu[lma, g_lm_qstate_mask, AND, in_xfer[NFD_OUT_QID_wrd],
+        >>(NFD_OUT_QID_shf - LM_QSTATE_SIZE_lg2)]
     local_csr_wr[LM_QSTATE_CSR, lma]
 
     // Copy descriptor. Put at the end so last word can be ommitted in WQ
-    move(out_xfer[2], in_xfer[0])               // lm addr cycle 0
+    move(out_xfer[2], in_xfer[0])       // lm addr cycle 0
     move(out_xfer[3], in_xfer[1])       // lm addr cycle 1
     move(out_xfer[4], in_xfer[2])       // lm addr cycle 2
     move(out_xfer[5], in_xfer[3])
@@ -693,7 +730,7 @@ test_ready_to_send#:
      * - get next addr_lo from sequence number
      * - issue read then write
      */
-    alu[addr_lo_10bit_seq, g_cache_addr_lo_10bit_seq_mask, AND, LM_SEQ, <<NFD_OUT_FL_DESC_SIZE_lg2]
+    alu[out_word0, g_seq_mask, AND, LM_SEQ]
     alu[addr_lo, g_cache_addr_lo_mask, AND, LM_SEQ, <<NFD_OUT_FL_DESC_SIZE_lg2]
     mem[read, $buf_desc[0], LM_CACHE_ADDR_RS8, <<8, addr_lo, 1], sig_done[fl_read_sig]
     mem[write, out_xfer[4], LM_CACHE_ADDR_RS8, <<8, addr_lo, 1], sig_done[cur_outsig]
@@ -704,16 +741,16 @@ test_ready_to_send#:
     /*
      * Wait for read/write operations to complete
      * In the defer shadow:
-     * - increment the sequence number
-     * - Sequence number is (addr_lo >> NFD_OUT_FL_DESC_SIZE_lg2).  We will
-     *   shift it into place (bit 8) below.  Fill in the requester ID at the
-     *   proper bit position so that when we shift it, the requester ID will
-     *   end up at bit F_L(SB_WQ_RID_bf)
+     * - Increment the sequence number
+     * - The sequence number is in out_word0.  We will shift it into place
+     *   (SB_WQ_SEQ_shf) below.  In this defer slot, fill in the requester ID
+     *   and enabled bit so that when we shift the word, the requester ID
+     *   will start at bit SB_WQ_RID_shf and the enabled bit will land at bit
+     *   SB_WQ_ENABLED_shf.
      */
     ctx_arb[fl_read_sig, cur_outsig], defer[2]
-    alu[LM_SEQ, LM_SEQ, +, 1]
-    alu[addr_lo_10bit_seq, addr_lo_10bit_seq, OR, LM_STATUS, <<(F_L(SB_WQ_RID_bf) - (F_L(SB_WQ_SEQ_bf) - NFD_OUT_FL_DESC_SIZE_lg2))]
-
+    alu[LM_SEQ, LM_SEQ, +, 1]                   // convenient debug counter
+    alu[out_word0, out_word0, OR, LM_STATUS, <<(SB_WQ_RID_shf - SB_WQ_SEQ_shf)]
 
     // Start sending the work to issue DMA, but see below: we're not quite done
     pci_out_sb_add_work(out_xfer[0], cur_outsig)
@@ -730,7 +767,7 @@ test_ready_to_send#:
     .set_sig ordersig
     #pragma warning(disable:5009)
     ctx_arb[nxt_insig, nxt_outsig, ordersig], defer[2], br[DONE_LABEL]
-    alu[out_xfer[0], $buf_desc[0], OR, addr_lo_10bit_seq, <<(F_L(SB_WQ_SEQ_bf) - NFD_OUT_FL_DESC_SIZE_lg2)]
+    alu[out_xfer[0], $buf_desc[0], OR, out_word0, <<SB_WQ_SEQ_shf]
     move(out_xfer[1], $buf_desc[1])
     #pragma warning(default:5009)
 
@@ -768,7 +805,7 @@ flow_controlled#:
     .reg volatile g_sig_next_worker
     .reg volatile g_lm_qstate_mask
     .reg volatile g_cache_addr_lo_mask
-    .reg volatile g_cache_addr_lo_10bit_seq_mask
+    .reg volatile g_seq_mask
     .reg volatile g_in_wq_hi
     .reg volatile g_in_wq_lo
     .reg volatile g_out_wq_hi
@@ -810,8 +847,8 @@ flow_controlled#:
     move(g_lm_qstate_mask, ((NFD_OUT_MAX_QUEUES - 1) << LM_QSTATE_SIZE_lg2))
     move(g_cache_addr_lo_mask, ((NFD_OUT_FL_BUFS_PER_QUEUE - 1) << NFD_OUT_FL_DESC_SIZE_lg2))
 
-    /* Mask 10 bits for the sequence number */
-    move(g_cache_addr_lo_10bit_seq_mask, (SB_WQ_SEQ_msk << NFD_OUT_FL_DESC_SIZE_lg2))
+    /* Mask for the sequence number */
+    move(g_seq_mask, SB_WQ_SEQ_msk)
 
     move(g_in_wq_hi, ((nfd_out_ring_mem/**/PCIE_ISL >> 8) & 0xFF000000))
     move(g_in_wq_lo, nfd_out_ring_num/**/PCIE_ISL/**/0)
