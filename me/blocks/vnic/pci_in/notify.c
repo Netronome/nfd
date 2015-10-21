@@ -290,7 +290,7 @@ notify_setup_shared()
 
 
 /**
- * Perform per context initialisation (for CTX 1 to 7)
+ * Perform per context initialization (for CTX 1 to 7)
  */
 void
 notify_setup()
@@ -344,26 +344,77 @@ notify_setup()
 #define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)
 #endif
 
-#define _NOTIFY_PROC(_pkt)                                              \
-do {                                                                    \
-    if (batch_in.pkt##_pkt##.eop) {                                     \
-        __critical_path();                                              \
-        _NOTIFY_MU_CHK(_pkt)                                            \
-        pkt_desc_tmp.sp0 = 0;                                           \
-        pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;              \
-        NFD_IN_ADD_SEQN_PROC;                                           \
-        batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];         \
-        batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1]; \
-        batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2]; \
-        batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3]; \
-                                                                        \
-        _SET_DST_Q(_pkt);                                               \
-        __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,     \
-                             out_msg_sz, out_msg_sz, sig_done, &wq_sig##_pkt); \
-    } else {                                                            \
-        /* Remove the wq signal from the wait mask */                   \
-        wait_msk &= ~__signals(&wq_sig##_pkt);                          \
-    }                                                                   \
+#define _NOTIFY_PROC(_pkt, _lso_ring_num, _lso_ring_addr)                    \
+do {                                                                         \
+    unsigned int i;                                                          \
+    unsigned int num_lso_to_read = batch_in.pkt##_pkt##.sp0;                 \
+    __xread struct nfd_in_pkt_desc lso_pkt;                                  \
+    SIGNAL lso_sig;                                                          \
+    SIGNAL_PAIR lso_sig_pair;                                                \
+    NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                               \
+                         NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC);             \
+    /* finished packet and no LSO */                                         \
+    if ((batch_in.pkt##_pkt##.eop) && (num_lso_to_read == 0)) {              \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
+                             NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC);     \
+        __critical_path();                                                   \
+        _NOTIFY_MU_CHK(_pkt)                                                 \
+        pkt_desc_tmp.sp0 = 0;                                                \
+        pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;                   \
+        NFD_IN_ADD_SEQN_PROC;                                                \
+        batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];              \
+        batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1];      \
+        batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2];      \
+        batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3];      \
+                                                                             \
+        _SET_DST_Q(_pkt);                                                    \
+        __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,          \
+                             out_msg_sz, out_msg_sz, sig_done,               \
+                             &wq_sig##_pkt);                                 \
+    } else if (num_lso_to_read != 0) {                                       \
+        /* else LSO packets */                                               \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
+                             NFD_IN_LSO_CNTR_T_NOTIFY_LSO_PKT_DESC);         \
+         /* finished packet with LSO to handle */                            \
+        i = 0;                                                               \
+        while (i < num_lso_to_read) {                                        \
+            /* read packet from nfd_in_issued_lso_ring */                    \
+            __mem_ring_get(_lso_ring_num, _lso_ring_addr, &lso_pkt,          \
+                           sizeof(lso_pkt), sizeof(lso_pkt), sig_done,       \
+                           &lso_sig_pair);                                   \
+            wait_for_all_single(&lso_sig_pair.even);                         \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
+                              NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING); \
+            pkt_desc_tmp.sp0 = 0;                                            \
+            pkt_desc_tmp.offset = lso_pkt.offset;                            \
+            NFD_IN_ADD_SEQN_PROC;                                            \
+            batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];          \
+            batch_out.pkt##_pkt##.__raw[1] = lso_pkt.__raw[1];               \
+            batch_out.pkt##_pkt##.__raw[2] = lso_pkt.__raw[2];               \
+            batch_out.pkt##_pkt##.__raw[3] = lso_pkt.__raw[3];               \
+            _SET_DST_Q(_pkt);                                                \
+            /* if it is last LSO being read from ring */                     \
+            if (i == (num_lso_to_read - 1)) {                                \
+                __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,  \
+                                     out_msg_sz, out_msg_sz, sig_done,       \
+                                     &wq_sig##_pkt);                         \
+                NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
+                             NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING); \
+            } else {                                                         \
+                __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,  \
+                                     out_msg_sz, out_msg_sz, sig_done,       \
+                                     &lso_sig);                              \
+                __wait_for_all(&lso_sig);                                    \
+            }                                                                \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
+                            NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ); \
+            i++;                                                             \
+            _LSO_END_PKTS_TO_ME_WQ_CNTR(lso_pkt.flags);                      \
+        }                                                                    \
+    } else {                                                                 \
+        /* Remove the wq signal from the wait mask */                        \
+        wait_msk &= ~__signals(&wq_sig##_pkt);                               \
+    }                                                                        \
 } while (0)
 
 
@@ -380,7 +431,8 @@ do {                                                                    \
  */
 __forceinline void
 _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
-        int input_ring)
+        int input_ring, __gpr unsigned int lso_ring_num,
+        __gpr mem_ring_addr_t lso_ring_addr)
 {
 
     unsigned int n_batch;
@@ -457,14 +509,14 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         pkt_desc_tmp.reserved = 0;
 #endif
 
-        _NOTIFY_PROC(0);
-        _NOTIFY_PROC(1);
-        _NOTIFY_PROC(2);
-        _NOTIFY_PROC(3);
-        _NOTIFY_PROC(4);
-        _NOTIFY_PROC(5);
-        _NOTIFY_PROC(6);
-        _NOTIFY_PROC(7);
+        _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(1, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(2, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(3, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(4, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(5, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(6, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(7, lso_ring_num, lso_ring_addr);
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
@@ -485,10 +537,12 @@ notify(int side)
 {
     if (side == 0) {
         _notify(&data_dma_seq_compl0, &data_dma_seq_served0,
-                NFD_IN_ISSUED_RING0_NUM);
+                NFD_IN_ISSUED_RING0_NUM, nfd_in_issued_lso_ring_num0,
+                nfd_in_issued_lso_ring_addr0);
     } else {
         _notify(&data_dma_seq_compl1, &data_dma_seq_served1,
-                NFD_IN_ISSUED_RING1_NUM);
+                NFD_IN_ISSUED_RING1_NUM, nfd_in_issued_lso_ring_num1,
+                nfd_in_issued_lso_ring_addr1);
     }
 }
 
