@@ -491,7 +491,7 @@ do {                                                                         \
         /* do we do not have a pkt buffer to fill into */                    \
         if (queue_data[queue].curr_buf == 0) {                               \
             /* get a buffer. */                                              \
-            while (blm_buf_alloc(&mu_buf_xread, 0) != NFD_IN_BLM_BLS) {      \
+            while (blm_buf_alloc(&mu_buf_xread, NFD_IN_BLM_BLS) != 0) {      \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                           NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);\
             }                                                                \
