@@ -721,15 +721,14 @@ add_wq_credits#:
 
     wsm_extract(qnum, io_work, SB_WQ_QNUM)
     alu[bitmap_lo, g_bitmap_base, OR, qnum, <<4]
-    wsm_extract($ticket, io_work, SB_WQ_SEQ)
+    alu[$ticket, g_seq_mask, AND, io_work[SB_WQ_SEQ_wrd], >>SB_WQ_SEQ_shf]
 
     wsm_extract(isl, io_work, SB_WQ_CTM_ISL)
     beq[no_ctm_buffer#]
 
     // Free CTM buffer
-    alu[addr_hi, isl, OR, 0x80]
-    alu[addr_hi, --, B, addr_hi, <<24]
-    wsm_extract(addr_lo, io_work, SB_WQ_PKT_NUM)
+    alu[addr_hi, g_pkt_free_hi, OR, isl, <<24]
+    alu[addr_lo, g_pkt_num_mask, AND, io_work[SB_WQ_PKT_NUM_wrd], >>SB_WQ_PKT_NUM_shf]
     mem[packet_free, --, addr_hi, <<8, addr_lo]
 
 no_ctm_buffer#:
@@ -737,7 +736,7 @@ no_ctm_buffer#:
 
     wsm_extract(addr_lo, io_work, SB_WQ_MUBUF)
     ctx_arb[ticket_sig], defer[2]
-    alu[cntr_addr_lo, --, B, qnum, <<4]
+    alu[cntr_addr_lo, NFD_OUT_ATOMICS_DMA_DONE, OR, qnum, <<4]
     wsm_extract(ring_num, io_work, SB_WQ_BLS)
 
     // Free the MU buffer
@@ -748,7 +747,6 @@ ticket_ready#:
     br=byte[$ticket, 0, 0, complete_done#]
     br=byte[$ticket, 0, TICKET_ERROR, ticket_error#]
 
-    alu[cntr_addr_lo, cntr_addr_lo, +, NFD_OUT_ATOMICS_DMA_DONE]
     alu[--, g_add_imm_iref, OR, $ticket, <<16]
     mem[add_imm, --, g_send_cntrs_addr_hi, <<8, cntr_addr_lo], indirect_ref
 
@@ -863,6 +861,9 @@ main#:
     .reg volatile g_dma_word1_vals
     .reg volatile g_dma_word3_vals
     .reg volatile g_bitmap_base
+    .reg volatile g_seq_mask
+    .reg volatile g_pkt_num_mask
+    .reg volatlie g_pkt_free_hi
     .reg volatile g_send_cntrs_addr_hi
     .reg volatile g_blm_addr_hi
     .reg volatile g_blm_iref
@@ -959,6 +960,16 @@ main#:
 
     // Base address in local island of release bitmap
     move(g_bitmap_base, nfd_out_sb_release/**/PCIE_ISL)
+
+    // Mask of sequence number in incoming descriptor
+    move(g_seq_mask, SB_WQ_SEQ_msk)
+
+    // Mask of packet number in the incoming descriptor
+    move(g_pkt_num_mask, SB_WQ_PKT_NUM_msk)
+
+    // Used to quickly construct the packet free address
+    // Sets "direct access mode" bit in MU address.
+    move(g_pkt_free_hi, 0x80000000)
 
     // Base address of send_desc release counters
     move(g_send_cntrs_addr_hi, (nfd_out_atomics/**/PCIE_ISL >> 8))
