@@ -13,6 +13,10 @@
 
 #include <nfp6000/nfp_pcie.h>
 
+#ifndef STAGE_BATCH_MANAGER_CTX
+#define STAGE_BATCH_MANAGER_CTX 0
+#endif
+
 #ifndef NFD_OUT_RX_OFFSET
 #warning "NFD_OUT_RX_OFFSET not defined: defaulting to NFP_NET_RX_OFFSET which is sub-optimal"
 #define NFD_OUT_RX_OFFSET NFP_NET_RX_OFFSET
