@@ -114,7 +114,7 @@
 #define NFD_IN_ISSUED_LSO_RING1_SZ  65536  /* ring needs 204B per batch * number Queues */
 #define NFD_IN_MAX_LSO_HDR_SZ       256
 
-#if defined(__NFP_LANG_MICROC)
+#if defined(__NFP_LANG_MICROC) || defined(NFD_DBG)
 /* NFD IN LSO Debug Counters. */
 enum NFD_IN_LSO_CNTR_IDX {
     NFD_IN_LSO_CNTR_T_ISSUED_ALL_TX_DESC = 0,
