@@ -11,8 +11,10 @@
 
 #include <nfp/cls.h>
 #include <nfp/me.h>
+#include <nfp/mem_pe.h>
 #include <nfp/pcie.h>
 #include <std/reg_utils.h>
+#include <std/cntrs.h>
 
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
@@ -156,7 +158,6 @@ __visible volatile SIGNAL nfd_in_gather_compl_refl_sig1;
 
 #endif
 
-//#if (PCI_IN_ISSUE_DMA_IDX == 0)
 #define NFD_IN_ISSUED_LSO_RING_INIT_IND2(_isl, _emem, _num)                        \
     ASM(.alloc_mem nfd_in_issued_lso_ring_mem##_isl##_num _emem global             \
         NFD_IN_ISSUED_LSO_RING_SZ NFD_IN_ISSUED_LSO_RING_SZ)                 \
@@ -175,7 +176,6 @@ NFD_IN_ISSUED_LSO_RING_INIT(PCIE_ISL, NFD_IN_ISSUED_LSO_RING_NUM);
     _link_sym(nfd_in_issued_lso_ring_mem##_isl##_num)
 #define NFD_IN_ISSUED_LSO_RING_ADDR(_isl, _num)                                    \
     NFD_IN_ISSUED_LSO_RING_ADDR_IND(_isl, _num)
-//#endif
 
 static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr = 0;
 static __gpr unsigned int nfd_in_issued_lso_ring_num = 0;
@@ -420,6 +420,12 @@ issue_dma_setup()
     cpp_hi_event_part |= (NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN) |
                           NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG));
 
+    /* wait_msk initially only needs batch_sig, tx_desc_sig and dma_order_sig
+     * No DMAs or messages have been issued at this stage */
+    wait_msk = __signals(&batch_sig, &tx_desc_sig, &dma_order_sig);
+    next_ctx = reorder_get_next_ctx(NFD_IN_ISSUE_START_CTX,
+                                    NFD_IN_ISSUE_END_CTX);
+
 #ifdef NFD_IN_LSO_CNTR_ENABLE
     nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *) nfd_in_lso_cntrs);
 #endif
@@ -427,12 +433,6 @@ issue_dma_setup()
                                                NFD_IN_ISSUED_LSO_RING_NUM);
     nfd_in_issued_lso_ring_addr = ((((unsigned long long)
                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
-
-    /* wait_msk initially only needs batch_sig, tx_desc_sig and dma_order_sig
-     * No DMAs or messages have been issued at this stage */
-    wait_msk = __signals(&batch_sig, &tx_desc_sig, &dma_order_sig);
-    next_ctx = reorder_get_next_ctx(NFD_IN_ISSUE_START_CTX,
-                                    NFD_IN_ISSUE_END_CTX);
 }
 
 
@@ -574,9 +574,21 @@ do {                                                                    \
                                                                         \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                              \
     _ISSUE_PROC_A0_SUPPORT(dma_len);                                    \
+    NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                          \
+                         NFD_IN_LSO_CNTR_T_ISSUED_ALL_TX_DESC);         \
                                                                         \
-    if (tx_desc.pkt##_pkt##.eop &&                                      \
+    /* if tx descr is LSO */                                            \
+    if (tx_desc.pkt##_pkt##.lso) {                                      \
+        /* do the lso function processing */                            \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
+                             NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_TX_DESC); \
+       /* ADD CALL TO LSO FUNCTION HERE */                              \
+        _LSO_TX_DESC_TYPE_CNTR(_pkt);                                   \
+    }                                                                   \
+    else if (tx_desc.pkt##_pkt##.eop &&                                 \
         (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT) == 0)) { \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
+                      NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);    \
         /* Fast path, use buf_store data */                             \
         __critical_path();                                              \
                                                                         \
@@ -630,6 +642,8 @@ do {                                                                    \
         batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
                                                                         \
     } else if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_UP) == 0) { \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
+                             NFD_IN_LSO_CNTR_T_ISSUED_NOT_Q_UP_TX_DESC);\
         /* Handle down queues off the fast path. */                     \
         /* As all packets in a batch come from one queue and are */     \
         /* processed without swapping, all the packets in the batch */  \
@@ -674,6 +688,8 @@ do {                                                                    \
                                                                         \
     } else {                                                            \
         if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT) == 0) { \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
+                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_TX_DESC);\
             /* Initialise continuation data */                          \
                                                                         \
             /* XXX check efficiency */                                  \
@@ -739,6 +755,8 @@ do {                                                                    \
                                                                         \
         /* Clear continuation data on EOP */                            \
         if (tx_desc.pkt##_pkt##.eop) {                                  \
+            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,              \
+                      NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);\
             __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
                         AND~, 1, <<NFD_IN_DMA_STATE_CONT] }             \
             __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, 0] }              \
