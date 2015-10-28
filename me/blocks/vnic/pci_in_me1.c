@@ -147,10 +147,6 @@ main(void)
         }
     } else {
         /* Worker main loop */
-
-        for (;;) {
             issue_dma();
-
-        }
     }
 }

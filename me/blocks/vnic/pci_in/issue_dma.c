@@ -545,6 +545,27 @@ do {                                                                    \
 } while (0)
 
 
+/* These functions issue DMAs for LSO packet.
+ *
+ */
+#define DECLARE_PROC_LSO(_pkt)                                          \
+__noinline void issue_proc_lso##_pkt() {                                \
+    /* Fill up the LSO processing function */                           \
+    __gpr unsigned int cnt;                                             \
+    cnt = local_csr_read(local_csr_mailbox_3);                          \
+    cnt++;                                                              \
+    local_csr_write(local_csr_mailbox_0, cnt);                          \
+}
+DECLARE_PROC_LSO(0);
+DECLARE_PROC_LSO(1);
+DECLARE_PROC_LSO(2);
+DECLARE_PROC_LSO(3);
+DECLARE_PROC_LSO(4);
+DECLARE_PROC_LSO(5);
+DECLARE_PROC_LSO(6);
+DECLARE_PROC_LSO(7);
+
+
 #if __REVISION_MIN < __REVISION_B0
     /* THS-54 workaround, round DMA up to next 4B multiple size.
      * This workaround is incompatible with gather support. */
@@ -583,6 +604,7 @@ do {                                                                    \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_TX_DESC); \
        /* ADD CALL TO LSO FUNCTION HERE */                              \
+       issue_proc_lso##_pkt();                                          \
         _LSO_TX_DESC_TYPE_CNTR(_pkt);                                   \
     }                                                                   \
     else if (tx_desc.pkt##_pkt##.eop &&                                 \
@@ -784,7 +806,7 @@ do {                                                                    \
  * "data_dma_seq_issued" indicate that it is safe to continue.  Two ordering
  * stages ensure that packet DMAs are issued in sequence.
  */
-__forceinline void
+void
 issue_dma()
 {
     static __xread struct _tx_desc_batch tx_desc;
@@ -798,142 +820,145 @@ issue_dma()
     unsigned int queue;
     unsigned int num;
 
-    reorder_test_swap(&desc_order_sig);
+    for (;;) {
 
-    /* Check "DMA" completed and we can read the batch
-     * If so, the CLS ring MUST have a batch descriptor for us
-     * NB: only one ctx can execute this at any given time */
-    while (gather_dma_seq_compl == gather_dma_seq_serv) {
-        ctx_swap(); /* Yield while waiting for work */
-    }
+        reorder_test_swap(&desc_order_sig);
 
-    reorder_done_opt(&next_ctx, &desc_order_sig);
-
-    /*
-     * Increment gather_dma_seq_serv upfront to avoid ambiguity
-     * about sequence number zero
-     */
-    gather_dma_seq_serv++;
-
-    /* Read the batch descriptor */
-    cls_ring_get(NFD_IN_BATCH_RING0_NUM + PCI_IN_ISSUE_DMA_IDX,
-                 &batch, sizeof(batch), &batch_sig);
-
-    /* Read the batch */
-    desc_ring_off = ((gather_dma_seq_serv * sizeof(tx_desc)) &
-                     (NFD_IN_DESC_RING_SZ - 1));
-    desc_ring_addr = (__cls void *) (desc_ring_base | desc_ring_off);
-    __cls_read(&tx_desc, desc_ring_addr, sizeof tx_desc, sizeof tx_desc,
-               sig_done, &tx_desc_sig);
-
-    /* Start of dma_order_sig reorder stage */
-    __asm {
-        ctx_arb[--], defer[1];
-        local_csr_wr[local_csr_active_ctx_wakeup_events, wait_msk];
-    }
-
-    wait_msk = __signals(&last_of_batch_dma_sig, &batch_sig, &tx_desc_sig,
-                         &msg_sig0, &msg_sig1, &dma_order_sig);
-    __implicit_read(&last_of_batch_dma_sig);
-    __implicit_read(&msg_sig1);
-    __implicit_read(&msg_sig0);
-    __implicit_read(&batch_sig);
-    __implicit_read(&tx_desc_sig);
-    __implicit_read(&dma_order_sig);
-    __implicit_read(&dma_out, sizeof dma_out);
-
-    while ((int)(data_dma_seq_issued - data_dma_seq_safe) >= 0) {
-        /* We can't process this batch yet.
-         * Swap then recompute seq_safe.
+        /* Check "DMA" completed and we can read the batch
+         * If so, the CLS ring MUST have a batch descriptor for us
          * NB: only one ctx can execute this at any given time */
-        ctx_swap();
-        precache_bufs_compute_seq_safe();
+        while (gather_dma_seq_compl == gather_dma_seq_serv) {
+            ctx_swap(); /* Yield while waiting for work */
+        }
+
+        reorder_done_opt(&next_ctx, &desc_order_sig);
+
+        /*
+         * Increment gather_dma_seq_serv upfront to avoid ambiguity
+         * about sequence number zero
+         */
+        gather_dma_seq_serv++;
+
+        /* Read the batch descriptor */
+        cls_ring_get(NFD_IN_BATCH_RING0_NUM + PCI_IN_ISSUE_DMA_IDX,
+                     &batch, sizeof(batch), &batch_sig);
+
+        /* Read the batch */
+        desc_ring_off = ((gather_dma_seq_serv * sizeof(tx_desc)) &
+                         (NFD_IN_DESC_RING_SZ - 1));
+        desc_ring_addr = (__cls void *) (desc_ring_base | desc_ring_off);
+        __cls_read(&tx_desc, desc_ring_addr, sizeof tx_desc, sizeof tx_desc,
+                   sig_done, &tx_desc_sig);
+
+        /* Start of dma_order_sig reorder stage */
+        __asm {
+            ctx_arb[--], defer[1];
+            local_csr_wr[local_csr_active_ctx_wakeup_events, wait_msk];
+        }
+
+        wait_msk = __signals(&last_of_batch_dma_sig, &batch_sig, &tx_desc_sig,
+                             &msg_sig0, &msg_sig1, &dma_order_sig);
+        __implicit_read(&last_of_batch_dma_sig);
+        __implicit_read(&msg_sig1);
+        __implicit_read(&msg_sig0);
+        __implicit_read(&batch_sig);
+        __implicit_read(&tx_desc_sig);
+        __implicit_read(&dma_order_sig);
+        __implicit_read(&dma_out, sizeof dma_out);
+
+        while ((int)(data_dma_seq_issued - data_dma_seq_safe) >= 0) {
+            /* We can't process this batch yet.
+             * Swap then recompute seq_safe.
+             * NB: only one ctx can execute this at any given time */
+            ctx_swap();
+            precache_bufs_compute_seq_safe();
+        }
+
+        /* We can start to process this batch but may need to issue multiple
+         * DMAs and swap for large packets, so don't let other batches start
+         * just yet. */
+
+        queue = batch.queue;
+        num = batch.num;
+        data_dma_seq_issued++;
+
+        local_csr_write(local_csr_active_lm_addr_2, &queue_data[queue]);
+
+        issued_tmp.sp0 = 0;
+        issued_tmp.num_batch = num;   /* Only needed in pkt0 */
+        issued_tmp.sp1 = 0;
+        issued_tmp.q_num = queue;
+        pcie_hi_word_part =
+            (NFP_PCIE_DMA_CMD_RID_OVERRIDE |
+             NFP_PCIE_DMA_CMD_TRANS_CLASS(NFD_IN_DATA_DMA_TRANS_CLASS) |
+             NFP_PCIE_DMA_CMD_RID(queue_data[queue].rid));
+
+        /* Maybe add "full" bit */
+        if (num == 8) {
+            /* Full batches are the critical path */
+            /* XXX maybe tricks with an extra nfd_in_dma_state
+             * struct would convince nfcc to use one set LM index? */
+            __critical_path();
+            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(3, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(4, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(5, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(6, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(7, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+        } else if (num == 4) {
+            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(3, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+            _ISSUE_CLR(4);
+            _ISSUE_CLR(5);
+            _ISSUE_CLR(6);
+            _ISSUE_CLR(7);
+        } else if (num == 3) {
+            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(2, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+            _ISSUE_CLR(3);
+            _ISSUE_CLR(4);
+            _ISSUE_CLR(5);
+            _ISSUE_CLR(6);
+            _ISSUE_CLR(7);
+        } else if (num == 2) {
+            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+            _ISSUE_PROC(1, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+            _ISSUE_CLR(2);
+            _ISSUE_CLR(3);
+            _ISSUE_CLR(4);
+            _ISSUE_CLR(5);
+            _ISSUE_CLR(6);
+            _ISSUE_CLR(7);
+        } else if (num == 1) {
+            _ISSUE_PROC(0, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+
+            _ISSUE_CLR(1);
+            _ISSUE_CLR(2);
+            _ISSUE_CLR(3);
+            _ISSUE_CLR(4);
+            _ISSUE_CLR(5);
+            _ISSUE_CLR(6);
+            _ISSUE_CLR(7);
+        } else {
+            local_csr_write(local_csr_mailbox_0, 0xdeadbeef);
+            local_csr_write(local_csr_mailbox_1, batch.__raw);
+            halt();
+        }
+
+        /* We have finished processing the batch, let the next continue */
+        reorder_done_opt(&next_ctx, &dma_order_sig);
+
+        ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt0,
+                     (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
+        ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt4,
+                     (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
     }
-
-    /* We can start to process this batch but may need to issue multiple
-     * DMAs and swap for large packets, so don't let other batches start
-     * just yet. */
-
-    queue = batch.queue;
-    num = batch.num;
-    data_dma_seq_issued++;
-
-    local_csr_write(local_csr_active_lm_addr_2, &queue_data[queue]);
-
-    issued_tmp.sp0 = 0;
-    issued_tmp.num_batch = num;   /* Only needed in pkt0 */
-    issued_tmp.sp1 = 0;
-    issued_tmp.q_num = queue;
-    pcie_hi_word_part =
-        (NFP_PCIE_DMA_CMD_RID_OVERRIDE |
-         NFP_PCIE_DMA_CMD_TRANS_CLASS(NFD_IN_DATA_DMA_TRANS_CLASS) |
-         NFP_PCIE_DMA_CMD_RID(queue_data[queue].rid));
-
-    /* Maybe add "full" bit */
-    if (num == 8) {
-        /* Full batches are the critical path */
-        /* XXX maybe tricks with an extra nfd_in_dma_state
-         * struct would convince nfcc to use one set LM index? */
-        __critical_path();
-        _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(3, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(4, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(5, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(6, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(7, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-    } else if (num == 4) {
-        _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(3, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-        _ISSUE_CLR(4);
-        _ISSUE_CLR(5);
-        _ISSUE_CLR(6);
-        _ISSUE_CLR(7);
-    } else if (num == 3) {
-        _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(2, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-        _ISSUE_CLR(3);
-        _ISSUE_CLR(4);
-        _ISSUE_CLR(5);
-        _ISSUE_CLR(6);
-        _ISSUE_CLR(7);
-    } else if (num == 2) {
-        _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-        _ISSUE_PROC(1, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-        _ISSUE_CLR(2);
-        _ISSUE_CLR(3);
-        _ISSUE_CLR(4);
-        _ISSUE_CLR(5);
-        _ISSUE_CLR(6);
-        _ISSUE_CLR(7);
-    } else if (num == 1) {
-        _ISSUE_PROC(0, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-        _ISSUE_CLR(1);
-        _ISSUE_CLR(2);
-        _ISSUE_CLR(3);
-        _ISSUE_CLR(4);
-        _ISSUE_CLR(5);
-        _ISSUE_CLR(6);
-        _ISSUE_CLR(7);
-    } else {
-        local_csr_write(local_csr_mailbox_0, 0xdeadbeef);
-        local_csr_write(local_csr_mailbox_1, batch.__raw);
-        halt();
-    }
-
-    /* We have finished processing the batch, let the next continue */
-    reorder_done_opt(&next_ctx, &dma_order_sig);
-
-    ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt0,
-                 (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
-    ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt4,
-                 (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
 }
