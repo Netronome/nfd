@@ -23,7 +23,7 @@
  * ABI change.  Increment minor version number for each compatible ABI change
  * (e.g. a new feature flag).  Reset minor version number to zero for each
  * major version number change. */
-#define NFD_CFG_MAJOR               1
+#define NFD_CFG_MAJOR               2
 #define NFD_CFG_MINOR               0
 #define NFD_CFG_CLASS_DEFAULT       0
 

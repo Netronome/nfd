@@ -108,6 +108,7 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
+    __xwrite unsigned int rx_off = NFP_NET_RX_OFFSET;
 
     mem_write64(&cfg,
                 NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_VERSION,
@@ -115,6 +116,10 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
 
     mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
+
+    mem_write8(&rx_off,
+               NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_RX_OFFSET_ADDR,
+               sizeof rx_off);
 #endif
 }
 
@@ -141,12 +146,16 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, unsigned int vf)
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
+    __xwrite unsigned int rx_off = NFP_NET_RX_OFFSET;
 
     mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 
-    mem_write8(&exn_lsc,
-               NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_LSC, sizeof exn_lsc);
+    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_LSC,
+               sizeof exn_lsc);
+
+    mem_write8(&rx_off, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_RX_OFFSET_ADDR,
+               sizeof rx_off);
 #endif
 }
 

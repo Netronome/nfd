@@ -157,6 +157,18 @@
 #define NFP_NET_N_VXLAN_PORTS  (NFP_NET_CFG_VXLAN_SZ / sizeof(uint16_t))
 
 /**
+ * Reuse spare address to contain the offset from the start of
+ * the host buffer where the first byte of the received frame
+ * will land.  Any metadata will come prior to that offset.  If the
+ * value in this field is 0, it means that that the metadata will
+ * always land starting at the first byte of the host buffer and
+ * packet data will immediately follow the metadata.  As always,
+ * the RX descriptor indicates the presence or absence of metadata
+ * along with the length thereof.
+ */
+#define NFP_NET_CFG_RX_OFFSET_ADDR      0x0050
+
+/**
  * 64B reserved for future use (0x0080 - 0x00c0)
  */
 #define NFP_NET_CFG_RESERVED            0x0080
