@@ -701,6 +701,14 @@ copy_loop#:
     .reg addr_lo
     .reg out_word0
 
+    #ifndef NFD_OUT_SB_SKIP_BUF_SANITY
+        .reg buf_hi
+        #define _BUF_HI buf_hi
+    #else /* NFD_OUT_SB_SKIP_BUF_SANITY */
+        #define _BUF_HI $buf_desc[0]
+    #endif /* NFD_OUT_SB_SKIP_BUF_SANITY */
+
+
     .reg read $buf_desc[2]
     .xfer_order $buf_desc
 
@@ -755,6 +763,16 @@ test_ready_to_send#:
     // Start sending the work to issue DMA, but see below: we're not quite done
     pci_out_sb_add_work(out_xfer[0], cur_outsig)
 
+    #ifndef NFD_OUT_SB_SKIP_BUF_SANITY
+        /*
+         * Extract the high address bits of the host buffer.
+         * NOTE that this should *not* be necessary, but we have observed cases
+         * where PMDs failed to clear memory with stale RX descriptors triggered
+         * from previous PMD crashes.
+         */ 
+        alu[buf_hi, 0xFF, AND, $buf_desc[0]]
+    #endif /* NFD_OUT_SB_SKIP_BUF_SANITY */
+
     /*
      * Wait for least recent I/Os to complete.
      *
@@ -767,7 +785,7 @@ test_ready_to_send#:
     .set_sig ordersig
     #pragma warning(disable:5009)
     ctx_arb[nxt_insig, nxt_outsig, ordersig], defer[2], br[DONE_LABEL]
-    alu[out_xfer[0], $buf_desc[0], OR, out_word0, <<SB_WQ_SEQ_shf]
+    alu[out_xfer[0], _BUF_HI, OR, out_word0, <<SB_WQ_SEQ_shf]
     move(out_xfer[1], $buf_desc[1])
     #pragma warning(default:5009)
 
@@ -776,6 +794,8 @@ flow_controlled#:
     ctx_arb[voluntary], defer[2], br[test_ready_to_send#]
     alu[LM_WQ_CREDITS, LM_WQ_CREDITS, +, 1]
     nop
+
+    #undef _BUF_HI
 
 .end
 #endm
