@@ -72,6 +72,8 @@ extern __shared __gpr unsigned int jumbo_dma_seq_compl;
 static volatile __xread unsigned int nfd_in_data_event_xfer;
 static SIGNAL nfd_in_data_event_sig;
 static volatile __xread unsigned int nfd_in_jumbo_event_xfer = 0;
+/* XXX nfd_in_jumbo_event_sig is overloaded to also trigger re-execution
+ * of precache_bufs_jumbo(). */
 static SIGNAL nfd_in_jumbo_event_sig;
 
 /* Signals and transfer registers for sequence number reflects */
@@ -417,7 +419,14 @@ precache_bufs_jumbo()
 
         wait_for_all_single(&jumbo_sig.even);
         if (signal_test(&jumbo_sig.odd)) {
-            /* XXX No buffers on the BLQ, what should we do? */
+            if (jumbo_cnt == 0) {
+                /* We have really exhausted the jumbo_store,
+                 * so allow the * context to poll again, by setting
+                 * nfd_in_jumbo_event_sig */
+                signal_ctx(0, __signal_number(&nfd_in_jumbo_event_sig));
+                __implicit_write(&nfd_in_jumbo_event_sig);
+            }
+
             return;
         }
 
@@ -479,6 +488,12 @@ precache_bufs_jumbo_use(__gpr unsigned int *buf_addr)
         jumbo_cnt--;
         *buf_addr = jumbo_store[jumbo_cnt];
     } else {
+        /* The jumbo_store is depleted and threads are spinning.
+         * Allow CTX0 to execute precache_bufs_jumbo() again to
+         * hopefully refill the jumbo_store. */
+        signal_ctx(0, __signal_number(&nfd_in_jumbo_event_sig));
+        __implicit_write(&nfd_in_jumbo_event_sig);
+
         /* Set the return buffer to a distinctive value to help identify
          * incorrect use of the return data. */
         #define JUMBO_ERROR_BUF 0x00aabbcc
@@ -504,6 +519,11 @@ distr_precache_bufs_setup_shared()
     dma_seqn_ap_setup(NFD_IN_JUMBO_EVENT_FILTER, NFD_IN_JUMBO_EVENT_FILTER,
                       NFD_IN_JUMBO_EVENT_TYPE, PCI_IN_ISSUE_DMA_IDX,
                       &nfd_in_jumbo_event_xfer, &nfd_in_jumbo_event_sig);
+
+    /* Allow precache_bufs_jumbo() to run and cache a few jumbo buffers
+     * to be ready for the first jumbo frames. */
+    signal_ctx(0, __signal_number(&nfd_in_jumbo_event_sig));
+    __implicit_write(&nfd_in_jumbo_event_sig);
 }
 
 
@@ -525,6 +545,10 @@ distr_precache_bufs_setup_shared()
  *
  * jumbo_dma_seq_compl tracks the number of reserve DMAs completed.  These
  * reserve DMAs are used if the packets exceeds NFD_IN_DMA_SPLIT_LEN.
+ *
+ * precache_bufs_jumbo() is called from the section of code that services
+ * nfd_in_jumbo_event_sig.  This minimises the jumbo overhead when the
+ * extra DMAs and packet buffers are not used.
  */
 __intrinsic void
 distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *data_sig,
@@ -561,6 +585,8 @@ distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *data_sig,
 
     if (signal_test(&nfd_in_jumbo_event_sig)) {
         dma_seqn_advance(&nfd_in_jumbo_event_xfer, &jumbo_dma_seq_compl);
+
+        precache_bufs_jumbo();
 
         __implicit_write(&nfd_in_jumbo_event_sig);
         __event_cls_autopush_filter_reset(
