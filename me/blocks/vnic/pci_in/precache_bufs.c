@@ -310,6 +310,27 @@ precache_bufs_use()
 
 
 /**
+ * Return a buffer to the cache, updating the cache pointer.
+ *
+ * This function may only be invoked to return a buffer allocated via
+ * precache_bufs_use(), and only if the context has not swapped since
+ * allocating the buffer.  If the context has swapped, the cache may
+ * have been refilled and invoking this function may overflow the cache.
+ * If the context has swapped, simply free the buffer back to the
+ * relevant BLQ.
+ */
+__intrinsic unsigned int
+precache_bufs_return(unsigned int buf_addr)
+{
+    /* Advance NFD_IN_BUF_STORE_PTR to the next vacant slot,
+     * and copy data back. */
+    __asm alu[--, --, b, NFD_IN_BUF_STORE_PTR++];
+    __asm alu[NFD_IN_BUF_STORE_PTR, --, b, buf_addr];
+}
+
+
+
+/**
  * Check the number of buffers available in the cache.
  */
 __intrinsic unsigned int
@@ -438,6 +459,36 @@ precache_bufs_jumbo()
     }
 }
 
+
+/**
+ * Fetch a packet buffer from the jumbo_store
+ * @param buf_addr      29bit buffer pointer from MU
+ *
+ * This function returns 0 on success, indicating that buf_addr is
+ * safe to use.  If the function does not return success, buf_addr
+ * may not be used; the jumbo_store is depleted and must be refilled.
+ */
+__intrinsic int
+precache_bufs_jumbo_use(__gpr unsigned int *buf_addr)
+{
+    int ret = 0;
+
+    if (jumbo_cnt > 0) {
+        /* Decrement jumbo_cnt then use that as the jumbo_store offset
+         * to account for C array indexing. */
+        jumbo_cnt--;
+        *buf_addr = jumbo_store[jumbo_cnt];
+    } else {
+        /* Set the return buffer to a distinctive value to help identify
+         * incorrect use of the return data. */
+        #define JUMBO_ERROR_BUF 0x00aabbcc
+
+        *buf_addr = JUMBO_ERROR_BUF;
+        ret = -1;
+    }
+
+    return ret;
+}
 
 
 /**
