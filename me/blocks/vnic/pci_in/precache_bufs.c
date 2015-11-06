@@ -46,6 +46,7 @@ struct precache_bufs_state {
 
 
 NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
+NFD_BLM_Q_ALLOC(NFD_IN_BLM_JUMBO_POOL);
 
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
@@ -57,6 +58,9 @@ static __xread unsigned int bufs_rd[NFD_IN_BUF_RECACHE_WM];
 static unsigned int blm_queue_addr;
 static unsigned int blm_queue_num;
 
+__shared __lmem unsigned int jumbo_store[NFD_IN_JUMBO_STORE_SZ];
+__shared __gpr unsigned int jumbo_cnt = 0;
+
 extern __shared __gpr unsigned int data_dma_seq_issued;
 __shared __gpr unsigned int data_dma_seq_compl = 0;
 __shared __gpr unsigned int data_dma_seq_served = 0;
@@ -67,7 +71,7 @@ extern __shared __gpr unsigned int jumbo_dma_seq_compl;
 /* Signals and transfer registers for receiving DMA events */
 static volatile __xread unsigned int nfd_in_data_event_xfer;
 static SIGNAL nfd_in_data_event_sig;
-static volatile __xread unsigned int nfd_in_jumbo_event_xfer;
+static volatile __xread unsigned int nfd_in_jumbo_event_xfer = 0;
 static SIGNAL nfd_in_jumbo_event_sig;
 
 /* Signals and transfer registers for sequence number reflects */
@@ -355,6 +359,85 @@ precache_bufs_compute_seq_safe()
     /* min_bat batches after data_dma_seq_issued are safe */
     data_dma_seq_safe = data_dma_seq_issued + min_bat;
 }
+
+
+/**
+ * Check whether at least NFD_IN_JUMBO_RECACHE_MIN buffers can be
+ * fetched.  If so fetch up to NFD_IN_JUMBO_RECACHE_MAX buffers
+ * from the BLM and copy them into jumbo_store.  We context swap
+ * on the fetch.  If the jumbo_store has become depleted, then some
+ * jumbo frames must have been sent, which implies that we should
+ * be ahead in terms of cycle budget.
+ */
+__intrinsic void
+precache_bufs_jumbo()
+{
+    unsigned int to_cache;
+
+    to_cache = NFD_IN_JUMBO_STORE_SZ - jumbo_cnt;
+
+    if (to_cache >= NFD_IN_JUMBO_RECACHE_MIN) {
+        __xread unsigned int jumbo_rd[NFD_IN_JUMBO_RECACHE_MAX];
+        unsigned int jumbo_store_addr;
+        unsigned int jumbo_queue_num;
+        unsigned int jump_offset;
+        SIGNAL_PAIR jumbo_sig;
+
+        if (to_cache > NFD_IN_JUMBO_RECACHE_MAX) {
+            to_cache = NFD_IN_JUMBO_RECACHE_MAX;
+        }
+
+        jumbo_queue_num = NFD_BLM_Q_LINK(NFD_IN_BLM_JUMBO_POOL);
+
+        /* Set blm_queue_num to another jumbo specific queue */
+        __mem_ring_pop(jumbo_queue_num, blm_queue_addr, jumbo_rd,
+                       to_cache * sizeof(unsigned int), sizeof jumbo_rd,
+                       sig_done, &jumbo_sig);
+
+        wait_for_all_single(&jumbo_sig.even);
+        if (signal_test(&jumbo_sig.odd)) {
+            /* XXX No buffers on the BLQ, what should we do? */
+            return;
+        }
+
+        jumbo_cnt += to_cache;
+        jumbo_store_addr = &jumbo_store[jumbo_cnt - 1];
+
+        local_csr_write(local_csr_active_lm_addr_2, jumbo_store_addr);
+        jump_offset = NFD_IN_JUMBO_RECACHE_MAX - to_cache;
+
+        __asm __attribute(ASM_HAS_JUMP) {
+            alu[jump_offset, 0xff, and, jump_offset] /* fill usage latency */
+#if NFD_IN_JUMBO_RECACHE_MAX == 8
+            jump[jump_offset, jumbo_8],                         \
+                targets[jumbo_8, jumbo_7, jumbo_6, jumbo_5,     \
+                        jumbo_4, jumbo_3, jumbo_2, jumbo_1]
+        jumbo_8:
+            alu[*l$index2--, --, b, jumbo_rd[7]];
+        jumbo_7:
+            alu[*l$index2--, --, b, jumbo_rd[6]];
+        jumbo_6:
+            alu[*l$index2--, --, b, jumbo_rd[5]];
+        jumbo_5:
+            alu[*l$index2--, --, b, jumbo_rd[4]];
+#else if NFD_IN_JUMBO_RECACHE_MAX == 4
+            jump[jump_offset, jumbo_4],                     \
+                targets[jumbo_4, jumbo_3, jumbo_2, jumbo_1]
+#else
+#error Unsupported NFD_IN_JUMBO_RECACHE_MAX setting (4 and 8 supported)
+#endif
+        jumbo_4:
+            alu[*l$index2--, --, b, jumbo_rd[3]];
+        jumbo_3:
+            alu[*l$index2--, --, b, jumbo_rd[2]];
+        jumbo_2:
+            alu[*l$index2--, --, b, jumbo_rd[1]];
+        jumbo_1:
+            alu[*l$index2, --, b, jumbo_rd[0]];
+        };
+    }
+}
+
 
 
 /**

@@ -44,6 +44,10 @@
 #define NFD_IN_BUF_RECACHE_WM   24
 #define NFD_IN_BUF_RING_POP_SZ  12
 
+#define NFD_IN_JUMBO_STORE_SZ       16
+#define NFD_IN_JUMBO_RECACHE_MAX    8
+#define NFD_IN_JUMBO_RECACHE_MIN    4
+
 #define NFD_IN_DATA_EVENT_XFER_ASSIGN 0
 /* #define NFD_IN_Q_EVENT_START    0 */
 /* #define NFD_IN_Q_START          0 */

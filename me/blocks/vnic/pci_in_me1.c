@@ -137,6 +137,8 @@ main(void)
 
             precache_bufs();
 
+            precache_bufs_jumbo();
+
             distr_precache_bufs(&distr_wait_msk, &distr0, &distr1);
 
             precache_bufs_compute_seq_safe();

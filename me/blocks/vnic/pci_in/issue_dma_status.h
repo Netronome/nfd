@@ -9,7 +9,7 @@
 
 #define STATUS_ISSUE_DMA_START   24
 #define STATUS_QUEUE_START1      20 /* XXX avoid name clash, add rtsym rather */
-#define STATUS_Q_SEL_START       31
+#define STATUS_Q_SEL_START       63
 
 struct nfd_in_issue_dma_status {
     unsigned int gather_dma_seq_compl;
