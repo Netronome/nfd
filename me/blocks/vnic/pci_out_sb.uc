@@ -86,8 +86,8 @@
  *
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
- * Word  +---------------------------------------------------------------+
- *    0  |                         Sequence Number                       |
+ * Word  +-----------------------------------------------+---------------+
+ *    0  |                 Sequence Number               |     Zero      |
  *       +---------------------------------------------+-+---------------+
  *    1  |                 Unused                      |E| Requester ID  |
  *       +---------------------------------------------+-+---------------+
@@ -95,6 +95,9 @@
  *       +---------------------------------------------------------------+
  *    3  |                            Unused                             |
  *       +---------------------------------------------------------------+
+ *
+ * The sequence number is shifted over 8 to enabled optimized use of the 
+ * alu[.., +8, ..] instruction to add in the host buffer's high 8 bits.
  */
 
 #define LM_QSTATE_SEQ_bf        0, 31, 0
@@ -701,14 +704,6 @@ copy_loop#:
     .reg addr_lo
     .reg out_word0
 
-    #ifndef NFD_OUT_SB_SKIP_BUF_SANITY
-        .reg buf_hi
-        #define _BUF_HI buf_hi
-    #else /* NFD_OUT_SB_SKIP_BUF_SANITY */
-        #define _BUF_HI $buf_desc[0]
-    #endif /* NFD_OUT_SB_SKIP_BUF_SANITY */
-
-
     .reg read $buf_desc[2]
     .xfer_order $buf_desc
 
@@ -735,11 +730,14 @@ test_ready_to_send#:
 
     /*
      * Swap freelist descriptor for RX descriptor.
-     * - get next addr_lo from sequence number
+     * - get next addr_lo from the (shifted) sequence number
      * - issue read then write
      */
+    #if (SB_WQ_SEQ_shf < NFD_OUT_FL_DESC_SIZE_lg2)
+        #error "SB_WQ_SEQ_shf < NFD_OUT_FL_DESC_SIZE_lg2: cache address computation incorrect"
+    #endif
     alu[out_word0, g_seq_mask, AND, LM_SEQ]
-    alu[addr_lo, g_cache_addr_lo_mask, AND, LM_SEQ, <<NFD_OUT_FL_DESC_SIZE_lg2]
+    alu[addr_lo, g_cache_addr_lo_mask, AND, LM_SEQ, >>(SB_WQ_SEQ_shf - NFD_OUT_FL_DESC_SIZE_lg2)]
     mem[read, $buf_desc[0], LM_CACHE_ADDR_RS8, <<8, addr_lo, 1], sig_done[fl_read_sig]
     mem[write, out_xfer[4], LM_CACHE_ADDR_RS8, <<8, addr_lo, 1], sig_done[cur_outsig]
 
@@ -750,28 +748,14 @@ test_ready_to_send#:
      * Wait for read/write operations to complete
      * In the defer shadow:
      * - Increment the sequence number
-     * - The sequence number is in out_word0.  We will shift it into place
-     *   (SB_WQ_SEQ_shf) below.  In this defer slot, fill in the requester ID
-     *   and enabled bit so that when we shift the word, the requester ID
-     *   will start at bit SB_WQ_RID_shf and the enabled bit will land at bit
-     *   SB_WQ_ENABLED_shf.
+     * - OR in the RID and the enabled bit
      */
     ctx_arb[fl_read_sig, cur_outsig], defer[2]
-    alu[LM_SEQ, LM_SEQ, +, 1]                   // convenient debug counter
-    alu[out_word0, out_word0, OR, LM_STATUS, <<(SB_WQ_RID_shf - SB_WQ_SEQ_shf)]
+    alu[LM_SEQ, LM_SEQ, +, g_seq_incr]
+    alu[out_word0, out_word0, OR, LM_STATUS, <<SB_WQ_RID_shf]
 
     // Start sending the work to issue DMA, but see below: we're not quite done
     pci_out_sb_add_work(out_xfer[0], cur_outsig)
-
-    #ifndef NFD_OUT_SB_SKIP_BUF_SANITY
-        /*
-         * Extract the high address bits of the host buffer.
-         * NOTE that this should *not* be necessary, but we have observed cases
-         * where PMDs failed to clear memory with stale RX descriptors triggered
-         * from previous PMD crashes.
-         */ 
-        alu[buf_hi, 0xFF, AND, $buf_desc[0]]
-    #endif /* NFD_OUT_SB_SKIP_BUF_SANITY */
 
     /*
      * Wait for least recent I/Os to complete.
@@ -782,10 +766,13 @@ test_ready_to_send#:
      * even if it were a race, we would always win due to the CPP bus clocks
      * required before pulling the data from $buf_desc.
      */
+    #if (SB_WQ_HOST_ADDR_HI_msk != 0xFF)
+        #error "SB_WQ_HOST_ADDR_HI_msk != 0xFF: PD word0 construction will fail"
+    #endif
     .set_sig ordersig
     #pragma warning(disable:5009)
     ctx_arb[nxt_insig, nxt_outsig, ordersig], defer[2], br[DONE_LABEL]
-    alu[out_xfer[0], _BUF_HI, OR, out_word0, <<SB_WQ_SEQ_shf]
+    alu[out_xfer[0], out_word0, +8, $buf_desc[0]]
     move(out_xfer[1], $buf_desc[1])
     #pragma warning(default:5009)
 
@@ -794,8 +781,6 @@ flow_controlled#:
     ctx_arb[voluntary], defer[2], br[test_ready_to_send#]
     alu[LM_WQ_CREDITS, LM_WQ_CREDITS, +, 1]
     nop
-
-    #undef _BUF_HI
 
 .end
 #endm
@@ -826,6 +811,7 @@ flow_controlled#:
     .reg volatile g_lm_qstate_mask
     .reg volatile g_cache_addr_lo_mask
     .reg volatile g_seq_mask
+    .reg volatile g_seq_incr
     .reg volatile g_in_wq_hi
     .reg volatile g_in_wq_lo
     .reg volatile g_out_wq_hi
@@ -868,7 +854,10 @@ flow_controlled#:
     move(g_cache_addr_lo_mask, ((NFD_OUT_FL_BUFS_PER_QUEUE - 1) << NFD_OUT_FL_DESC_SIZE_lg2))
 
     /* Mask for the sequence number */
-    move(g_seq_mask, SB_WQ_SEQ_msk)
+    move(g_seq_mask, (SB_WQ_SEQ_msk << (SB_WQ_SEQ_shf)))
+
+    /* Shifted sequence number addent */
+    move(g_seq_incr, (1 << (SB_WQ_SEQ_shf)))
 
     move(g_in_wq_hi, ((nfd_out_ring_mem/**/PCIE_ISL >> 8) & 0xFF000000))
     move(g_in_wq_lo, nfd_out_ring_num/**/PCIE_ISL/**/0)
