@@ -15,8 +15,6 @@
 #include <nfp/pcie.h>
 #include <std/reg_utils.h>
 #include <std/cntrs.h>
-#include <blm/libblm.h>
-#include <blm/libblm_pkt_fl.h>
 
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
