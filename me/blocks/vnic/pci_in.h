@@ -166,9 +166,9 @@
  *    0  |E|   offset    |            dma_len            |  dma_addr_hi  |
  *       +-+-------------+-------------------------------+---------------+
  *    1  |                          dma_addr_lo                          |
- *       +---------------+---------------+-------------------------------+
- *    2  |     flags     |   l4_offsets  |               lso             |
- *       +---------------+---------------+-------------------------------+
+ *       +---------------+---------------+---+---------------------------+
+ *    2  |     flags     |   l4_offsets  |sp0|           mss             |
+ *       +---------------+---------------+---|---------------------------+
  *    3  |           data_len            |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
@@ -190,7 +190,8 @@ struct nfd_in_tx_desc {
 
             unsigned int flags:8;       /**< Flags for the packet */
             unsigned int l4_offset:8;   /**< Offset of L4 header in packet */
-            unsigned int lso:16;        /**< Info for Large Segment Offload */
+            unsigned int sp0:2;
+            unsigned int mss:14;        /**< Info for Large Segment Offload */
 
             unsigned int data_len:16;   /**< Length of the entire packet */
             unsigned int vlan:16;       /**< VLAN to prepend to this packet */
@@ -205,17 +206,18 @@ struct nfd_in_tx_desc {
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+-----------------------------+---+-------------+
- *    0  |S|    offset   |           reserved          |itf|    q_num    |
+ *    0  |S|    offset   |           seq_num           |itf|    q_num    |
  *       +-+-------------+-----------------------------+---+-------------+
  *    1  |                           buf_addr                            |
- *       +---------------+---------------+-------------------------------+
- *    2  |     flags     |   l4_offset   |               lso             |
- *       +---------------+---------------+-------------------------------+
+ *       +---------------+---------------+-+-+---------------------------+
+ *    2  |     flags     |   l4_offset   |L|S|           mss             |
+ *       +---------------+---------------+-+-+---------------------------+
  *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
- *      S -> sp0 (spare)
  *    itf -> intf
+ *    L -> Last packet in a series of LSO packets
+ *    S -> sp0 and sp1 (spare)
  */
 /**
  * NFD-to-App (TX) packet descriptor
@@ -227,7 +229,7 @@ struct nfd_in_pkt_desc {
             unsigned int offset:7;      /**< Offset of packet data from start
                                          *   of buffer + NFD_IN_DATA_OFFSET.
                                          *   aka (prepended metadata length) */
-            unsigned int reserved:16;   /**< Sequence number of the packet */
+            unsigned int seq_num:16;    /**< Sequence number of the packet */
             unsigned int intf:2;        /**< PCIe num the packet arrived on */
             unsigned int q_num:6;       /**< Queue num the packet arrived on */
 
@@ -235,7 +237,9 @@ struct nfd_in_pkt_desc {
 
             unsigned int flags:8;       /**< Flags for the packet */
             unsigned int l4_offset:8;   /**< Offset of L4 header in packet */
-            unsigned int lso:16;        /**< Info for Large Segment Offload */
+            unsigned int lso_end:1;     /**< Last packet in a series of LSO packets */
+            unsigned int sp1:1;         /**< Spare bit (unused) */
+            unsigned int mss:14;        /**< Info for Large Segment Offload */
 
             unsigned int data_len:16;   /**< Total packet length */
             unsigned int vlan:16;       /**< VLAN to prepend to the packet */

@@ -189,7 +189,7 @@ static __shared __gpr unsigned int dst_q_seqn = 0;
 
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
-    pkt_desc_tmp.reserved = dst_q_seqn;                                 \
+    pkt_desc_tmp.seq_num = dst_q_seqn;                                  \
     dst_q_seqn++;                                                       \
 } while (0)
 
@@ -207,7 +207,7 @@ static __shared __lmem unsigned int seq_nums[NFD_IN_NUM_SEQRS];
  */
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
-    pkt_desc_tmp.reserved =                                             \
+    pkt_desc_tmp.seq_num =                                              \
         seq_nums[(pkt_desc_tmp.__raw[0] >> NFD_IN_SEQR_QSHIFT) &        \
                  (NFD_IN_NUM_SEQRS - 1)]++;                             \
 } while (0)
@@ -335,13 +335,13 @@ notify_setup()
 #endif
 
 #ifdef NFD_IN_LSO_CNTR_ENABLE
-#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)                              \
-        if (_flags & PCIE_DESC_TX_LSO) {                          \
+#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_lso_end)                            \
+        if (_lso_end) {                                                  \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                          NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ);\
         }
 #else
-#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)
+#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_lso_end)
 #endif
 
 #define _NOTIFY_PROC(_pkt, _lso_ring_num, _lso_ring_addr)                    \
@@ -400,6 +400,10 @@ do {                                                                         \
                                      &wq_sig##_pkt);                         \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                              NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING); \
+                if (lso_pkt.lso_end) {                                       \
+                    NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,               \
+                             NFD_IN_LSO_CNTR_T_NOTIFY_LSO_EOP_PKT_TO_ME_WQ); \
+                }                                                            \
             } else {                                                         \
                 __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,  \
                                      out_msg_sz, out_msg_sz, sig_done,       \
@@ -409,7 +413,7 @@ do {                                                                         \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                             NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ); \
             i++;                                                             \
-            _LSO_END_PKTS_TO_ME_WQ_CNTR(lso_pkt.flags);                      \
+            _LSO_END_PKTS_TO_ME_WQ_CNTR(lso_pkt.lso_end);                    \
         }                                                                    \
     } else {                                                                 \
         /* Remove the wq signal from the wait mask */                        \
@@ -506,7 +510,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         pkt_desc_tmp.intf = PCIE_ISL;
         pkt_desc_tmp.q_num = q_batch;
 #ifndef NFD_IN_ADD_SEQN
-        pkt_desc_tmp.reserved = 0;
+        pkt_desc_tmp.seq_num = 0;
 #endif
 
         _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);

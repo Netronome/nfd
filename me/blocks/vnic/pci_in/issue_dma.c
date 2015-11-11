@@ -725,7 +725,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         }                                                                    \
         /* 4. Issue the data DMA (use Jumbo seq numbers) */                  \
         /* get the length left in mu buffer */                               \
-        mu_buf_left = tx_desc.pkt##_pkt##.lso -                              \
+        mu_buf_left = tx_desc.pkt##_pkt##.mss -                              \
                                           queue_data[queue].lso_payload_len; \
         /* get the length left to DMA. */                                    \
         dma_left = dma_len - lso_dma_index;                                  \
@@ -796,7 +796,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         /* Make sure we can reuse the XFERs (dma_out.pkt##_pkt##) */         \
         __wait_for_all(&lso_enq_sig);                                        \
         /* if we are at end of mu_buf */                                     \
-        if (queue_data[queue].lso_payload_len >=  tx_desc.pkt##_pkt##.lso) { \
+        if (queue_data[queue].lso_payload_len >=  tx_desc.pkt##_pkt##.mss) { \
             pkt_ptr = (__addr40 void *)(((uint64_t)                          \
                         queue_data[queue].curr_buf << 11) |                  \
                         queue_data[queue].offset);                           \
@@ -810,7 +810,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* if last of LSO segment set lso end flag and we have no */     \
             /* more dma data */                                              \
             if ((lso_dma_index == dma_len) && tx_desc.pkt##_pkt##.eop) {     \
-                issued_tmp.flags |= PCIE_DESC_TX_LSO;                        \
+                issued_tmp.lso_end = 1              ;                        \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING);\
                 queue_data[queue].lso_hdr_len = 0;                           \
@@ -848,7 +848,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         issued_tmp.buf_addr = queue_data[queue].curr_buf;                    \
         issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];                  \
         issued_tmp.l4_offset = ++queue_data[queue].lso_seq_cnt;              \
-        issued_tmp.flags |= PCIE_DESC_TX_LSO;                                \
+        issued_tmp.lso_end = 1;                                              \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                     NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING_END);\
         issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];                  \
@@ -873,7 +873,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS);              \
     NFD_IN_LSO_CNTR_ADD(nfd_in_lso_cntr_addr,                                \
                        NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS,                \
-                       tx_desc.pkt##_pkt##.lso);                             \
+                       tx_desc.pkt##_pkt##.mss);                             \
     NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
                         NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET);        \
     NFD_IN_LSO_CNTR_ADD(nfd_in_lso_cntr_addr,                                \
@@ -949,7 +949,7 @@ do {                                                                    \
                          NFD_IN_LSO_CNTR_T_ISSUED_ALL_TX_DESC);         \
                                                                         \
     /* if tx descr is LSO */                                            \
-    if (tx_desc.pkt##_pkt##.lso) {                                      \
+    if (tx_desc.pkt##_pkt##.flags & PCIE_DESC_TX_LSO) {                 \
         /* do the lso function processing */                            \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_TX_DESC); \
@@ -1037,6 +1037,7 @@ do {                                                                    \
         issued_tmp.offset = 0;                                          \
         issued_tmp.sp0 = 0;                                             \
         issued_tmp.num_batch = 0;                                       \
+        issued_tmp.lso_end = 0;                                         \
         issued_tmp.sp1 = 0;                                             \
         batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];           \
                                                                         \
@@ -1238,6 +1239,7 @@ issue_dma()
 
         issued_tmp.sp0 = 0;
         issued_tmp.num_batch = num;   /* Only needed in pkt0 */
+        issued_tmp.lso_end = 0;
         issued_tmp.sp1 = 0;
         issued_tmp.q_num = queue;
         pcie_hi_word_part =
