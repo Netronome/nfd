@@ -82,7 +82,7 @@ struct _dma_desc_batch {
 };
 
 NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
-
+NFD_BLM_Q_ALLOC(NFD_IN_BLM_JUMBO_POOL);
 
 #define NFD_IN_DESC_RING_SZ (NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ * \
                       sizeof(struct nfd_in_tx_desc))
@@ -607,7 +607,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     SIGNAL lso_enq_sig;                                                      \
     SIGNAL lso_hdr_sig;                                                      \
     SIGNAL lso_journal_sig;                                                  \
-    __xread unsigned int mu_buf_xread;                                       \
     unsigned int hdr_offset;                                                 \
     __addr40 void *pkt_ptr;                                                  \
     __addr40 void *hdr_pkt_ptr;                                              \
@@ -618,7 +617,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     unsigned int mode;                                                       \
     unsigned int header_to_read;                                             \
     unsigned int hdr_remainder;                                              \
-                                                                             \
+    __gpr unsigned int curr_buf;                                             \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                                   \
                                                                              \
     /* data_dma_seq_issued was pre-incremented once we could */              \
@@ -697,11 +696,12 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         /* 2. Get an MU buffer */                                            \
         if (queue_data[queue].curr_buf == 0) {                               \
             /* get a buffer. */                                              \
-            while (blm_buf_alloc(&mu_buf_xread, NFD_IN_BLM_BLS) != 0) {      \
+            while (precache_bufs_jumbo_use(&curr_buf) != 0) {      \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                           NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);\
+                ctx_swap(); \
             }                                                                \
-            queue_data[queue].curr_buf = mu_buf_xread;                       \
+            queue_data[queue].curr_buf = curr_buf;                       \
             queue_data[queue].lso_payload_len = 0;                           \
             queue_data[queue].offset = NFD_IN_DATA_OFFSET -                  \
                 tx_desc.pkt##_pkt.offset;                                    \
