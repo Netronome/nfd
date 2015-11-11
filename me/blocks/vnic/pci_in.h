@@ -124,9 +124,9 @@
  *    0  |E|   offset    |            dma_len            |  dma_addr_hi  |
  *       +-+-------------+-------------------------------+---------------+
  *    1  |                          dma_addr_lo                          |
- *       +---------------+---------------+-------------------------------+
- *    2  |     flags     |   l4_offsets  |               lso             |
- *       +---------------+---------------+-------------------------------+
+ *       +---------------+---------------+---+---------------------------+
+ *    2  |     flags     |   l4_offsets  |sp0|           mss             |
+ *       +---------------+---------------+---|---------------------------+
  *    3  |           data_len            |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
@@ -144,7 +144,8 @@ struct nfd_in_tx_desc {
 
             unsigned int flags:8;
             unsigned int l4_offset:8;
-            unsigned int lso:16;
+            unsigned int sp0:2;
+            unsigned int mss:14;
 
             unsigned int data_len:16;
             unsigned int vlan:16;
@@ -159,24 +160,25 @@ struct nfd_in_tx_desc {
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+-----------------------------+---+-------------+
- *    0  |S|    offset   |           reserved          |itf|    q_num    |
+ *    0  |S|    offset   |           seq_num           |itf|    q_num    |
  *       +-+-------------+-----------------------------+---+-------------+
  *    1  |                           buf_addr                            |
- *       +---------------+---------------+-------------------------------+
- *    2  |     flags     |   l4_offset   |               lso             |
- *       +---------------+---------------+-------------------------------+
+ *       +---------------+---------------+-+-+---------------------------+
+ *    2  |     flags     |   l4_offset   |L|S|           mss             |
+ *       +---------------+---------------+-+-+---------------------------+
  *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
- *      S -> sp0 (spare)
  *    itf -> intf
+ *    L -> Last packet in a series of LSO packets
+ *    S -> sp0 and sp1 (spare)
  */
 struct nfd_in_pkt_desc {
     union {
         struct {
             unsigned int sp0:1;
             unsigned int offset:7;
-            unsigned int reserved:16;
+            unsigned int seq_num:16;
             unsigned int intf:2;
             unsigned int q_num:6;
 
@@ -184,7 +186,9 @@ struct nfd_in_pkt_desc {
 
             unsigned int flags:8;
             unsigned int l4_offset:8;
-            unsigned int lso:16;
+            unsigned int lso_end:1;
+            unsigned int sp1:1;
+            unsigned int mss:14;
 
             unsigned int data_len:16;
             unsigned int vlan:16;

@@ -267,7 +267,7 @@ do {                                                                         \
         pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;                   \
         dst_q = 0;                                                           \
         NFD_IN_ADD_SEQN_PROC(1, seq);                                        \
-        pkt_desc_tmp.reserved = seq;                                         \
+        pkt_desc_tmp.seq_num = seq;                                          \
         dst_q |= wq_num_base;                                                \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];              \
         batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1];      \
@@ -279,6 +279,7 @@ do {                                                                         \
                              &wq_sig##_pkt);                                 \
     } else if (num_lso_to_read != 0) {                                       \
         dst_q = 0;                                                           \
+        pkt_desc_tmp.sp0 = 0; \
         NFD_IN_ADD_SEQN_PROC(num_lso_to_read, start_lso_seq);                \
         /* LSO packets to read */                                            \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
@@ -295,10 +296,9 @@ do {                                                                         \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                               NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING); \
             /* fill in pkt_desc values */                                    \
-            pkt_desc_tmp.sp0 = 0;                                            \
-            pkt_desc_tmp.reserved = start_lso_seq++;                         \
-            dst_q |= wq_num_base;                                            \
             pkt_desc_tmp.offset = lso_pkt.offset;                            \
+            pkt_desc_tmp.seq_num = start_lso_seq++;                          \
+            dst_q |= wq_num_base;                                            \
             batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];          \
             batch_out.pkt##_pkt##.__raw[1] = lso_pkt.__raw[1];               \
             batch_out.pkt##_pkt##.__raw[2] = lso_pkt.__raw[2];               \
@@ -310,6 +310,11 @@ do {                                                                         \
                                      &wq_sig##_pkt);                         \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                              NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING); \
+                /* remove as per enhance */                                  \
+                if (lso_pkt.lso_end) {                                       \
+                    NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,               \
+                             NFD_IN_LSO_CNTR_T_NOTIFY_LSO_EOP_PKT_TO_ME_WQ); \
+                }                                                            \
             } else {                                                         \
                 __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,  \
                                      out_msg_sz, out_msg_sz, sig_done,       \
@@ -412,7 +417,7 @@ notify()
         pkt_desc_tmp.intf = PCIE_ISL;
         pkt_desc_tmp.q_num = q_batch;
 #ifndef NFD_IN_ADD_SEQN
-        pkt_desc_tmp.reserved = 0;
+        pkt_desc_tmp.seq_num = 0;
 #endif
 
         _NOTIFY_PROC(0);

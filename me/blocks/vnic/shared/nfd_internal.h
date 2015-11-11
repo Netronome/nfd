@@ -115,9 +115,11 @@ enum NFD_IN_LSO_CNTR_IDX {
     NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING,
     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ,
     NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ,
+    NFD_IN_LSO_CNTR_T_NOTIFY_LSO_EOP_PKT_TO_ME_WQ,
     NFD_IN_LSO_CNTR_T_ME_ALL_HOST_PKTS,
     NFD_IN_LSO_CNTR_T_ME_NON_LSO_HOST_PKTS,
     NFD_IN_LSO_CNTR_T_ME_LSO_HOST_PKTS,
+    NFD_IN_LSO_CNTR_T_ME_LAST_LSO_HOST_PKTS,
     NFD_IN_LSO_CNTR_T_ME_FM_HOST_PKT_TX_TO_WIRE,
     NFD_IN_LSO_CNTR_T_ME_FM_HOST_PROC_TO_WIRE_DROP,
     NFD_IN_LSO_CNTR_T_ME_FM_HOST_PKT_TX_TO_WIRE_DROP,
@@ -150,9 +152,11 @@ const char *nfd_in_lso_cntr_names[] = {
     "NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING",
     "NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ",
     "NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_LSO_EOP_PKT_TO_ME_WQ",
     "NFD_IN_LSO_CNTR_T_ME_ALL_HOST_PKTS",
     "NFD_IN_LSO_CNTR_T_ME_NON_LSO_HOST_PKTS",
     "NFD_IN_LSO_CNTR_T_ME_LSO_HOST_PKTS",
+    "NFD_IN_LSO_CNTR_T_ME_LAST_LSO_HOST_PKTS",
     "NFD_IN_LSO_CNTR_T_ME_FM_HOST_PKT_TX_TO_WIRE",
     "NFD_IN_LSO_CNTR_T_ME_FM_HOST_PROC_TO_WIRE_DROP",
     "NFD_IN_LSO_CNTR_T_ME_FM_HOST_PKT_TX_TO_WIRE_DROP"
@@ -304,14 +308,16 @@ struct nfd_in_batch_desc {
  *    0  |E|    offset   |      sp0      |   num_batch   |sp1|   q_num   |
  *       +-+-------------+---------------+---------------+---+-----------+
  *    1  |                           buf_addr                            |
- *       +---------------+---------------+-------------------------------+
- *    2  |     flags     |   l4_offset   |               lso             |
- *       +---------------+---------------+-------------------------------+
+ *       +---------------+---------------+-+-+---------------------------+
+ *    2  |     flags     |   l4_offset   |L|S|           mss             |
+ *       +---------------+---------------+-+-+---------------------------+
  *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
- *      sp0 - sp3 -> spare
+ *      sp0 - sp2 -> spare
  *      E -> End of packet
+ *      L -> Last packet in a series of LSO packets
+ *      S -> sp1
  */
 struct nfd_in_issued_desc {
     union {
@@ -327,7 +333,9 @@ struct nfd_in_issued_desc {
 
             unsigned int flags:8;
             unsigned int l4_offset:8;
-            unsigned int lso:16;
+            unsigned int lso_end:1;
+            unsigned int sp2:1;
+            unsigned int mss:14;
 
             unsigned int data_len:16;
             unsigned int vlan:16;
