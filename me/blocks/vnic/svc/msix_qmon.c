@@ -551,6 +551,10 @@ msix_local_reconfig(const unsigned int pcie_isl)
     msix_rx_enabled = msix_cls_rx_enabled[pcie_isl];
     msix_tx_enabled = msix_cls_tx_enabled[pcie_isl];
 
+    /* Clear pending on disabled queues */
+    msix_rx_pending &= msix_rx_enabled;
+    msix_tx_pending &= msix_tx_enabled;
+
     /* We are done. Signal context zero */
     signal_ctx(0, SVC_RECONFIG_SIG_NUM);
 }
