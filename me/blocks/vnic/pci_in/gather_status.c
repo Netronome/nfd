@@ -30,12 +30,6 @@ extern __shared __gpr unsigned int gather_dma_seq_compl;
  */
 extern __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
 
-/**
- * Notify state
- */
-extern __shared __gpr unsigned int data_dma_seq_compl;
-extern __shared __gpr unsigned int data_dma_seq_served;
-
 
 #define _ZERO_ARRAY     {0, 0, 0, 0, 0, 0, 0, 0}
 
@@ -45,7 +39,6 @@ extern __shared __gpr unsigned int data_dma_seq_served;
 static __xread unsigned int status_queue_sel = 0;
 static __xwrite struct nfd_in_queue_info status_queue_info = _ZERO_ARRAY;
 static __xwrite struct nfd_in_gather_status status_gather = _ZERO_ARRAY;
-static __xwrite struct nfd_in_notify_status status_notify = {0, 0};
 
 SIGNAL status_throttle;
 
@@ -58,7 +51,6 @@ gather_status_setup()
     /* Fix the transfer registers used */
     __assign_relative_register(&status_gather, STATUS_GATHER_START);
     __assign_relative_register(&status_queue_info, STATUS_QUEUE_START);
-    __assign_relative_register(&status_notify, STATUS_NOTIFY_START);
     __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
 
     set_alarm(NFD_IN_DBG_GATHER_INTVL, &status_throttle);
@@ -74,7 +66,6 @@ gather_status()
     {
         __implicit_read(&status_gather, sizeof status_gather);
         __implicit_read(&status_queue_info, sizeof status_queue_info);
-        __implicit_read(&status_notify, sizeof status_notify);
 
         /*
          * Convert the natural queue number in the request to a bitmask queue
@@ -99,12 +90,6 @@ gather_status()
          * Copy the queue info from LM into the status struct
          */
         status_queue_info = queue_data[bmsk_queue];
-
-        /*
-         * Collect the notify state from various sources
-         */
-        status_notify.dma_compl = data_dma_seq_compl;
-        status_notify.dma_served = data_dma_seq_served;
 
         /*
          * Reset the alarm

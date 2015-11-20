@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2015,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/utils/ordering.h
  * @brief         NFP ordering primatives
@@ -11,9 +11,11 @@
 
 __intrinsic void reorder_start(unsigned int start_ctx, SIGNAL *sig);
 
-__intrinsic void reorder_done(unsigned int start_ctx, SIGNAL *sig);
+__intrinsic void reorder_done(unsigned int start_ctx, unsigned int end_ctx,
+                              SIGNAL *sig);
 
-__intrinsic unsigned int reorder_get_next_ctx(unsigned int start_ctx);
+__intrinsic unsigned int reorder_get_next_ctx(unsigned int start_ctx,
+                                              unsigned int end_ctx);
 
 /* NB: "next_ctx" as obtained from "reorder_get_next_ctx" above */
 __intrinsic void reorder_done_opt(unsigned int *next_ctx, SIGNAL *sig);

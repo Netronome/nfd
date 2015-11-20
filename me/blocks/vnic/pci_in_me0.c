@@ -14,7 +14,6 @@
 
 #include <vnic/pci_in/gather.c>
 #include <vnic/pci_in/gather_status.c>
-#include <vnic/pci_in/notify.c>
 #include <vnic/pci_in/service_qc.c>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_cfg_internal.c>
@@ -31,7 +30,7 @@
  */
 #include <std/event.h>                  /* TEMP */
 
-NFD_CFG_DECLARE(nfd_cfg_sig_pci_in0, nfd_cfg_sig_pci_in1);
+NFD_CFG_DECLARE(nfd_cfg_sig_pci_in, nfd_cfg_sig_pci_in0);
 NFD_INIT_DONE_DECLARE;
 
 NFD_CFG_PF_DECLARE(PCIE_ISL);
@@ -55,7 +54,7 @@ main(void)
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
         /* Initialisation that does not swap */
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_in0, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_in, &cfg_msg);
         gather_setup_shared();
         gather_status_setup();
 
@@ -72,12 +71,10 @@ main(void)
         distr_gather_setup_shared();
         nfd_cfg_setup();
 
-        notify_setup_shared();
-
         /* TEMP: Mark initialisation complete */
         status |= (1<<STATUS_INIT_DONE_BIT);
 
-        NFD_INIT_DONE_SET(PCIE_ISL, 2);     /* XXX Remove? */
+        NFD_INIT_DONE_SET(PCIE_ISL, 1);     /* XXX Remove? */
     } else if (ctx() == 1) {
         nfd_cfg_flr_setup();
         nfd_cfg_pcie_monitor_stop();        /* Will halt ME on ABI mismatch */
@@ -85,7 +82,6 @@ main(void)
     } else {
         gather_setup();
 
-        notify_setup();
     }
 
     /* Perform general initialisation */
@@ -112,7 +108,6 @@ main(void)
             service_qc();
 
             distr_gather();
-            distr_notify();
 
             gather_status();
 
@@ -140,8 +135,8 @@ main(void)
 
                 if (!cfg_msg.msg_valid) {
                     nfd_cfg_start_cfg_msg(&cfg_msg,
-                                          &nfd_cfg_sig_pci_in1,
-                                          NFD_CFG_NEXT_ME(PCIE_ISL, 3),
+                                          &nfd_cfg_sig_pci_in0,
+                                          NFD_CFG_NEXT_ME(PCIE_ISL, 2),
                                           NFD_CFG_RING_NUM(PCIE_ISL, 0));
                 }
             }
@@ -160,10 +155,8 @@ main(void)
         for (;;) {
             gather();
 
-            notify();
-
             /* Yield thread */
-            /* ctx_swap(); */
+            ctx_swap();
         }
     }
 }

@@ -35,19 +35,16 @@ extern __gpr unsigned int fl_cache_dma_seq_served;
 
 
 /**
- * stage_batch state
+ * desc_dma state
  */
-extern __shared __gpr unsigned int batch_issued;
-extern __shared __gpr unsigned int batch_safe;
-
-extern __shared __gpr unsigned int data_dma_compl;
-extern __shared __gpr unsigned int desc_batch_served;
+extern __shared __gpr struct qc_bitmask cached_bmsk;
+extern __shared __gpr struct qc_bitmask pending_bmsk;
 
 extern __shared __gpr unsigned int desc_dma_issued;
 extern __shared __gpr unsigned int desc_dma_compl;
-extern __shared __gpr unsigned int desc_dma_safe;
+extern __shared __gpr unsigned int desc_dma_served;
+extern __shared __gpr unsigned int desc_dma_pkts_served;
 
-extern __shared __gpr unsigned int desc_batch_compl;
 
 #define _ZERO_ARRAY     {0, 0, 0, 0, 0, 0, 0, 0}
 
@@ -57,7 +54,7 @@ extern __shared __gpr unsigned int desc_batch_compl;
 static __xread unsigned int status_queue_sel = 0;
 static __xwrite struct nfd_out_queue_info status_queue_info = _ZERO_ARRAY;
 static __xwrite struct nfd_out_cache_desc_status status_cache_desc = _ZERO_ARRAY;
-static __xwrite struct nfd_out_stage_batch_status status_stage = _ZERO_ARRAY;
+static __xwrite struct nfd_out_desc_dma_status status_desc_dma = _ZERO_ARRAY;
 
 SIGNAL status_throttle;
 
@@ -69,7 +66,7 @@ cache_desc_status_setup()
 
     /* Fix the transfer registers used */
     __assign_relative_register(&status_cache_desc, STATUS_Q_CACHE_START);
-    __assign_relative_register(&status_stage, STATUS_Q_STAGE_START);
+    __assign_relative_register(&status_desc_dma, STATUS_Q_DMA_START);
     __assign_relative_register(&status_queue_info, STATUS_Q_INFO_START);
     __assign_relative_register(&status_queue_sel, STATUS_Q_SEL_START);
 
@@ -85,7 +82,7 @@ cache_desc_status()
     if (signal_test(&status_throttle))
     {
         __implicit_read(&status_cache_desc, sizeof status_cache_desc);
-        __implicit_read(&status_stage, sizeof status_stage);
+        __implicit_read(&status_desc_dma, sizeof status_desc_dma);
         __implicit_read(&status_queue_info, sizeof status_queue_info);
 
         /*
@@ -112,20 +109,21 @@ cache_desc_status()
         status_cache_desc.fl_cache_compl = fl_cache_dma_seq_compl;
         status_cache_desc.fl_cache_served = fl_cache_dma_seq_served;
 
+        status_cache_desc.reserved = 0;
 
         /*
-         * Collect stage_batch data
+         * Collect desc_dma data
          */
-        status_stage.batch_issued = batch_issued;
-        status_stage.batch_safe = batch_safe;
-        status_stage.data_dma_compl = data_dma_compl;
-        status_stage.desc_batch_served = desc_batch_served;
+        status_desc_dma.cached_bmsk_hi = cached_bmsk.bmsk_hi;
+        status_desc_dma.cached_bmsk_lo = cached_bmsk.bmsk_lo;
+        status_desc_dma.pending_bmsk_hi = pending_bmsk.bmsk_hi;
+        status_desc_dma.pending_bmsk_lo = pending_bmsk.bmsk_lo;
 
-        status_stage.desc_dma_issued = desc_dma_issued;
-        status_stage.desc_dma_compl = desc_dma_compl;
-        status_stage.desc_dma_safe = desc_dma_safe;
+        status_desc_dma.desc_dma_issued = desc_dma_issued;
+        status_desc_dma.desc_dma_compl = desc_dma_compl;
+        status_desc_dma.desc_dma_served = desc_dma_served;
 
-        status_stage.desc_batch_compl = desc_batch_compl;
+        status_desc_dma.desc_dma_pkts_served = desc_dma_pkts_served;
 
         /*
          * Reset the alarm

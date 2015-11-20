@@ -7,12 +7,10 @@
 #ifndef _BLOCKS__VNIC_PCI_IN_GATHER_STATUS_H_
 #define _BLOCKS__VNIC_PCI_IN_GATHER_STATUS_H_
 
-#define STATUS_NOTIFY_START      14
 #define STATUS_GATHER_START      16
 #define STATUS_QUEUE_START       24
 #define STATUS_Q_SEL_START       31
 
-/* XXX the dma_compl value is already in xfers for the reflect */
 struct nfd_in_gather_status {
     unsigned int actv_bmsk_hi;
     unsigned int actv_bmsk_lo;
@@ -22,12 +20,6 @@ struct nfd_in_gather_status {
     unsigned int pend_bmsk_proc;
     unsigned int dma_issued;
     unsigned int dma_compl;
-};
-
-/* XXX the dma_issued and dma_compl are already in xfers for the reflect */
-struct nfd_in_notify_status {
-    unsigned int dma_compl;
-    unsigned int dma_served;
 };
 
 

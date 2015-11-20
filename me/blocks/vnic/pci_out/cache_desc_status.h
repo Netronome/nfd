@@ -8,7 +8,7 @@
 #define _BLOCKS__VNIC_PCI_IN_CACHE_DESC_STATUS_H_
 
 #define STATUS_Q_CACHE_START    8
-#define STATUS_Q_STAGE_START    16
+#define STATUS_Q_DMA_START      16
 #define STATUS_Q_INFO_START     24
 #define STATUS_Q_SEL_START      31
 
@@ -21,18 +21,18 @@ struct nfd_out_cache_desc_status {
     unsigned int fl_cache_issued;
     unsigned int fl_cache_compl;
     unsigned int fl_cache_served;
-    unsigned int spare;
+    unsigned int reserved;
 };
 
-struct nfd_out_stage_batch_status {
-    unsigned int batch_issued;
-    unsigned int batch_safe;
-    unsigned int data_dma_compl;
-    unsigned int desc_batch_served;
+struct nfd_out_desc_dma_status {
+    unsigned int cached_bmsk_hi;
+    unsigned int cached_bmsk_lo;
+    unsigned int pending_bmsk_hi;
+    unsigned int pending_bmsk_lo;
     unsigned int desc_dma_issued;
     unsigned int desc_dma_compl;
-    unsigned int desc_dma_safe;
-    unsigned int desc_batch_compl;
+    unsigned int desc_dma_served;
+    unsigned int desc_dma_pkts_served;
 };
 
 

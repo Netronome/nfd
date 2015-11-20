@@ -87,7 +87,7 @@ NFD_FLR_DECLARE;
 #define CHECK_CFG_MSG(_isl)                                             \
 do {                                                                    \
     nfd_cfg_check_cfg_msg(&cfg_msg##_isl, &nfd_cfg_sig_svc_me##_isl,    \
-                          NFD_CFG_RING_NUM(_isl, 2));                   \
+                          NFD_CFG_RING_NUM(_isl, 4));                   \
     if (cfg_msg##_isl.msg_valid) {                                      \
         ncfg++;                                                         \
         mem_read64(cfg_bar_data##_isl,                                  \
@@ -121,8 +121,8 @@ do {                                                                    \
         nfd_cfg_svc_complete_cfg_msg(&cfg_msg##_isl,                    \
                                      &NFD_CFG_SIG_NEXT_ME##_isl,        \
                                      NFD_CFG_NEXT_ME##_isl,             \
-                                     NFD_CFG_RING_NUM(_isl, 3),         \
-                                     NFD_CFG_RING_NUM(_isl, 2));        \
+                                     NFD_CFG_RING_NUM(_isl, 5),         \
+                                     NFD_CFG_RING_NUM(_isl, 4));        \
     }                                                                   \
 } while (0)
 

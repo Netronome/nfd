@@ -32,6 +32,11 @@
 #include <nfp_net_ctrl.h>
 
 
+#ifndef NFD_OUT_RX_OFFSET
+#warning "NFD_OUT_RX_OFFSET not defined: defaulting to NFP_NET_RX_OFFSET which is sub-optimal"
+#define NFD_OUT_RX_OFFSET NFP_NET_RX_OFFSET
+#endif /* NFD_OUT_RX_OFFSET */
+
 #define NFD_CFG_DECLARE(_sig, _next_sig)  \
     __visible SIGNAL _sig;                \
     __remote SIGNAL _next_sig;
@@ -51,7 +56,7 @@ ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
     (NFD_MAX_ISL * NFD_CFG_NUM_RINGS * NFD_CFG_RING_SZ))
 
 #define NFD_CFG_RINGS_INIT_IND(_isl)                                    \
-    ASM(.declare_resource nfd_cfg_ring_mem##_isl global 8192 nfd_cfg_ring_mem) \
+    ASM(.declare_resource nfd_cfg_ring_mem##_isl global 12288 nfd_cfg_ring_mem) \
     ASM(.alloc_resource nfd_cfg_ring_mem##_isl##0 nfd_cfg_ring_mem##_isl \
         global 2048 2048)                                               \
     ASM(.alloc_resource nfd_cfg_ring_mem##_isl##1 nfd_cfg_ring_mem##_isl \
@@ -60,11 +65,18 @@ ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
         global 2048 2048)                                               \
     ASM(.alloc_resource nfd_cfg_ring_mem##_isl##3 nfd_cfg_ring_mem##_isl \
         global 2048 2048)                                               \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##4 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
+    ASM(.alloc_resource nfd_cfg_ring_mem##_isl##5 nfd_cfg_ring_mem##_isl \
+        global 2048 2048)                                               \
                                                                         \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##0 nfd_cfg_ring_mem##_isl##0) \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##1 nfd_cfg_ring_mem##_isl##1) \
     ASM(.init_mu_ring nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_mem##_isl##2) \
-    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_mem##_isl##3)
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_mem##_isl##3) \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##4 nfd_cfg_ring_mem##_isl##4) \
+    ASM(.init_mu_ring nfd_cfg_ring_num##_isl##5 nfd_cfg_ring_mem##_isl##5)
+
 
 #define NFD_CFG_RINGS_INIT(_isl) NFD_CFG_RINGS_INIT_IND(_isl)
 
@@ -389,7 +401,7 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
-    __xwrite unsigned int rx_off = NFP_NET_RX_OFFSET;
+    __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
@@ -415,7 +427,7 @@ _nfd_cfg_init_pf_ctrl_bar()
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
-    __xwrite unsigned int rx_off = NFP_NET_RX_OFFSET;
+    __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
 
     mem_write64(&cfg,
                 (NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
@@ -445,7 +457,7 @@ nfd_cfg_setup()
 
     /* XXX remove once .declare_resource and .alloc_resource support
      * bracketed expressions. */
-    ctassert(NFD_CFG_NUM_RINGS == 4);
+    ctassert(NFD_CFG_NUM_RINGS == 8);
     ctassert(NFD_CFG_RING_SZ == 2048);
 
     /* Setup the configuration queues */
@@ -543,7 +555,7 @@ nfd_cfg_pcie_monitor_stop()
         local_csr_write(local_csr_mailbox_1, chk_val);
 
         /* We have an ABI mismatch with the pcie_monitor, halt. */
-        halt();
+        /* halt(); */ /* XXX suppressed for compatibility with SDN BSP */
     }
 
     /* We disable the pcie_monitor by clearing a bit in ARM CLS */
@@ -1055,6 +1067,9 @@ nfd_cfg_next_queue(struct nfd_cfg_msg *cfg_msg, unsigned int *queue)
  * Check the ClockResetControl for the PCIe island to ensure PCIe link is up
  * If the PCIe link is not up, it is not safe to run NFD on the island, so
  * halt the ME immediately.
+ *
+ * This function "busy waits" on the PCIe link check to ensure that no other
+ * contexts can execute while it tests the link.
  */
 __intrinsic void
 nfd_cfg_check_pcie_link()
@@ -1064,12 +1079,20 @@ nfd_cfg_check_pcie_link()
 #define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf     16
 #define NFP_PCIEX_CLOCK_RESET_CTRL_ACTIVE           0xf
 
-    unsigned int pcie_sts_raw;
+    __xread unsigned int pcie_sts_raw;
     unsigned int pcie_sts;
+    unsigned int pcie_sts_addr;
+    SIGNAL pcie_sts_sig;
 
     /* Check the ClockResetControl value */
-    pcie_sts_raw = xpb_read(NFP_PCIEX_CLOCK_RESET_CTRL |
-                            (PCIE_ISL << NFP_PCIEX_ISL_shf));
+    pcie_sts_addr = (NFP_PCIEX_CLOCK_RESET_CTRL |
+                     (PCIE_ISL << NFP_PCIEX_ISL_shf));
+    __asm ct[xpb_read, pcie_sts_raw, pcie_sts_addr, 0,  \
+             1], sig_done[pcie_sts_sig];
+
+    /* Busy wait on the read signal to prevent other threads executing */
+    while (!signal_test(&pcie_sts_sig));
+
     pcie_sts = ((pcie_sts_raw >> NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf) &
                 NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk);
 

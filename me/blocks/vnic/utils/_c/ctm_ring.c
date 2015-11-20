@@ -60,12 +60,12 @@ ctm_ring_setup(unsigned int rnum, __ctm void *base, size_t size)
 
 
 __intrinsic void
-ctm_ring_put(unsigned int rnum, __xwrite void *data, size_t size,
-             SIGNAL *put_sig)
+ctm_ring_put(unsigned int isl, unsigned int rnum, __xwrite void *data,
+             size_t size, SIGNAL *put_sig)
 {
     unsigned int ind;
     unsigned int count = size / 4;
-    unsigned int ring_addr = rnum << 2;
+    unsigned int ring_addr = (isl << 24) | (rnum << 2);
 
     ctassert(__is_write_reg(data));
     ctassert(rnum < 16);
@@ -88,12 +88,12 @@ ctm_ring_put(unsigned int rnum, __xwrite void *data, size_t size,
 
 
 __intrinsic void
-ctm_ring_get(unsigned int rnum, __xread void *data, size_t size,
-             SIGNAL *get_sig)
+ctm_ring_get(unsigned int isl, unsigned int rnum, __xread void *data,
+             size_t size, SIGNAL *get_sig)
 {
     unsigned int ind;
     unsigned int count = size / 4;
-    unsigned int ring_addr = rnum << 2;
+    unsigned int ring_addr = (isl << 24) | (rnum << 2);
 
     ctassert(__is_read_reg(data));
     ctassert(rnum < 16);

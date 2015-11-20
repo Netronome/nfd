@@ -50,6 +50,42 @@ cls_ring_setup(unsigned int rnum, __cls void *base, size_t size)
 }
 
 
+__intrinsic int
+cls_state_test(int rstate)
+{
+    __gpr int full = 1;
+
+    ctassert(__is_ct_const(rstate));
+
+    __asm {
+        br_cls_state[__ct_const_val(rstate), match];
+        alu[full, --, B, 0];
+        match:
+    }
+
+    return full;
+}
+
+
+__intrinsic int
+cls_state_test2(int rstate1, int rstate2)
+{
+    __gpr int full = 1;
+
+    ctassert(__is_ct_const(rstate1));
+    ctassert(__is_ct_const(rstate2));
+
+    __asm {
+        br_cls_state[__ct_const_val(rstate1), match];
+        br_cls_state[__ct_const_val(rstate2), match];
+        alu[full, --, B, 0];
+        match:
+    }
+
+    return full;
+}
+
+
 __intrinsic void
 cls_ring_put(unsigned int rnum, __xwrite void *data, size_t size,
              SIGNAL *put_sig)
@@ -59,7 +95,7 @@ cls_ring_put(unsigned int rnum, __xwrite void *data, size_t size,
     unsigned int ring_addr = rnum << 2;
 
     ctassert(__is_write_reg(data));
-    ctassert(rnum < 16);
+    try_ctassert(rnum < 16);
     ctassert(__is_ct_const(size));
     ctassert(__is_aligned(size, 4));
     ctassert(size <= (16*4));
@@ -87,7 +123,7 @@ cls_ring_get(unsigned int rnum, __xread void *data, size_t size,
     unsigned int ring_addr = rnum << 2;
 
     ctassert(__is_read_reg(data));
-    ctassert(rnum < 16);
+    try_ctassert(rnum < 16);
     ctassert(__is_ct_const(size));
     ctassert(__is_aligned(size, 4));
     ctassert(size <= (16*4));

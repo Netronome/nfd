@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2012-2015 Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/pci_in.h
  * @brief         Interface to PCI.IN
@@ -13,6 +13,10 @@
 
 #include <vnic/shared/nfcc_chipres.h>
 #include <vnic/shared/nfd_net.h>
+#include "shared/nfd_api_common.h"
+
+
+/** @cond DOXYGEN_SHOULD_SKIP_THIS */
 
 #ifndef NFD_IN_DATA_OFFSET
 #define NFD_IN_DATA_OFFSET          64
@@ -41,6 +45,38 @@
 
 #define NFD_IN_MAX_QUEUES   64
 
+
+#ifndef NFD_IN_NUM_SEQRS
+#define NFD_IN_NUM_SEQRS 1
+#endif
+
+#ifndef NFD_IN_SEQR_QSHIFT
+#define NFD_IN_SEQR_QSHIFT 0
+#endif
+
+#if (NFD_IN_NUM_SEQRS < 1 || NFD_IN_NUM_SEQRS > 64 || \
+    (NFD_IN_NUM_SEQRS & (NFD_IN_NUM_SEQRS - 1)) != 0)
+#error "NFD_IN_NUM_SEQRS must be a power of 2 between 1 and 64"
+#endif
+
+/** @endcond */
+
+/**
+ * Determine the input sequencer for a packet given its queue number.
+ *
+ * This macro computes the sequencer number of a particular packet given
+ * its queue number.  Sequencers start at 0 and are numbered contiguously
+ * and sequentially.  The sequencers for separate PCI.IN blocks are distinct
+ * meaning that sequencer 1 for pcie0 is a separate sequence space from
+ * sequencer 1 from pcie2, for example.  It is the application's
+ * responsibility to map these <pcie, sequencer> tuples to appropriate
+ * reorder contexts in GRO or the NBI traffic manager.
+ */
+#define NFD_IN_SEQR_NUM(_qnum) \
+    (((_qnum) >> NFD_IN_SEQR_QSHIFT) & (NFD_IN_NUM_SEQRS - 1))
+
+
+/** @cond DOXYGEN_SHOULD_SKIP_THIS */
 
 #ifdef NFD_IN_WQ_SHARED
 
@@ -82,42 +118,48 @@
 
 #endif /* NFD_IN_WQ_SHARED */
 
-#define NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem)                            \
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem, _num)                            \
     _emem##_queues_DECL                                                 \
-    ASM(.alloc_resource nfd_in_issued_lso_ring_num##_isl##0 _emem##_queues global 1 1)
-#define NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, _emem)    \
-    NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem)
-#define NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl)                       \
-    NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, NFD_PCIE##_isl##_EMEM)
-#define NFD_IN_ISSUED_LSO_RING_DECL(_isl) NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl)
+    ASM(.alloc_resource nfd_in_issued_lso_ring_num##_isl##_num _emem##_queues global 1 1)
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, _emem, _num)    \
+    NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem, _num)
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl, _num)                       \
+    NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, NFD_PCIE##_isl##_EMEM, _num)
+#define NFD_IN_ISSUED_LSO_RING_DECL(_isl, _num) NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl, _num)
 
 #ifdef NFD_PCIE0_EMEM
     NFD_IN_RINGS_DECL(0);
     NFD_IN_RING_NUM_ALLOC(0, 0);
-    NFD_IN_ISSUED_LSO_RING_DECL(0);
+    NFD_IN_ISSUED_LSO_RING_DECL(0, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(0, 1);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
     NFD_IN_RINGS_DECL(1);
     NFD_IN_RING_NUM_ALLOC(1, 0);
-    NFD_IN_ISSUED_LSO_RING_DECL(1);
+    NFD_IN_ISSUED_LSO_RING_DECL(1, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(1, 1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
     NFD_IN_RINGS_DECL(2);
     NFD_IN_RING_NUM_ALLOC(2, 0);
-    NFD_IN_ISSUED_LSO_RING_DECL(2);
+    NFD_IN_ISSUED_LSO_RING_DECL(2, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(2, 1);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
     NFD_IN_RINGS_DECL(3);
     NFD_IN_RING_NUM_ALLOC(3, 0);
-    NFD_IN_ISSUED_LSO_RING_DECL(3);
+    NFD_IN_ISSUED_LSO_RING_DECL(3, 0);
+    NFD_IN_ISSUED_LSO_RING_DECL(3, 1);
 #endif
 
+/** @endcond */
 
-/**
- * PCI.in TX descriptor format
+
+/*
+ * PCI.IN TX descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+-------------------------------+---------------+
@@ -132,30 +174,34 @@
  *
  *      E -> End of packet
  */
+/**
+ * Host-to-NFD (TX) packet descriptor
+ */
 struct nfd_in_tx_desc {
     union {
         struct {
-            unsigned int eop:1;
-            unsigned int offset:7;
-            unsigned int dma_len:16;
-            unsigned int dma_addr_hi:8;
+            unsigned int eop:1;         /**< Last descriptor of a packet */
+            unsigned int offset:7;      /**< Offset of packet start from dma
+                                         * address.  (packet metadat length) */
+            unsigned int dma_len:16;    /**< Length to DMA for this desc */
+            unsigned int dma_addr_hi:8; /**< Bits[39:32] of the host address */
 
-            unsigned int dma_addr_lo:32;
+            unsigned int dma_addr_lo:32; /**< Bits[31:0] of the host address */
 
-            unsigned int flags:8;
-            unsigned int l4_offset:8;
+            unsigned int flags:8;       /**< Flags for the packet */
+            unsigned int l4_offset:8;   /**< Offset of L4 header in packet */
             unsigned int sp0:2;
-            unsigned int mss:14;
+            unsigned int mss:14;        /**< Info for Large Segment Offload */
 
-            unsigned int data_len:16;
-            unsigned int vlan:16;
+            unsigned int data_len:16;   /**< Length of the entire packet */
+            unsigned int vlan:16;       /**< VLAN to prepend to this packet */
         };
-        unsigned int __raw[4];
+        unsigned int __raw[4];          /**< Direct access to struct words */
     };
 };
 
 
-/**
+/*
  * PCI.in Packet descriptor format
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
@@ -173,27 +219,32 @@ struct nfd_in_tx_desc {
  *    L -> Last packet in a series of LSO packets
  *    S -> sp0 and sp1 (spare)
  */
+/**
+ * NFD-to-App (TX) packet descriptor
+ */
 struct nfd_in_pkt_desc {
     union {
         struct {
-            unsigned int sp0:1;
-            unsigned int offset:7;
-            unsigned int seq_num:16;
-            unsigned int intf:2;
-            unsigned int q_num:6;
+            unsigned int sp0:1;         /**< Spare bit (unused) */
+            unsigned int offset:7;      /**< Offset of packet data from start
+                                         *   of buffer + NFD_IN_DATA_OFFSET.
+                                         *   aka (prepended metadata length) */
+            unsigned int seq_num:16;    /**< Sequence number of the packet */
+            unsigned int intf:2;        /**< PCIe num the packet arrived on */
+            unsigned int q_num:6;       /**< Queue num the packet arrived on */
 
-            unsigned int buf_addr:32;
+            unsigned int buf_addr:32;   /**< Bits [39:11] of the MU buffer */
 
-            unsigned int flags:8;
-            unsigned int l4_offset:8;
-            unsigned int lso_end:1;
-            unsigned int sp1:1;
-            unsigned int mss:14;
+            unsigned int flags:8;       /**< Flags for the packet */
+            unsigned int l4_offset:8;   /**< Offset of L4 header in packet */
+            unsigned int lso_end:1;     /**< Last packet in a series of LSO packets */
+            unsigned int sp1:1;         /**< Spare bit (unused) */
+            unsigned int mss:14;        /**< Info for Large Segment Offload */
 
-            unsigned int data_len:16;
-            unsigned int vlan:16;
+            unsigned int data_len:16;   /**< Total packet length */
+            unsigned int vlan:16;       /**< VLAN to prepend to the packet */
         };
-        unsigned int __raw[4];
+        unsigned int __raw[4];          /**< Direct access to struct words */
     };
 };
 
@@ -201,67 +252,74 @@ struct nfd_in_pkt_desc {
 /**
  * Prepare ME data structures required to receive packets from NFD
  *
- * This method should be called from a single context, during initialisation.
+ * This method should be called from a single context, during initialization.
  */
-__intrinsic void nfd_in_recv_init();
+__intrinsic void nfd_in_recv_init(void);
 
 
 /**
  * Receive a packet from PCI.IN
- * @param pcie_isl      PCIe island to access
- * @param workq         work queue from the given island to access
+ * @param pcie_isl      PCIe island
+ * @param workq         Work queue from the given island to access
  * @param nfd_in_meta   PCI.IN descriptor for the packet
- * @param sync          type of synchronization
- * @param sig           signal to report completion
+ * @param sync          Type of synchronization
+ * @param sig           Signal to report completion
  */
 __intrinsic void __nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
                                __xread struct nfd_in_pkt_desc *nfd_in_meta,
                                sync_t sync, SIGNAL *sig);
 
+/**
+ * Receive a packet from PCI.IN
+ * @param pcie_isl      PCIe island
+ * @param workq         Work queue from the given island to access
+ *                      (must be 0)
+ * @param nfd_in_meta   PCI.IN descriptor for the packet
+ */
 __intrinsic void nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
                              __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
 
 /**
- * Packets and Bytes count for PCI.IN queues.
- * @param pcie_isl      PCIe island to access
- * @param bmsk_queue    Tx queue number
+ * Increment packet and byte counts for PCI.IN queues.
+ * @param pcie_isl      PCIe island
+ * @param queue         TX queue number
  * @param byte_count    The bytes count to add
- * @param sync          type of synchronization
- * @param sig           signal to report completion
+ * @param sync          Type of synchronization
+ * @param sig           Signal to report completion
  *
- * This function uses the stats engine pkt and byte counters
- * to log the packet and bytes count per Tx queue.
- * The values are accumulated in the nfd_in_cntrsX memory and needs
- * to be pushed to the CFG BAR using the "__nfd_in_push_pkt_cnt" function.
+ * This function uses the stats engine to log the packet and byte 
+ * counts per TX queue.  The values are accumulated in the nfd_in_cntrsX
+ * memory (where X is the PCIe unit number) and needs to be pushed to the
+ * CFG BAR using the "__nfd_in_push_pkt_cnt" function.
  */
 __intrinsic void __nfd_in_cnt_pkt(unsigned int pcie_isl,
-                                  unsigned int bmsk_queue,
+                                  unsigned int queue,
                                   unsigned int byte_count,
                                   sync_t sync, SIGNAL *sig);
 
 /**
- * Push Packets and Bytes count for PCI.IN queue into the CFG BAR.
- * @param pcie_isl      PCIe island to access
- * @param bmsk_queue    Tx queue number
- * @param sync          type of synchronization
- * @param sig           signal to report completion
+ * Push packet and bytes counts for PCI.IN queue into the CFG BAR.
+ * @param pcie_isl      PCIe island
+ * @param queue         TX queue number
+ * @param sync          Type of synchronization
+ * @param sig           Signal to report completion
  *
- * This function updates the per Tx Q packets and bytes counter
- * in the CFG BAR. It reads and clears the packets and bytes
- * count from the relevant nfd_in_cntrsX memory and updates the
- * CFG BAR counters using the read values.
+ * This function updates the per TX queue packets and bytes counter
+ * in the CFG BAR. It reads and clears the packet and byte
+ * counts from the relevant nfd_in_cntrsX memory (where X is the 
+ * PCIe unit number) and updates the CFG BAR counters using the read values.
  */
 __intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,
-                                       unsigned int bmsk_queue,
+                                       unsigned int queue,
                                        sync_t sync, SIGNAL *sig);
 
 
 
 /**
- * Populate a nfd_in_pkt_desc struct from the NFD meta data
- * @param desc      PCI.IN descriptor for the packet
- * @param pkt_info  nbi_meta_pkt_info struct for the packet
+ * Populate a nbi_meta_pkt_info structure from the NFD meta data.
+ * @param pkt_info     nbi_meta_pkt_info struct for the packet
+ * @param nfd_in_meta  PCI.IN descriptor for the packet
  *
  * "pkt_info->isl", "pkt_info->pnum", and "pkt_info->split" are set to zero
  * as PCI.IN returns an "MU only" packet.
@@ -271,21 +329,27 @@ __intrinsic void nfd_in_fill_meta(void *pkt_info,
 
 
 /**
- * Map an NFD bitmask queue to a vnic, queue number pair
+ * Map an NFD bitmask queue to a vnic, queue number pair.
  * @param vnic      vNIC as seen by the host
- * @param queue     queue number within the vNIC
- * @param nfd_queue queue number within NFD "bitmask" numbering system
+ * @param queue     Queue number within the vNIC
+ * @param nfd_queue Queue number within NFD numbering system
  */
 __intrinsic void nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
                                   unsigned int nfd_queue);
 
+/**
+ * Get the length of the packet excluding metadata.
+ * @param nfd_in_meta   PCI.IN descriptor for the packet
+ * @return              The number of bytes of packet data
+ */
 __intrinsic unsigned int nfd_in_pkt_len(
     __xread struct nfd_in_pkt_desc *nfd_in_meta);
 
 
 /**
- * Get the dst_q sequence number (if NFD is configured to add it)
+ * Get the sequence number for a PCI.IN sourced packet.
  * @param nfd_in_meta   PCI.IN descriptor for the packet
+ * @return              The sequence number of the packet
  */
 __intrinsic unsigned int nfd_in_get_seqn(
     __xread struct nfd_in_pkt_desc *nfd_in_meta);

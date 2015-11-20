@@ -248,8 +248,8 @@ __nfd_out_send(unsigned int pcie_isl, unsigned int bmsk_queue,
     desc->cpp.reserved = 0;
     *desc_out = *desc;
 
-    __mem_ring_journal(rnum, raddr, desc_out, desc_sz, desc_sz,
-                       sig_done, sig);
+    __mem_workq_add_work(rnum, raddr, desc_out, desc_sz, desc_sz,
+                         sig_done, sig);
 }
 
 

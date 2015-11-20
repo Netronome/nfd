@@ -18,11 +18,13 @@
 #macro nfd_define_pf_bars(_isl)
 .alloc_mem nfd_cfg_base/**/_isl NFD_PCIE/**/_isl/**/_EMEM global \
     NFD_CFG_BAR_SZ 0x200000
+#if NFD_MAX_PF_QUEUES != 0
 .declare_resource nfd_cfg_base/**/_isl/**/_res global NFD_CFG_BAR_SZ \
     nfd_cfg_base/**/_isl
 .alloc_resource _pf/**/_isl/**/_net_bar0 \
     nfd_cfg_base/**/_isl/**/_res+NFD_CFG_BAR0_OFF global \
     NFP_NET_CFG_BAR_SZ
+#endif
 #endm
 
 

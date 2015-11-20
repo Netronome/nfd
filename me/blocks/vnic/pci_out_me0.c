@@ -14,7 +14,6 @@
 
 #include <vnic/pci_out/cache_desc.c>
 #include <vnic/pci_out/cache_desc_status.c>
-#include <vnic/pci_out/stage_batch.c>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_cfg_internal.c>
 
@@ -39,24 +38,17 @@ main(void)
 
         cache_desc_status_setup();
 
-        /* This method must complete before stage_batch may run.
-         * (stage_batch permits issue_dma and send_desc to go.) */
-        compute_seqn_setup_shared();
-
+        NFD_INIT_DONE_SET(PCIE_ISL, 0);     /* XXX Remove? */
+    } else if (ctx() == 1) {
         send_desc_setup_shared();
 
-        /* CTX 1-7 will stall until this starts ordering stages */
-        stage_batch_setup_shared();
-
-        NFD_INIT_DONE_SET(PCIE_ISL, 0);     /* XXX Remove? */
-    } else {
-        /* These methods do not have dependencies on the
-         * setup_shared() methods. */
+        /* send_desc uses cache_desc_compute_fl_addr
+         * as a service function */
         cache_desc_setup();
 
-        stage_batch_setup();
-
-        send_desc_setup();
+    } else {
+        /* CTX >1 are unused currently */
+        ctx_wait(kill);
     }
 
     /*
@@ -65,7 +57,6 @@ main(void)
     if (ctx() == 0) {
         /* CTX0 main loop */
         for (;;) {
-            /* cache_desc(); */
             cache_desc_complete_fetch(); /* Swaps once */
 
             cache_desc_check_urgent(); /* Swaps at least once */
@@ -73,15 +64,13 @@ main(void)
             cache_desc_status();
             ctx_swap();
 
-            compute_seqn(); /* Swaps once */
-
             cache_desc_check_active(); /* Swaps at least once */
 
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
                 nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_out,
-                                      NFD_CFG_RING_NUM(PCIE_ISL, 1));
+                                      NFD_CFG_RING_NUM(PCIE_ISL, 2));
 
                 if (cfg_msg.msg_valid) {
                     nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_OUT);
@@ -93,30 +82,32 @@ main(void)
                     nfd_cfg_complete_cfg_msg(&cfg_msg,
                                              &NFD_CFG_SIG_NEXT_ME,
                                              NFD_CFG_NEXT_ME,
-                                             NFD_CFG_RING_NUM(PCIE_ISL, 2),
-                                             NFD_CFG_RING_NUM(PCIE_ISL, 1));
+                                             NFD_CFG_RING_NUM(PCIE_ISL, 3),
+                                             NFD_CFG_RING_NUM(PCIE_ISL, 2));
                 }
             }
 
             /* Yield thread */
             ctx_swap();
         }
+     } else if (ctx() == 1) {
+        for (;;) {
+            /* CTX1 main loop */
+            send_desc_complete_send();  /* Swaps once */
+
+            send_desc_check_cached();   /* Swaps at least once */
+
+            send_desc_check_cached();   /* Swaps at least once */
+
+            send_desc_check_pending();   /* Swaps at least once */
+
+            /* ctx_swap(); */
+        }
     } else {
         /* Worker main loop */
         for (;;) {
-            /* This method will stall until stage_batch_setup_shared
-             * has completed. */
-            stage_batch();
-
-            /* This method won't start until stage_batch has
-             * processed a batch. */
-            send_desc();
-
-            /* This method won't start until a send_desc batch has completed */
-            inc_sent();
-
-            /* /\* Yield thread *\/ */
-            /* ctx_swap(); */
+            /* CTX >1 are unused currently */
+            ctx_wait(kill);
         }
     }
 }

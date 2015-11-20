@@ -54,8 +54,8 @@
 
 
 /* Configuration mechanism memory and ring defines */
-#define NFD_CFG_TOTAL_RINGS     16
-#define NFD_CFG_NUM_RINGS       4
+#define NFD_CFG_TOTAL_RINGS     32
+#define NFD_CFG_NUM_RINGS       8
 
 
 /* It is convenient to have a value like NFD_MAX_VFS for the PF,
@@ -69,7 +69,8 @@
 
 #define NFD_CFG_RINGS_RES_IND(_emem)                                    \
     _emem##_queues_DECL                                                 \
-    ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues global 16 16)
+    ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues global \
+        NFD_CFG_TOTAL_RINGS NFD_CFG_TOTAL_RINGS)
 #define NFD_CFG_RINGS_RES(_emem) NFD_CFG_RINGS_RES_IND(_emem)
 
 NFD_CFG_RINGS_RES(NFD_CFG_RING_EMEM);
@@ -85,6 +86,10 @@ NFD_CFG_RINGS_RES(NFD_CFG_RING_EMEM);
     ASM(.alloc_resource nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_nums##_isl \
         global 1)                                                       \
     ASM(.alloc_resource nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_nums##_isl \
+        global 1)                                                       \
+    ASM(.alloc_resource nfd_cfg_ring_num##_isl##4 nfd_cfg_ring_nums##_isl \
+        global 1)                                                       \
+    ASM(.alloc_resource nfd_cfg_ring_num##_isl##5 nfd_cfg_ring_nums##_isl \
         global 1)
 
 #define NFD_CFG_RINGS_DECL(_isl) NFD_CFG_RINGS_DECL_IND(_isl)
@@ -271,10 +276,10 @@ __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
  */
 #ifdef USE_SVC_ME
 #define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
-    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 3))
+    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 5))
 #else
 #define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
-    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 2))
+    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 4))
 #endif
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2015 Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/pci_in/notify.c
  * @brief         Code to notify host and app that packet was transmitted
@@ -17,20 +17,32 @@
 
 #include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
+#include <vnic/pci_in/notify_status.c>
 #include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_cfg_internal.c>
 #include <vnic/shared/nfd_internal.h>
-/*#include <vnic/utils/cls_ring.h> */ /* XXX THS-50 workaround */
-#include <vnic/utils/ctm_ring.h> /* XXX THS-50 workaround */
+#include <vnic/utils/ctm_ring.h>
+#include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 
-/* XXX assume this runs on PCI.IN ME0 */
+/* TODO: get NFD_PCIE_ISL_BASE from a common header file */
+#define NOTIFY_RING_ISL (PCIE_ISL + 4)
+
+#if !defined(NFD_IN_HAS_ISSUE0) && !defined(NFD_IN_HAS_ISSUE1)
+#error "At least one of NFD_IN_HAS_ISSUE0 and NFD_IN_HAS_ISSUE1 must be defined"
+#endif
+
 
 struct _issued_pkt_batch {
     struct nfd_in_issued_desc pkt0;
     struct nfd_in_issued_desc pkt1;
     struct nfd_in_issued_desc pkt2;
     struct nfd_in_issued_desc pkt3;
+    struct nfd_in_issued_desc pkt4;
+    struct nfd_in_issued_desc pkt5;
+    struct nfd_in_issued_desc pkt6;
+    struct nfd_in_issued_desc pkt7;
 };
 
 struct _pkt_desc_batch {
@@ -38,25 +50,51 @@ struct _pkt_desc_batch {
     struct nfd_in_pkt_desc pkt1;
     struct nfd_in_pkt_desc pkt2;
     struct nfd_in_pkt_desc pkt3;
+    struct nfd_in_pkt_desc pkt4;
+    struct nfd_in_pkt_desc pkt5;
+    struct nfd_in_pkt_desc pkt6;
+    struct nfd_in_pkt_desc pkt7;
 };
 
-__shared __gpr unsigned int data_dma_seq_served = 0;
-__shared __gpr unsigned int data_dma_seq_compl = 0;
-static __gpr unsigned int data_dma_seq_sent = 0;
 
-/* Signals and transfer registers for sequence number reflects */
-__visible volatile __xread unsigned int nfd_in_data_compl_refl_in;
+NFD_INIT_DONE_DECLARE;
+
+
+/* Shared by both issue DMA MEs */
 __visible volatile SIGNAL nfd_in_data_compl_refl_sig;
-__remote volatile __xread unsigned int nfd_in_data_served_refl_in;
-__remote volatile SIGNAL nfd_in_data_served_refl_sig;
-static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
+
+/* Used for issue DMA 0 */
+__shared __gpr unsigned int data_dma_seq_served0 = 0;
+__shared __gpr unsigned int data_dma_seq_compl0 = 0;
+static __gpr unsigned int data_dma_seq_sent0 = 0;
+static __xwrite unsigned int nfd_in_data_served_refl_out0 = 0;
+
+/* Shared with issue DMA 0 */
+__visible volatile __xread unsigned int nfd_in_data_compl_refl_in0 = 0;
+__remote volatile __xread unsigned int nfd_in_data_served_refl_in0;
+__remote volatile SIGNAL nfd_in_data_served_refl_sig0;
+
+/* Used for issue DMA 1 */
+__shared __gpr unsigned int data_dma_seq_served1 = 0;
+__shared __gpr unsigned int data_dma_seq_compl1 = 0;
+static __gpr unsigned int data_dma_seq_sent1 = 0;
+static __xwrite unsigned int nfd_in_data_served_refl_out1 = 0;
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr0 = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num0 = 0;
+
+/* Shared with issue DMA 1 */
+__visible volatile __xread unsigned int nfd_in_data_compl_refl_in1 = 0;
+__remote volatile __xread unsigned int nfd_in_data_served_refl_in1;
+__remote volatile SIGNAL nfd_in_data_served_refl_sig1;
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr1 = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num1 = 0;
 
 static unsigned int nfd_in_lso_cntr_addr = 0;
-static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr = 0;
-static __gpr unsigned int nfd_in_issued_lso_ring_num = 0;
+
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
-static SIGNAL msg_sig, qc_sig;
+static SIGNAL wq_sig4, wq_sig5, wq_sig6, wq_sig7;
+static SIGNAL msg_sig0, msg_sig1, qc_sig;
 static SIGNAL get_order_sig;    /* Signal for reordering before issuing get */
 static SIGNAL msg_order_sig;    /* Signal for reordering on message return */
 static SIGNAL_MASK wait_msk;
@@ -64,11 +102,6 @@ static unsigned int next_ctx;
 
 __xwrite struct _pkt_desc_batch batch_out;
 __xread unsigned int qc_xfer;
-
-/* XXX use CLS ring API when available */
-/* XXX THS-50 workaround, use CTM instead of CLS rings */
-__export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING_SZ)
-    struct nfd_in_issued_desc nfd_in_issued_ring[NFD_IN_ISSUED_RING_SZ];
 
 /* XXX declare dst_q counters in LM */
 
@@ -144,44 +177,96 @@ NFD_IN_RINGS_MEM(PCIE_ISL);
 
 static __shared mem_ring_addr_t wq_raddr;
 static __shared unsigned int wq_num_base;
+static __gpr unsigned int dst_q;
+
 
 
 #ifdef NFD_IN_ADD_SEQN
-#if (NFD_IN_NUM_WQS == 1)
+
+#if (NFD_IN_NUM_SEQRS == 1)
 /* Add sequence numbers, using a shared GPR to store */
-static __shared __gpr dst_q_seqn = 0;
+static __shared __gpr unsigned int dst_q_seqn = 0;
 
-#define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                            \
-    do {                                                                \
-        _seq = dst_q_seqn;                                              \
-        dst_q_seqn += _num_seq;                                         \
-    } while (0)
+#define NFD_IN_ADD_SEQN_PROC                                            \
+do {                                                                    \
+    pkt_desc_tmp.seq_num = dst_q_seqn;                                  \
+    dst_q_seqn++;                                                       \
+} while (0)
 
-#else
+#else /* (NFD_IN_NUM_SEQRS == 1) */
+
 /* Add sequence numbers, using a LM to store */
-static __shared __lmem dst_q_seqn[NFD_IN_NUM_WQS];
-
-#define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                            \
-    do {                                                                \
-        _seq = dst_q_seqn[dst_q];                                       \
-        dst_q_seqn[dst_q] += _num_seq;                                  \
-    } while (0)
-
-#endif
-
-#else
-/* Null sequence number add */
-#define NFD_IN_ADD_SEQN_PROC(_num_seq, _seq)                            \
-    do {                                                                \
-        _seq = 0;                                                       \
-    } while (0)
-
-#endif
-
+static __shared __lmem unsigned int seq_nums[NFD_IN_NUM_SEQRS];
 
 /*
- * reflect_data() available from gather.c, imported before this file.
+ * XXX this ugly bit of code was the best way I could find to make the
+ * compiler generate intelligent assembly here.  This should just be
+ * a shift + AND operation to get the LM address.  But if I use the
+ * NFD_IN_SEQR_NUM(q), I get 2-4 extra instructions and this is on the
+ * fast path in a potentially down-clocked ME.
  */
+#define NFD_IN_ADD_SEQN_PROC                                            \
+do {                                                                    \
+    pkt_desc_tmp.seq_num =                                              \
+        seq_nums[(pkt_desc_tmp.__raw[0] >> NFD_IN_SEQR_QSHIFT) &        \
+                 (NFD_IN_NUM_SEQRS - 1)]++;                             \
+} while (0)
+
+#endif /* (NFD_IN_NUM_SEQRS == 1) */
+
+#else /* NFD_IN_ADD_SEQN */
+
+/* Null sequence number add */
+#define NFD_IN_ADD_SEQN_PROC                                            \
+do {                                                                    \
+} while (0)
+
+#endif /* NFD_IN_ADD_SEQN */
+
+#if (NFD_IN_NUM_WQS == 1)
+#define _SET_DST_Q(_pkt)                                                \
+do {                                                                    \
+} while (0)
+#else /* (NFD_IN_NUM_WQS == 1) */
+#define _SET_DST_Q(_pkt)                                                \
+do {                                                                    \
+    /* Removing dst_q support for driving pkts to specified wq */       \
+} while (0)
+#endif /* (NFD_IN_NUM_WQS == 1) */
+
+
+/* XXX Move to some sort of CT reflect library */
+__intrinsic void
+reflect_data(unsigned int dst_me, unsigned int dst_xfer,
+             unsigned int sig_no, volatile __xwrite void *src_xfer,
+             size_t size)
+{
+    #define OV_SIG_NUM 13
+
+    unsigned int addr;
+    unsigned int count = (size >> 2);
+    struct nfp_mecsr_cmd_indirect_ref_0 indirect;
+
+    /* ctassert(__is_write_reg(src_xfer)); */ /* TEMP, avoid volatile warnings */
+    ctassert(__is_ct_const(size));
+
+    /* Generic address computation.
+     * Could be expensive if dst_me, or dst_xfer
+     * not compile time constants */
+    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 0xF)<<10 | (dst_xfer & 0x3F)<<2));
+
+    indirect.__raw = 0;
+    indirect.signal_num = sig_no;
+    local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
+
+    /* Currently just support reflect_write_sig_remote */
+    __asm {
+        alu[--, --, b, 1, <<OV_SIG_NUM];
+        ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
+           __ct_const_val(count)], indirect_ref;
+    };
+}
+
 
 
 /**
@@ -205,57 +290,67 @@ notify_setup_shared()
 
 
 /**
- * Perform per context initialisation (for CTX 1 to 7)
+ * Perform per context initialization (for CTX 1 to 7)
  */
 void
 notify_setup()
 {
-    if (ctx() != 0) {
-        wait_msk = __signals(&msg_sig, &msg_order_sig);
-        next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX);
-    }
-
+    dst_q = wq_num_base;
+    wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
+    next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX,
+                                    NFD_IN_NOTIFY_END_CTX);
 #ifdef NFD_IN_LSO_CNTR_ENABLE
+    /* get the location of LSO statistics */
     nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *) nfd_in_lso_cntrs);
 #endif
-    nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
-                                               0);
-    nfd_in_issued_lso_ring_addr = ((((unsigned long long)
-                                     NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
+    nfd_in_issued_lso_ring_num0 = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                                NFD_IN_ISSUED_LSO_RING0_NUM);
+    nfd_in_issued_lso_ring_addr0 = ((((unsigned long long)
+                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
+
+    nfd_in_issued_lso_ring_num1 = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                                NFD_IN_ISSUED_LSO_RING1_NUM);
+    nfd_in_issued_lso_ring_addr1 = ((((unsigned long long)
+                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
+
 }
 
-#ifdef NFD_VNIC_DBG_CHKS
-#define _NOTIFY_MU_CHK                                                  \
+#ifndef NFD_MU_PTR_DBG_MSK
+#define NFD_MU_PTR_DBG_MSK 0x1f000000
+#endif
+
+#ifdef NFD_IN_NOTIFY_DBG_CHKS
+#define _NOTIFY_MU_CHK(_pkt)                                            \
     if ((batch_in.pkt##_pkt##.__raw[1] & NFD_MU_PTR_DBG_MSK) == 0) {    \
+        /* Write the error we read to Mailboxes for debug purposes */   \
+        local_csr_write(local_csr_mailbox_0,                            \
+                        NFD_IN_NOTIFY_MU_PTR_INVALID);                  \
+        local_csr_write(local_csr_mailbox_1,                            \
+                        batch_in.pkt##_pkt##.__raw[1]);                 \
+                                                                        \
         halt();                                                         \
     }
 #else
-#define _NOTIFY_MU_CHK
+#define _NOTIFY_MU_CHK(_pkt)
 #endif
 
 #ifdef NFD_IN_LSO_CNTR_ENABLE
-#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)                              \
-        if (_flags & PCIE_DESC_TX_LSO) {                          \
+#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_lso_end)                            \
+        if (_lso_end) {                                                  \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                          NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ);\
         }
 #else
-#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_flags)
+#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_lso_end)
 #endif
 
-//        _NOTIFY_MU_CHK;                       \
-
-#define _NOTIFY_PROC(_pkt)                                                   \
+#define _NOTIFY_PROC(_pkt, _lso_ring_num, _lso_ring_addr)                    \
 do {                                                                         \
     unsigned int i;                                                          \
-    unsigned int start_lso_seq = 0;                                          \
-    unsigned int seq = 0;                                                    \
-    unsigned int ret;                                                        \
     unsigned int num_lso_to_read = batch_in.pkt##_pkt##.sp0;                 \
     __xread struct nfd_in_pkt_desc lso_pkt;                                  \
     SIGNAL lso_sig;                                                          \
     SIGNAL_PAIR lso_sig_pair;                                                \
-                                                                             \
     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                               \
                          NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC);             \
     /* finished packet and no LSO */                                         \
@@ -263,46 +358,41 @@ do {                                                                         \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC);     \
         __critical_path();                                                   \
+        _NOTIFY_MU_CHK(_pkt)                                                 \
         pkt_desc_tmp.sp0 = 0;                                                \
         pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;                   \
-        dst_q = 0;                                                           \
-        NFD_IN_ADD_SEQN_PROC(1, seq);                                        \
-        pkt_desc_tmp.seq_num = seq;                                          \
-        dst_q |= wq_num_base;                                                \
+        NFD_IN_ADD_SEQN_PROC;                                                \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];              \
         batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1];      \
         batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2];      \
         batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3];      \
                                                                              \
+        _SET_DST_Q(_pkt);                                                    \
         __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,          \
                              out_msg_sz, out_msg_sz, sig_done,               \
                              &wq_sig##_pkt);                                 \
     } else if (num_lso_to_read != 0) {                                       \
-        dst_q = 0;                                                           \
-        pkt_desc_tmp.sp0 = 0; \
-        NFD_IN_ADD_SEQN_PROC(num_lso_to_read, start_lso_seq);                \
-        /* LSO packets to read */                                            \
+        /* else LSO packets */                                               \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_NOTIFY_LSO_PKT_DESC);         \
          /* finished packet with LSO to handle */                            \
         i = 0;                                                               \
         while (i < num_lso_to_read) {                                        \
             /* read packet from nfd_in_issued_lso_ring */                    \
-            __mem_ring_get(nfd_in_issued_lso_ring_num,                       \
-                               nfd_in_issued_lso_ring_addr,                  \
-                               &lso_pkt, sizeof(lso_pkt), sizeof(lso_pkt),   \
-                               sig_done, &lso_sig_pair);                     \
+            __mem_ring_get(_lso_ring_num, _lso_ring_addr, &lso_pkt,          \
+                           sizeof(lso_pkt), sizeof(lso_pkt), sig_done,       \
+                           &lso_sig_pair);                                   \
             wait_for_all_single(&lso_sig_pair.even);                         \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                               NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING); \
-            /* fill in pkt_desc values */                                    \
+            pkt_desc_tmp.sp0 = 0;                                            \
             pkt_desc_tmp.offset = lso_pkt.offset;                            \
-            pkt_desc_tmp.seq_num = start_lso_seq++;                          \
-            dst_q |= wq_num_base;                                            \
+            NFD_IN_ADD_SEQN_PROC;                                            \
             batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];          \
             batch_out.pkt##_pkt##.__raw[1] = lso_pkt.__raw[1];               \
             batch_out.pkt##_pkt##.__raw[2] = lso_pkt.__raw[2];               \
             batch_out.pkt##_pkt##.__raw[3] = lso_pkt.__raw[3];               \
+            _SET_DST_Q(_pkt);                                                \
             /* if it is last LSO being read from ring */                     \
             if (i == (num_lso_to_read - 1)) {                                \
                 __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,  \
@@ -310,7 +400,6 @@ do {                                                                         \
                                      &wq_sig##_pkt);                         \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                              NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING); \
-                /* remove as per enhance */                                  \
                 if (lso_pkt.lso_end) {                                       \
                     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,               \
                              NFD_IN_LSO_CNTR_T_NOTIFY_LSO_EOP_PKT_TO_ME_WQ); \
@@ -324,11 +413,10 @@ do {                                                                         \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                             NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ); \
             i++;                                                             \
-            _LSO_END_PKTS_TO_ME_WQ_CNTR(lso_pkt.flags);                      \
+            _LSO_END_PKTS_TO_ME_WQ_CNTR(lso_pkt.lso_end);                    \
         }                                                                    \
     } else {                                                                 \
-        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
-                             NFD_IN_LSO_CNTR_T_NOTIFY_OTHER_PKT_DESC);       \
+        /* Remove the wq signal from the wait mask */                        \
         wait_msk &= ~__signals(&wq_sig##_pkt);                               \
     }                                                                        \
 } while (0)
@@ -346,14 +434,15 @@ do {                                                                         \
  * we must still participate in the "msg_order_sig" ordering.
  */
 __forceinline void
-notify()
+_notify(__gpr unsigned int *complete, __gpr unsigned int *served,
+        int input_ring, __gpr unsigned int lso_ring_num,
+        __gpr mem_ring_addr_t lso_ring_addr)
 {
 
     unsigned int n_batch;
     unsigned int q_batch;
     unsigned int qc_queue;
 
-    unsigned int dst_q;
     unsigned int out_msg_sz = sizeof(struct nfd_in_pkt_desc);
 
     __xread struct _issued_pkt_batch batch_in;
@@ -364,22 +453,20 @@ notify()
     wait_for_all(&get_order_sig);
     reorder_done_opt(&next_ctx, &get_order_sig);
 
-
     /* Is there a batch to process
      * XXX assume that issue_dma only inc's dma seq for final dma in batch */
-    if (data_dma_seq_compl != data_dma_seq_served)
+    if (*complete != *served)
     {
         /* Process whole batch */
         __critical_path();
 
         /* Increment data_dma_seq_served before swapping */
-        data_dma_seq_served += 1;
+        *served += 1;
 
-        /* XXX THS-50 workaround */
-        /* cls_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in, sizeof batch_in, */
-        /*              &msg_sig); */
-        ctm_ring_get(NFD_IN_ISSUED_RING_NUM, &batch_in, sizeof batch_in,
-                     &msg_sig);
+        ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt0,
+                     (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
+        ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt4,
+                     (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
 
         __asm {
             ctx_arb[--], defer[1];
@@ -387,13 +474,19 @@ notify()
         }
 
         wait_msk = __signals(&wq_sig0, &wq_sig1, &wq_sig2, &wq_sig3,
-                             &qc_sig, &msg_sig, &msg_order_sig);
+                             &wq_sig4, &wq_sig5, &wq_sig6, &wq_sig7,
+                             &qc_sig, &msg_sig0, &msg_sig1, &msg_order_sig);
         __implicit_read(&wq_sig0);
         __implicit_read(&wq_sig1);
         __implicit_read(&wq_sig2);
         __implicit_read(&wq_sig3);
+        __implicit_read(&wq_sig4);
+        __implicit_read(&wq_sig5);
+        __implicit_read(&wq_sig6);
+        __implicit_read(&wq_sig7);
         __implicit_read(&qc_sig);
-        __implicit_read(&msg_sig);
+        __implicit_read(&msg_sig0);
+        __implicit_read(&msg_sig1);
         __implicit_read(&msg_order_sig);
         __implicit_read(&qc_xfer);
 
@@ -420,10 +513,14 @@ notify()
         pkt_desc_tmp.seq_num = 0;
 #endif
 
-        _NOTIFY_PROC(0);
-        _NOTIFY_PROC(1);
-        _NOTIFY_PROC(2);
-        _NOTIFY_PROC(3);
+        _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(1, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(2, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(3, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(4, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(5, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(6, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(7, lso_ring_num, lso_ring_addr);
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
@@ -435,6 +532,21 @@ notify()
         wait_for_all(&msg_order_sig);
         reorder_done_opt(&next_ctx, &msg_order_sig);
         return;
+    }
+}
+
+
+__forceinline void
+notify(int side)
+{
+    if (side == 0) {
+        _notify(&data_dma_seq_compl0, &data_dma_seq_served0,
+                NFD_IN_ISSUED_RING0_NUM, nfd_in_issued_lso_ring_num0,
+                nfd_in_issued_lso_ring_addr0);
+    } else {
+        _notify(&data_dma_seq_compl1, &data_dma_seq_served1,
+                NFD_IN_ISSUED_RING1_NUM, nfd_in_issued_lso_ring_num1,
+                nfd_in_issued_lso_ring_addr1);
     }
 }
 
@@ -458,22 +570,89 @@ __intrinsic void
 distr_notify()
 {
     if (signal_test(&nfd_in_data_compl_refl_sig)) {
-        data_dma_seq_compl = nfd_in_data_compl_refl_in;
+#ifdef NFD_IN_HAS_ISSUE0
+        data_dma_seq_compl0 = nfd_in_data_compl_refl_in0;
+#endif
+#ifdef NFD_IN_HAS_ISSUE1
+        data_dma_seq_compl1 = nfd_in_data_compl_refl_in1;
+#endif NFD_IN_HAS_ISSUE1
     }
 
-    /* XXX possibly throttle these reflects further */
-    if (data_dma_seq_served != data_dma_seq_sent) {
-        __implicit_read(&nfd_in_data_served_refl_out);
+#ifdef NFD_IN_HAS_ISSUE0
+    if (data_dma_seq_served0 != data_dma_seq_sent0) {
+        __implicit_read(&nfd_in_data_served_refl_out0);
 
-        data_dma_seq_sent = data_dma_seq_served;
+        data_dma_seq_sent0 = data_dma_seq_served0;
 
-        nfd_in_data_served_refl_out = data_dma_seq_sent;
-        reflect_data(NFD_IN_DATA_DMA_ME,
-                     __xfer_reg_number(&nfd_in_data_served_refl_in,
-                                       NFD_IN_DATA_DMA_ME),
-                     __signal_number(&nfd_in_data_served_refl_sig,
-                                     NFD_IN_DATA_DMA_ME),
-                     &nfd_in_data_served_refl_out,
-                     sizeof nfd_in_data_served_refl_out);
+        nfd_in_data_served_refl_out0 = data_dma_seq_sent0;
+        reflect_data(NFD_IN_DATA_DMA_ME0,
+                     __xfer_reg_number(&nfd_in_data_served_refl_in0,
+                                       NFD_IN_DATA_DMA_ME0),
+                     __signal_number(&nfd_in_data_served_refl_sig0,
+                                     NFD_IN_DATA_DMA_ME0),
+                     &nfd_in_data_served_refl_out0,
+                     sizeof nfd_in_data_served_refl_out0);
+    }
+#endif
+
+#ifdef NFD_IN_HAS_ISSUE1
+    if (data_dma_seq_served1 != data_dma_seq_sent1) {
+        __implicit_read(&nfd_in_data_served_refl_out1);
+
+        data_dma_seq_sent1 = data_dma_seq_served1;
+
+        nfd_in_data_served_refl_out1 = data_dma_seq_sent1;
+        reflect_data(NFD_IN_DATA_DMA_ME1,
+                     __xfer_reg_number(&nfd_in_data_served_refl_in1,
+                                       NFD_IN_DATA_DMA_ME1),
+                     __signal_number(&nfd_in_data_served_refl_sig1,
+                                     NFD_IN_DATA_DMA_ME1),
+                     &nfd_in_data_served_refl_out1,
+                     sizeof nfd_in_data_served_refl_out1);
+    }
+#endif
+}
+
+
+int
+main(void)
+{
+    /* Perform per ME initialisation  */
+    if (ctx() == 0) {
+
+        nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
+
+        notify_setup_shared();
+        notify_status_setup();
+
+        /* NFD_INIT_DONE_SET(PCIE_ISL, 2);     /\* XXX Remove? *\/ */
+
+    }
+
+    notify_setup();
+
+    if (ctx() == 0) {
+
+        for (;;) {
+            distr_notify();
+#ifdef NFD_IN_HAS_ISSUE0
+            notify(0);
+#endif
+#ifdef NFD_IN_HAS_ISSUE1
+            notify(1);
+#endif
+        }
+
+    } else {
+
+        for (;;) {
+#ifdef NFD_IN_HAS_ISSUE0
+            notify(0);
+#endif
+#ifdef NFD_IN_HAS_ISSUE1
+            notify(1);
+#endif
+        }
+
     }
 }
