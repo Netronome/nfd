@@ -15,7 +15,6 @@
 #include <nfp/pcie.h>
 #include <std/reg_utils.h>
 #include <std/cntrs.h>
-
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
 
@@ -684,7 +683,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ);         \
         queue_data[queue].lso_seq_cnt = 0;                                   \
-        wait_for_all(&lso_hdr_enq_sig, &lso_hdr_dma_sig);                    \
+        __wait_for_all(&lso_hdr_enq_sig, &lso_hdr_dma_sig);                  \
         /* We need to optimize here and kick the first LSO packet's data */  \
         /* including the header directly to emem buffer.*/                   \
         /* For later parts of the LSO we will use the PE DMA to load the */  \
@@ -694,16 +693,15 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         /* 2. Get an MU buffer */                                            \
         if (queue_data[queue].curr_buf == 0) {                               \
             /* get a buffer. */                                              \
-            while (precache_bufs_jumbo_use(&curr_buf) != 0) {      \
+            while (precache_bufs_jumbo_use(&curr_buf) != 0) {                \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                           NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);\
-                ctx_swap(); \
+                ctx_swap();                                                  \
             }                                                                \
-            queue_data[queue].curr_buf = curr_buf;                       \
+            queue_data[queue].curr_buf = curr_buf;                           \
             queue_data[queue].lso_payload_len = 0;                           \
             queue_data[queue].offset = NFD_IN_DATA_OFFSET -                  \
                 tx_desc.pkt##_pkt.offset;                                    \
-            /*hdr_offset = NFD_IN_DATA_OFFSET - tx_desc.pkt##_pkt.offset;*/      \
                                                                              \
             /* got buffer setup where hdr and payload is to start */         \
             hdr_offset = queue_data[queue].offset;                           \
@@ -792,7 +790,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         queue_data[queue].lso_payload_len += (dma_length + amount_extra_dmaed);\
         queue_data[queue].offset += (dma_length + amount_extra_dmaed);       \
         /* Make sure we can reuse the XFERs (dma_out.pkt##_pkt##) */         \
-        __wait_for_all(&lso_enq_sig);                                        \
+        while (!signal_test(&lso_enq_sig));                                  \
         /* if we are at end of mu_buf */                                     \
         if (queue_data[queue].lso_payload_len >=  tx_desc.pkt##_pkt##.mss) { \
             pkt_ptr = (__addr40 void *)(((uint64_t)                          \
@@ -833,7 +831,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* set value in the batch out sp0 for the packet so that */      \
             /* notify how how many to read in  */                            \
             lso_issued_index++;                                              \
-            __wait_for_all(&lso_journal_sig);                                \
+            while (!signal_test(&lso_journal_sig));                          \
         }                                                                    \
     } /* while */                                                            \
     /* if we still have a partial buffer and it is marked as last LSO */     \
@@ -865,7 +863,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         queue_data[queue].lso_hdr_len = 0;                                   \
         queue_data[queue].curr_buf = 0;                                      \
         queue_data[queue].offset = 0;                                        \
-        __wait_for_all(&lso_journal_sig);                                    \
+        while (!signal_test(&lso_journal_sig));                              \
     }                                                                        \
     NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
                         NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS);              \
