@@ -605,7 +605,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     SIGNAL lso_hdr_sig;                                                      \
     SIGNAL lso_journal_sig;                                                  \
     unsigned int hdr_offset;                                                 \
-    __addr40 void *pkt_ptr;                                                  \
     __addr40 void *hdr_pkt_ptr;                                              \
     unsigned int mu_buf_left;                                                \
     unsigned int dma_left;                                                   \
@@ -793,9 +792,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         while (!signal_test(&lso_enq_sig));                                  \
         /* if we are at end of mu_buf */                                     \
         if (queue_data[queue].lso_payload_len >=  tx_desc.pkt##_pkt##.mss) { \
-            pkt_ptr = (__addr40 void *)(((uint64_t)                          \
-                        queue_data[queue].curr_buf << 11) |                  \
-                        queue_data[queue].offset);                           \
             /* put finished mu buffer on lso_ring to notify */               \
             issued_tmp.eop = 1;                                              \
             issued_tmp.sp1 = 0;                                              \
