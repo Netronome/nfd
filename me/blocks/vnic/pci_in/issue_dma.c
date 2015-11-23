@@ -615,6 +615,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     __gpr unsigned int curr_buf = 0;                                         \
     __gpr unsigned int lso_hdr_len = 0;                                      \
     __gpr unsigned int offset;                                               \
+    __gpr unsigned int lso_payload_len;                                      \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                                   \
                                                                              \
     /* data_dma_seq_issued was pre-incremented once we could */              \
@@ -712,7 +713,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 ctx_swap();                                                  \
             }                                                                \
             __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, curr_buf] }            \
-            queue_data[queue].lso_payload_len = 0;                           \
+            /* clear queue_data[queue].lso_payload_len */                    \
+            __asm { alu[NFD_IN_Q_STATE_PTR[3], --, B, 0] }                   \
             offset = NFD_IN_DATA_OFFSET - tx_desc.pkt##_pkt.offset;          \
                                                                              \
             /* got buffer setup where hdr and payload is to start */         \
@@ -723,7 +725,9 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             __asm { alu[NFD_IN_Q_STATE_PTR[2], --, B, offset] }              \
         }                                                                    \
         /* 3. Copy the header */                                             \
-        if (queue_data[queue].lso_payload_len == 0) {                        \
+        /* get queue_data[queue].lso_payload_len */                          \
+        __asm { alu[lso_payload_len, --, B, NFD_IN_Q_STATE_PTR[3]] }         \
+        if (lso_payload_len == 0) {                                          \
             header_to_read = ((lso_hdr_len + 0x3F) & ~0x3F);                 \
             __mem_pe_dma_ctm_to_mu((__mem void *)hdr_pkt_ptr,                \
                                    (__ctm void *)&lso_hdr_data[(queue <<     \
@@ -733,8 +737,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         }                                                                    \
         /* 4. Issue the data DMA (use Jumbo seq numbers) */                  \
         /* get the length left in mu buffer */                               \
-        mu_buf_left = tx_desc.pkt##_pkt##.mss -                              \
-                                          queue_data[queue].lso_payload_len; \
+        mu_buf_left = tx_desc.pkt##_pkt##.mss - lso_payload_len;             \
         /* get the length left to DMA. */                                    \
         dma_left = dma_len - lso_dma_index;                                  \
         /* more to dma than we have buffer for */                            \
@@ -800,15 +803,19 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                        NFD_IN_DATA_DMA_QUEUE, sig_done, &lso_enq_sig);       \
         /* account for how much was read */                                  \
         lso_dma_index += dma_length;                                         \
-        queue_data[queue].lso_payload_len += dma_length;                     \
-        queue_data[queue].lso_payload_len += amount_extra_dmaed;             \
+        __asm { alu[NFD_IN_Q_STATE_PTR[3], NFD_IN_Q_STATE_PTR[3], +,         \
+                    dma_length] }                                            \
+        __asm { alu[NFD_IN_Q_STATE_PTR[3], NFD_IN_Q_STATE_PTR[3], +,         \
+                    amount_extra_dmaed] }                                    \
+        /* get queue_data[queue].lso_payload_len */                          \
+        __asm { alu[lso_payload_len, --, B, NFD_IN_Q_STATE_PTR[3]] }         \
         /* add to offset the dma_length */                                   \
         __asm { alu[NFD_IN_Q_STATE_PTR[2], NFD_IN_Q_STATE_PTR[2], +,         \
                     dma_length] }                                            \
         /* Make sure we can reuse the XFERs (dma_out.pkt##_pkt##) */         \
         while (!signal_test(&lso_enq_sig));                                  \
         /* if we are at end of mu_buf */                                     \
-        if (queue_data[queue].lso_payload_len >=  tx_desc.pkt##_pkt##.mss) { \
+        if (lso_payload_len >=  tx_desc.pkt##_pkt##.mss) {                   \
             /* put finished mu buffer on lso_ring to notify */               \
             issued_tmp.eop = 1;                                              \
             issued_tmp.sp1 = 0;                                              \
