@@ -291,6 +291,8 @@ struct nfd_in_queue_info {
 
 #define NFD_IN_DMA_STATE_UP   31
 #define NFD_IN_DMA_STATE_CONT 30
+#define NFD_IN_DMA_STATE_LSO_HDR_LEN_MASK 0xFF
+#define NFD_IN_DMA_STATE_LSO_HDR_LEN_SHIFT 16
 
 struct nfd_in_dma_state {
     union {
