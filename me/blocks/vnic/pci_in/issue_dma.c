@@ -613,7 +613,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     unsigned int mode;                                                       \
     unsigned int header_to_read;                                             \
     unsigned int hdr_remainder;                                              \
-    __gpr unsigned int curr_buf;                                             \
+    __gpr unsigned int curr_buf = 0;                                         \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                                   \
                                                                              \
     /* data_dma_seq_issued was pre-incremented once we could */              \
@@ -634,7 +634,11 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* Again per LSO handling                                   */           \
     /* 6. Send the message to notify (cls ring)                 */           \
                                                                              \
-    queue_data[queue].cont = 0;                                              \
+    /* clear queue_data[queue].cont */                                       \
+    __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],                \
+                AND~, 1, <<NFD_IN_DMA_STATE_CONT] }                          \
+    /* get queue_data[queue].curr_buf */                                     \
+    __asm { alu[curr_buf, --, B, NFD_IN_Q_STATE_PTR[1]] }                    \
     /* 1. Load the header to CTM buffer */                                   \
     if (queue_data[queue].lso_hdr_len != tx_desc.pkt##_pkt##.l4_offset) {    \
         /* We use the DMA slot granted to this tx_descp. We are issuing */   \
@@ -690,22 +694,22 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     }                                                                        \
     while (lso_dma_index < dma_len) {                                        \
         /* 2. Get an MU buffer */                                            \
-        if (queue_data[queue].curr_buf == 0) {                               \
+        if (curr_buf == 0) {                                                 \
             /* get a buffer. */                                              \
             while (precache_bufs_jumbo_use(&curr_buf) != 0) {                \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                           NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);\
                 ctx_swap();                                                  \
             }                                                                \
-            queue_data[queue].curr_buf = curr_buf;                           \
+            __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, curr_buf] }            \
             queue_data[queue].lso_payload_len = 0;                           \
             queue_data[queue].offset = NFD_IN_DATA_OFFSET -                  \
                 tx_desc.pkt##_pkt.offset;                                    \
                                                                              \
             /* got buffer setup where hdr and payload is to start */         \
             hdr_offset = queue_data[queue].offset;                           \
-            hdr_pkt_ptr = (__addr40 void *)(((uint64_t)                      \
-                    queue_data[queue].curr_buf << 11) | hdr_offset);         \
+            hdr_pkt_ptr = (__addr40 void *)(((uint64_t)curr_buf << 11) |     \
+                           hdr_offset);                                      \
             queue_data[queue].offset = hdr_offset +                          \
                                             queue_data[queue].lso_hdr_len;   \
         }                                                                    \
@@ -735,8 +739,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             dma_length = dma_left;                                           \
         }                                                                    \
         amount_extra_dmaed = 0;                                              \
-        buf_addr = queue_data[queue].curr_buf;                               \
-        cpp_addr_lo = buf_addr << 11;                                        \
+        cpp_addr_lo = curr_buf << 11;                                        \
         cpp_addr_lo += queue_data[queue].offset;                             \
         pcie_hi_word = (pcie_hi_word_part |                                  \
              NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(tx_desc.pkt##_pkt##.dma_addr_hi));\
@@ -745,7 +748,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
         /* Check for and handle large (jumbo) packets  */                    \
         while (dma_length > NFD_IN_DMA_SPLIT_THRESH) {                       \
-            _ISSUE_PROC_LSO_JUMBO(_pkt, buf_addr);                           \
+            _ISSUE_PROC_LSO_JUMBO(_pkt, curr_buf);                           \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                                  NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_TX_DESC);\
         }                                                                    \
@@ -762,15 +765,14 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         while ((int) (jumbo_seq_test + jumbo_dma_seq_compl) <= 0) {          \
             ctx_swap();                                                      \
         }                                                                    \
-        buf_addr = queue_data[queue].curr_buf;                               \
         /* set up the descr_tmp dma values */                                \
         cpp_hi_word = dma_seqn_init_event(NFD_IN_JUMBO_EVENT_TYPE,           \
                                           PCI_IN_ISSUE_DMA_IDX);             \
         cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, jumbo_dma_seq_issued);  \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);    \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);  \
-        cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_ADDR_HI(buf_addr >> 21);         \
-        cpp_addr_lo = buf_addr << 11;                                        \
+        cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_ADDR_HI(curr_buf >> 21);         \
+        cpp_addr_lo = curr_buf << 11;                                        \
         cpp_addr_lo += queue_data[queue].offset + amount_extra_dmaed;        \
         pcie_hi_word = pcie_hi_word_part |                                   \
                        NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(                        \
@@ -796,7 +798,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             issued_tmp.eop = 1;                                              \
             issued_tmp.sp1 = 0;                                              \
             issued_tmp.offset = tx_desc.pkt##_pkt##.offset;                  \
-            issued_tmp.buf_addr = queue_data[queue].curr_buf;                \
+            issued_tmp.buf_addr = curr_buf;                                  \
             issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
             issued_tmp.l4_offset = ++queue_data[queue].lso_seq_cnt;          \
             /* if last of LSO segment set lso end flag and we have no */     \
@@ -809,10 +811,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             }                                                                \
             issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
             issued_tmp.data_len = queue_data[queue].offset -                 \
-                             (NFD_IN_DATA_OFFSET - tx_desc.pkt##_pkt.offset);\
-            /* set that we do not have a curr_buf */                         \
-            queue_data[queue].curr_buf = 0;                                  \
-            queue_data[queue].offset = 0;                                    \
+                                  (NFD_IN_DATA_OFFSET -                      \
+                                  tx_desc.pkt##_pkt.offset);                 \
             /* send the lso pkt desc to the lso ring */                      \
             batch_out.pkt##_pkt## = issued_tmp;                              \
             __mem_ring_journal(nfd_in_issued_lso_ring_num,                   \
@@ -823,6 +823,10 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                             &lso_journal_sig);                               \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING);\
+            /* clear curr_buf */                                             \
+            __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, 0] }                   \
+            curr_buf = 0;                                                    \
+            queue_data[queue].offset = 0;                                    \
             /* used to track how many desc we have put on ring will */       \
             /* set value in the batch out sp0 for the packet so that */      \
             /* notify how how many to read in  */                            \
@@ -832,12 +836,12 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     } /* while */                                                            \
     /* if we still have a partial buffer and it is marked as last LSO */     \
     /* segment send it */                                                    \
-    if ((queue_data[queue].curr_buf) && (tx_desc.pkt##_pkt##.eop)) {         \
+    if ((curr_buf) && (tx_desc.pkt##_pkt##.eop)) {                           \
         /* fill the last info in. */                                         \
         issued_tmp.eop = 1;                                                  \
         issued_tmp.sp1 = 0;                                                  \
         issued_tmp.offset = tx_desc.pkt##_pkt##.offset;                      \
-        issued_tmp.buf_addr = queue_data[queue].curr_buf;                    \
+        issued_tmp.buf_addr = curr_buf;                                      \
         issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];                  \
         issued_tmp.l4_offset = ++queue_data[queue].lso_seq_cnt;              \
         issued_tmp.lso_end = 1;                                              \
@@ -845,7 +849,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                     NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING_END);\
         issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];                  \
         issued_tmp.data_len = queue_data[queue].offset -                     \
-            (NFD_IN_DATA_OFFSET - tx_desc.pkt##_pkt.offset);                 \
+                              (NFD_IN_DATA_OFFSET -                          \
+                              tx_desc.pkt##_pkt.offset);                     \
         batch_out.pkt##_pkt## = issued_tmp;                                  \
         __mem_ring_journal(nfd_in_issued_lso_ring_num,                       \
                          nfd_in_issued_lso_ring_addr,                        \
@@ -857,7 +862,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                     NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING_END);\
         lso_issued_index++;                                                  \
         queue_data[queue].lso_hdr_len = 0;                                   \
-        queue_data[queue].curr_buf = 0;                                      \
+        /* clear curr_buf */                                                 \
+        __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, 0] }                       \
         queue_data[queue].offset = 0;                                        \
         while (!signal_test(&lso_journal_sig));                              \
     }                                                                        \
