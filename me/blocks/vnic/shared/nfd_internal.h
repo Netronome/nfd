@@ -95,7 +95,7 @@
 #define NFD_IN_JUMBO0_EVENT_FILTER  13
 #define NFD_IN_JUMBO1_EVENT_FILTER  14
 
-#define NFD_IN_DMA_SPLIT_THRESH     2048
+#define NFD_IN_DMA_SPLIT_THRESH     (3 * 1024)
 #define NFD_IN_DMA_SPLIT_LEN        2048
 
 /* Debug defines */
