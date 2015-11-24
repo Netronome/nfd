@@ -33,6 +33,18 @@
 #error "NFD_IN_BLM_POOL must be defined by the user"
 #endif
 
+#ifndef NFD_IN_BLM_BUF_SZ
+#error "NFD_IN_BLM_BUF_SZ must be defined by the user"
+#endif
+
+#ifndef NFD_IN_BLM_JUMBO_BLS
+#error "NFD_IN_BLM_JUMBO_BLS must be defined by the user"
+#endif
+
+#ifndef NFD_IN_BLM_JUMBO_POOL
+#error "NFD_IN_BLM_JUMBO_POOL must be defined by the user"
+#endif
+
 #ifndef NFD_IN_BLM_RADDR
 #error "NFD_IN_BLM_RADDR must be defined by the user"
 #endif
@@ -256,11 +268,26 @@
 #macro nfd_in_pkt_meta(out_pkt_meta, in_nfd_meta)
 .begin
     .reg v
-    .reg tmp
+    .reg len
+    .reg off
+    .reg split_thresh
 
+    bitfield_extract(len, BF_AML(in_nfd_meta, NFD_IN_DATALEN_fld))
+
+#if (NFD_IN_BLM_BLS == NFD_IN_BLM_JUMBO_BLS)
     bitfield_insert(v, 0, NFD_IN_BLM_BLS, BF_ML(PKT_META_BUFLIST_bf))
-    nfd_in_get_pkt_len(tmp, in_nfd_meta)
-    bitfield_insert(BF_A(out_pkt_meta, PKT_META_LEN_bf), v, tmp, BF_ML(PKT_META_LEN_bf))
+#else
+    move(split_thresh, (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET))
+    .if (len > split_thresh)
+        bitfield_insert(v, 0, NFD_IN_BLM_JUMBO_BLS, BF_ML(PKT_META_BUFLIST_bf))
+    .else
+        bitfield_insert(v, 0, NFD_IN_BLM_BLS, BF_ML(PKT_META_BUFLIST_bf))
+    .endif
+#endif
+
+    bitfield_extract(off, BF_AML(in_nfd_meta, NFD_IN_OFFSET_fld))
+    alu[len, len, -, off]
+    bitfield_insert(BF_A(out_pkt_meta, PKT_META_LEN_bf), v, len, BF_ML(PKT_META_LEN_bf))
     bitfield_extract(v, BF_AML(in_nfd_meta, NFD_IN_BUFADDR_fld))
     bitfield_insert(BF_A(out_pkt_meta, PKT_META_MUPTR_bf), 0, v, BF_ML(PKT_META_MUPTR_bf))
 .end

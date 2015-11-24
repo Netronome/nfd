@@ -38,6 +38,18 @@
 #error "NFD_IN_BLM_POOL must be defined by the user"
 #endif
 
+#ifndef NFD_IN_BLM_BUF_SZ
+#error "NFD_IN_BLM_BUF_SZ must be defined by the user"
+#endif
+
+#ifndef NFD_IN_BLM_JUMBO_BLS
+#error "NFD_IN_BLM_JUMBO_BLS must be defined by the user"
+#endif
+
+#ifndef NFD_IN_BLM_JUMBO_POOL
+#error "NFD_IN_BLM_JUMBO_POOL must be defined by the user"
+#endif
+
 #ifndef NFD_IN_BLM_RADDR
 #error "NFD_IN_BLM_RADDR must be defined by the user"
 #endif

@@ -163,7 +163,11 @@ __intrinsic void
 nfd_in_fill_meta(void *pkt_info,
                  __xread struct nfd_in_pkt_desc *nfd_in_meta)
 {
+    unsigned int data_len;
+
     ctassert(__is_in_reg_or_lmem(pkt_info));
+
+    data_len = nfd_in_meta->data_len;
 
     /* XXX What is typically done with these values
      * when ejecting a packet from CTM? */
@@ -173,10 +177,23 @@ nfd_in_fill_meta(void *pkt_info,
 
     ((struct nbi_meta_pkt_info *) pkt_info)->resv0 = 0;
 
+    /* Set the BLS, suppressing length tests if the same BLQ is used
+     * for all packets.
+     * XXX The test applied in this API must match the test used internally
+     * in issue_dma.c. */
+#if (NFD_IN_BLM_JUMBO_BLS == NFD_IN_BLM_BLS)
     ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_BLS;
+#else
+    if (data_len > (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET)) {
+        ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_JUMBO_BLS;
+    } else {
+        ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_BLS;
+    }
+#endif
+
     ((struct nbi_meta_pkt_info *) pkt_info)->muptr = nfd_in_meta->buf_addr;
 
-    ((struct nbi_meta_pkt_info *) pkt_info)->len = (nfd_in_meta->data_len -
+    ((struct nbi_meta_pkt_info *) pkt_info)->len = (data_len -
                                                     nfd_in_meta->offset);
 }
 
