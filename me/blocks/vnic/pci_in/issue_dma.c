@@ -370,6 +370,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         }
         queue_data[bmsk_queue].cont = 0;
         queue_data[bmsk_queue].up = 1;
+        queue_data[bmsk_queue].jumbo = 0;
         queue_data[bmsk_queue].curr_buf = 0;
         queue_data[bmsk_queue].offset = 0;
 
@@ -383,7 +384,11 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
              * if some are available */
             blm_raddr = (((unsigned long long) NFD_IN_BLM_RADDR >> 8) &
                          0xff000000);
-            blm_rnum = NFD_BLM_Q_LINK(NFD_IN_BLM_POOL);
+            if (queue_data[bmsk_queue].jumbo) {
+                blm_rnum = NFD_BLM_Q_LINK(NFD_IN_BLM_JUMBO_POOL);
+            } else {
+                blm_rnum = NFD_BLM_Q_LINK(NFD_IN_BLM_POOL);
+            }
             mem_ring_journal_fast(blm_rnum, blm_raddr,
                                   queue_data[bmsk_queue].curr_buf);
         }
@@ -397,6 +402,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
          * to move the "up" test off the fast path. */
         queue_data[bmsk_queue].cont = 1;
         queue_data[bmsk_queue].up = 0;
+        queue_data[bmsk_queue].jumbo = 0;
         queue_data[bmsk_queue].curr_buf = 0;
         queue_data[bmsk_queue].offset = 0;
 
@@ -963,6 +969,22 @@ DECLARE_PROC_LSO(7);
 #endif
 
 
+/* Setup _ISSUE_PROC_JUMBO_TEST, a fast path test value to identify
+ * jumbo frames.  We may branch off the fast path to swap out a
+ * buf_store buffer for a jumbo_store buffer, or to issue separate
+ * NFD_IN_DMA_SPLIT_LEN DMAs, or both.  _ISSUE_PROC_JUMBO_TEST
+ * takes the "min" of the two thresholds. */
+#if ((NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET) < NFD_IN_DMA_SPLIT_THRESH)
+/* We will need to replace the MU buffer before we need to split packets
+ * into multiple DMAs. */
+#define _ISSUE_PROC_JUMBO_TEST (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET)
+#else
+/* We will need to split the packet into multiple DMAs before we need to
+ * replace the MU buffer. */
+#define _ISSUE_PROC_JUMBO_TEST NFD_IN_DMA_SPLIT_THRESH
+#endif
+
+
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     unsigned int dma_len;                                               \
@@ -1007,10 +1029,41 @@ do {                                                                    \
         pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;                 \
                                                                         \
         /* Check for and handle large (jumbo) packets  */               \
-        while (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                     \
-            _ISSUE_PROC_JUMBO(_pkt, buf_addr);                          \
-            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
-                      NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_JUMBO_TX_DESC); \
+        if (dma_len > _ISSUE_PROC_JUMBO_TEST) {                         \
+            /* We may need to swap the buffer allocated from */         \
+            /* buf_store for one allocated from jumbo_store. */         \
+            /* This must be done before context swapping. */            \
+            /* We calculate the amount of data that will fit */         \
+            /* using the dma_len which is immediately available */      \
+            /* rather than the packet length.  This is slightly */      \
+            /* pessimistic but efficient in terms of code store. */     \
+            if (dma_len > (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET)) {   \
+                precache_bufs_return(buf_addr);                         \
+                while (precache_bufs_jumbo_use(&buf_addr) != 0) {       \
+                    /* Allow service context to run */                  \
+                    /* to refill jumbo_store */                         \
+                    ctx_swap();                                         \
+                }                                                       \
+                _ISSUE_PROC_MU_CHK(buf_addr);                           \
+                                                                        \
+                /* cpp_addr_lo is now stale and must be recomputed */   \
+                cpp_addr_lo = buf_addr << 11;                           \
+                cpp_addr_lo -= tx_desc.pkt##_pkt##.offset;              \
+            }                                                           \
+                                                                        \
+            /* We may need to break this packet up into */              \
+            /* multiple DMAS. */                                        \
+            /* XXX if we aren't splitting packets, then we will */      \
+            /* only refill the jumbo_store when it tests empty */       \
+            /* in precache_bufs_jumbo_use() above.  */                  \
+            if (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                    \
+                do {                                                    \
+                    _ISSUE_PROC_JUMBO(_pkt, buf_addr);                  \
+                    NFD_IN_LSO_CNTR_INCR(                               \
+                        nfd_in_lso_cntr_addr,                           \
+                        NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_JUMBO_TX_DESC); \
+                } while (dma_len > NFD_IN_DMA_SPLIT_LEN);               \
+            }                                                           \
         }                                                               \
                                                                         \
         /* Issue final DMA for the packet */                            \
@@ -1099,7 +1152,20 @@ do {                                                                    \
             /* Initialise continuation data */                          \
                                                                         \
             /* XXX check efficiency */                                  \
-            curr_buf = precache_bufs_use();                             \
+            if (tx_desc.pkt##_pkt##.data_len >                          \
+                (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET)) {             \
+                while (precache_bufs_jumbo_use(&curr_buf) != 0) {       \
+                    /* Allow service context to run */                  \
+                    /* to refill jumbo_store */                         \
+                    ctx_swap();                                         \
+                }                                                       \
+                __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0], \
+                            OR, 1, <<NFD_IN_DMA_STATE_JUMBO] }          \
+            } else {                                                    \
+                curr_buf = precache_bufs_use();                         \
+                __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0], \
+                            AND~, 1, <<NFD_IN_DMA_STATE_JUMBO] }        \
+            }                                                           \
             _ISSUE_PROC_MU_CHK(curr_buf);                               \
             __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
                         OR, 1, <<NFD_IN_DMA_STATE_CONT] }               \
@@ -1122,10 +1188,13 @@ do {                                                                    \
         pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;                 \
                                                                         \
         /* Check for and handle large (jumbo) packets  */               \
-        while (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                     \
-            _ISSUE_PROC_JUMBO(_pkt, curr_buf);                          \
-            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
-                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_JUMBO_TX_DESC);\
+        if (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                        \
+            do {                                                        \
+                _ISSUE_PROC_JUMBO(_pkt, curr_buf);                      \
+                NFD_IN_LSO_CNTR_INCR(                                   \
+                    nfd_in_lso_cntr_addr,                               \
+                    NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_JUMBO_TX_DESC); \
+            } while (dma_len > NFD_IN_DMA_SPLIT_LEN);                   \
         }                                                               \
                                                                         \
         /* Issue final DMA for the packet */                            \
@@ -1163,10 +1232,14 @@ do {                                                                    \
                                                                         \
         /* Clear continuation data on EOP */                            \
         if (tx_desc.pkt##_pkt##.eop) {                                  \
-            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,              \
-                      NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);\
+            /* XXX could combine clearing "cont" and "jumbo" */         \
+            NFD_IN_LSO_CNTR_INCR(                                       \
+                nfd_in_lso_cntr_addr,                                   \
+                NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);          \
             __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
                         AND~, 1, <<NFD_IN_DMA_STATE_CONT] }             \
+            __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
+                        AND~, 1, <<NFD_IN_DMA_STATE_JUMBO] }            \
             __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, 0] }              \
             __asm { alu[NFD_IN_Q_STATE_PTR[2], --, B, 0] }              \
         }                                                               \
