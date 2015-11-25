@@ -105,7 +105,7 @@ enum pcie_cpp2pcie_bar {
 
 
 /* Require that at least some queues are used by NFD. */
-#if ((NFD_MAX_VF_QUEUES * NFD_MAX_VFS) + NFD_MAX_PF_QUEUES) == 0)
+#if ((NFD_MAX_VF_QUEUES * NFD_MAX_VFS) + NFD_MAX_PF_QUEUES) == 0
 #error "PF and VF options imply that no queues are in use"
 #endif
 
@@ -113,7 +113,7 @@ enum pcie_cpp2pcie_bar {
 /* NFD_MAX_VFS is used to determine PF vNIC number, so must
  * always be consistent with VFs in use.  The ambiguous case
  * where N VFs with 0 queues are requested is illegal. */
-#if ((NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0))
+#if (NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0)
 #error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
 #endif
 
@@ -189,8 +189,8 @@ enum pcie_cpp2pcie_bar {
  * is incompatible with gather support.  If the capabilities
  * advertise gather, throw an error. */
 #if __REVISION_MIN < __REVISION_B0
-#if ((NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_GATHER) || \
-     (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_GATHER))
+#if (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_GATHER) || \
+    (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_GATHER)
 #error "NFP_NET_CFG_CTRL_GATHER not supported for A0 chips"
 #endif
 #endif
