@@ -784,9 +784,9 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_ADDR_HI(curr_buf >> 21);         \
         cpp_addr_lo = curr_buf << 11;                                        \
         /* add in offset and amount_extra_dmaed */                           \
-        __asm { alu[cpp_addr_lo, cpp_addr_lo, +, NFD_IN_Q_STATE_PTR[2]] }    \
         __asm { alu[NFD_IN_Q_STATE_PTR[2], NFD_IN_Q_STATE_PTR[2], +,         \
                     amount_extra_dmaed] }                                    \
+        __asm { alu[cpp_addr_lo, cpp_addr_lo, +, NFD_IN_Q_STATE_PTR[2]] }    \
         pcie_hi_word = pcie_hi_word_part |                                   \
                        NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(                        \
                                         tx_desc.pkt##_pkt##.dma_addr_hi);    \
