@@ -7,13 +7,18 @@
 #ifndef _BLOCKS__SHARED_NFD_CFG_H_
 #define _BLOCKS__SHARED_NFD_CFG_H_
 
+#include <nfp_chipres.h>
+
 #include <nfp/mem_ring.h>
 #include <nfp_net_ctrl.h>
 
-#include <vnic/shared/nfcc_chipres.h>
 #include <vnic/shared/nfd.h>
 
 #include "nfd_user_cfg.h"
+
+#ifndef _link_sym
+#define _link_sym(x) __link_sym(#x)
+#endif
 
 
 /* /\* XXX Magic number currently */
@@ -68,29 +73,28 @@
 
 
 #define NFD_CFG_RINGS_RES_IND(_emem)                                    \
-    _emem##_queues_DECL                                                 \
-    ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues global \
-        NFD_CFG_TOTAL_RINGS NFD_CFG_TOTAL_RINGS)
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues   \
+                     global NFD_CFG_TOTAL_RINGS NFD_CFG_TOTAL_RINGS)
 #define NFD_CFG_RINGS_RES(_emem) NFD_CFG_RINGS_RES_IND(_emem)
 
 NFD_CFG_RINGS_RES(NFD_CFG_RING_EMEM);
 
 
 #define NFD_CFG_RINGS_DECL_IND(_isl)                                    \
-    ASM(.declare_resource nfd_cfg_ring_nums##_isl global NFD_CFG_NUM_RINGS \
-        nfd_cfg_ring_nums)                                              \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##0 nfd_cfg_ring_nums##_isl \
-        global 1)                                                       \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##1 nfd_cfg_ring_nums##_isl \
-        global 1)                                                       \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##2 nfd_cfg_ring_nums##_isl \
-        global 1)                                                       \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##3 nfd_cfg_ring_nums##_isl \
-        global 1)                                                       \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##4 nfd_cfg_ring_nums##_isl \
-        global 1)                                                       \
-    ASM(.alloc_resource nfd_cfg_ring_num##_isl##5 nfd_cfg_ring_nums##_isl \
-        global 1)
+    _NFP_CHIPRES_ASM(.declare_resource nfd_cfg_ring_nums##_isl          \
+                     global NFD_CFG_NUM_RINGS nfd_cfg_ring_nums)        \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_num##_isl##0          \
+                     nfd_cfg_ring_nums##_isl global 1)                  \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_num##_isl##1          \
+                     nfd_cfg_ring_nums##_isl global 1)                  \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_num##_isl##2          \
+                     nfd_cfg_ring_nums##_isl global 1)                  \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_num##_isl##3          \
+                     nfd_cfg_ring_nums##_isl global 1)                  \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_num##_isl##4          \
+                     nfd_cfg_ring_nums##_isl global 1)                  \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_num##_isl##5          \
+                     nfd_cfg_ring_nums##_isl global 1)
 
 #define NFD_CFG_RINGS_DECL(_isl) NFD_CFG_RINGS_DECL_IND(_isl)
 
@@ -126,9 +130,12 @@ NFD_CFG_RINGS_DECL(3);
  * they should not depend on this structure.
  */
 #define NFD_FLR_DECLARE                                                 \
-    ASM(.alloc_mem nfd_flr_atomic NFD_CFG_RING_EMEM global 64 64)       \
-    ASM(.declare_resource nfd_flr_atomic_mem global 64 nfd_flr_atomic)  \
-    ASM(.alloc_resource nfd_flr_seen nfd_flr_atomic_mem global 64 64)
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_flr_atomic NFD_CFG_RING_EMEM        \
+                     global 64 64)                                      \
+    _NFP_CHIPRES_ASM(.declare_resource nfd_flr_atomic_mem               \
+                     global 64 nfd_flr_atomic)                          \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_flr_seen nfd_flr_atomic_mem    \
+                     global 64 64)
 
 #define NFD_FLR_LINK_IND(_isl)                                  \
     ((__mem char *) _link_sym(nfd_flr_seen) + ((_isl) * 16))
@@ -190,20 +197,20 @@ NFD_CFG_RINGS_DECL(3);
 /* XXX test for chip revision correctly */
 /* Due to THB-350, BARs must be 2M aligned on A0 */
 #if 1
-#define NFD_CFG_BASE_DECLARE(_isl)                                   \
-    ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global          \
-        ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ) SZ_2M)
+#define NFD_CFG_BASE_DECLARE(_isl)                                      \
+    _NFP_CHIPRES_ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global \
+                     ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ) SZ_2M)
 #else
-#define NFD_CFG_BASE_DECLARE(_isl)                                   \
-    ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global          \
-        ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ)           \
-        (NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ * (1 +  NFD_MAX_PFS)))
+#define NFD_CFG_BASE_DECLARE(_isl)                                      \
+    _NFP_CHIPRES_ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global \
+                     ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ) \
+                     (NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ * (1 +  NFD_MAX_PFS)))
 #endif
 
 
-#define NFD_CFG_BASE_LINK_IND1(_sym)                 \
+#define NFD_CFG_BASE_LINK_IND1(_sym)            \
     ((__emem char *) _link_sym(_sym))
-#define NFD_CFG_BASE_LINK_IND0(_isl)                \
+#define NFD_CFG_BASE_LINK_IND0(_isl)            \
     NFD_CFG_BASE_LINK_IND1(NFD_CFG_BASE(_isl))
 #define NFD_CFG_BASE_LINK(_isl) NFD_CFG_BASE_LINK_IND0(_isl)
 

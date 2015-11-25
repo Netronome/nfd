@@ -20,8 +20,8 @@
 #define _BLOCKS__VNIC_SVC_MSIX_QMON_C_
 
 #include <assert.h>
-#include <vnic/shared/nfcc_chipres.h>
 #include <nfp.h>
+#include <nfp_chipres.h>
 #include <stdint.h>
 #include <types.h>
 

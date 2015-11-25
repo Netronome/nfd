@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <nfp.h>
+#include <nfp_chipres.h>
 
 #include <nfp/me.h>
 
@@ -108,39 +109,45 @@ __xread unsigned int qc_xfer;
 #ifdef NFD_IN_WQ_SHARED
 
 #define NFD_IN_RINGS_MEM_IND2(_isl, _emem)                              \
-    ASM(.alloc_mem nfd_in_rings_mem0 _emem global                       \
-        (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS) (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS))
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_in_rings_mem0 _emem global          \
+                     (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS)                    \
+                     (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS))
 #define NFD_IN_RINGS_MEM_IND1(_isl, _emem) NFD_IN_RINGS_MEM_IND2(_isl, _emem)
-#define NFD_IN_RINGS_MEM_IND0(_isl)                    \
+#define NFD_IN_RINGS_MEM_IND0(_isl)                     \
     NFD_IN_RINGS_MEM_IND1(_isl, NFD_IN_WQ_SHARED)
 #define NFD_IN_RINGS_MEM(_isl) NFD_IN_RINGS_MEM_IND0(_isl)
 
 #define NFD_IN_RING_INIT_IND0(_isl, _num)                               \
     NFD_IN_RING_NUM_ALLOC(_isl, _num)                                   \
-    ASM(.declare_resource nfd_in_ring_mem_res0##_num                    \
-        global NFD_IN_WQ_SZ nfd_in_rings_mem0)                          \
-    ASM(.alloc_resource nfd_in_ring_mem0##_num                          \
-        nfd_in_ring_mem_res0##_num global NFD_IN_WQ_SZ NFD_IN_WQ_SZ)    \
-    ASM(.init_mu_ring nfd_in_ring_num0##_num nfd_in_ring_mem0##_num)
+    _NFP_CHIPRES_ASM(.declare_resource nfd_in_ring_mem_res0##_num       \
+                     global NFD_IN_WQ_SZ nfd_in_rings_mem0)             \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_in_ring_mem0##_num             \
+                     nfd_in_ring_mem_res0##_num global                  \
+                     NFD_IN_WQ_SZ NFD_IN_WQ_SZ)                         \
+    _NFP_CHIPRES_ASM(.init_mu_ring nfd_in_ring_num0##_num               \
+                     nfd_in_ring_mem0##_num)
 #define NFD_IN_RING_INIT(_isl, _num) NFD_IN_RING_INIT_IND0(_isl, _num)
 
 #else /* !NFD_IN_WQ_SHARED */
 
 #define NFD_IN_RINGS_MEM_IND2(_isl, _emem)                              \
-    ASM(.alloc_mem nfd_in_rings_mem##_isl _emem global                  \
-        (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS) (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS))
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_in_rings_mem##_isl _emem global     \
+                     (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS)                    \
+                     (NFD_IN_WQ_SZ * NFD_IN_NUM_WQS))
 #define NFD_IN_RINGS_MEM_IND1(_isl, _emem) NFD_IN_RINGS_MEM_IND2(_isl, _emem)
-#define NFD_IN_RINGS_MEM_IND0(_isl)                    \
+#define NFD_IN_RINGS_MEM_IND0(_isl)                     \
     NFD_IN_RINGS_MEM_IND1(_isl, NFD_PCIE##_isl##_EMEM)
 #define NFD_IN_RINGS_MEM(_isl) NFD_IN_RINGS_MEM_IND0(_isl)
 
 #define NFD_IN_RING_INIT_IND0(_isl, _num)                               \
     NFD_IN_RING_NUM_ALLOC(_isl, _num)                                   \
-    ASM(.declare_resource nfd_in_ring_mem_res##_isl##_num               \
-        global NFD_IN_WQ_SZ nfd_in_rings_mem##_isl)                     \
-    ASM(.alloc_resource nfd_in_ring_mem##_isl##_num                     \
-        nfd_in_ring_mem_res##_isl##_num global NFD_IN_WQ_SZ NFD_IN_WQ_SZ) \
-    ASM(.init_mu_ring nfd_in_ring_num##_isl##_num nfd_in_ring_mem##_isl##_num)
+    _NFP_CHIPRES_ASM(.declare_resource nfd_in_ring_mem_res##_isl##_num  \
+                     global NFD_IN_WQ_SZ nfd_in_rings_mem##_isl)        \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_in_ring_mem##_isl##_num        \
+                     nfd_in_ring_mem_res##_isl##_num                    \
+                     global NFD_IN_WQ_SZ NFD_IN_WQ_SZ)                  \
+    _NFP_CHIPRES_ASM(.init_mu_ring nfd_in_ring_num##_isl##_num          \
+                     nfd_in_ring_mem##_isl##_num)
 #define NFD_IN_RING_INIT(_isl, _num) NFD_IN_RING_INIT_IND0(_isl, _num)
 
 #endif /* NFD_IN_WQ_SHARED */

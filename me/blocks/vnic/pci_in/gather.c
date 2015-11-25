@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <nfp.h>
+#include <nfp_chipres.h>
 
 #include <nfp/pcie.h>
 #include <std/event.h>
@@ -17,7 +18,6 @@
 
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd_internal.h>
-#include <vnic/shared/nfcc_chipres.h>
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/qc.h>
@@ -28,6 +28,10 @@
 
 #ifndef NFD_IN_ISSUE_DMA_QXOR
 #define NFD_IN_ISSUE_DMA_QXOR 0
+#endif
+
+#ifndef _link_sym
+#define _link_sym(x) __link_sym(#x)
 #endif
 
 /*
@@ -76,15 +80,16 @@ __export __shared __cls __align(DESC_RING_SZ) struct nfd_in_tx_desc
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
 
-CLS_RING_DECL;
-ASM(.alloc_mem nfd_in_batch_ring0_mem cls+NFD_IN_BATCH_RING0_ADDR island \
-    (NFD_IN_BATCH_RING0_SIZE_LW*4) (NFD_IN_BATCH_RING0_SIZE_LW*4));
-ASM(.alloc_resource nfd_in_batch_ring0_num cls_rings+NFD_IN_BATCH_RING0_NUM \
-    island 1 1);
-ASM(.alloc_mem nfd_in_batch_ring1_mem cls+NFD_IN_BATCH_RING1_ADDR island \
-    (NFD_IN_BATCH_RING1_SIZE_LW*4) (NFD_IN_BATCH_RING1_SIZE_LW*4));
-ASM(.alloc_resource nfd_in_batch_ring1_num cls_rings+NFD_IN_BATCH_RING1_NUM \
-    island 1 1);
+_NFP_CHIPRES_ASM(.alloc_mem nfd_in_batch_ring0_mem                         \
+                 cls+NFD_IN_BATCH_RING0_ADDR island                        \
+                 (NFD_IN_BATCH_RING0_SIZE_LW*4) (NFD_IN_BATCH_RING0_SIZE_LW*4));
+_NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring0_num \
+                 cls_rings+NFD_IN_BATCH_RING0_NUM island 1 1);
+_NFP_CHIPRES_ASM(.alloc_mem nfd_in_batch_ring1_mem                         \
+                 cls+NFD_IN_BATCH_RING1_ADDR island                        \
+                 (NFD_IN_BATCH_RING1_SIZE_LW*4) (NFD_IN_BATCH_RING1_SIZE_LW*4));
+_NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring1_num                    \
+                 cls_rings+NFD_IN_BATCH_RING1_NUM island 1 1);
 
 
 /* XXX Move to some sort of CT reflect library */

@@ -7,11 +7,11 @@
 #ifndef _BLOCKS__VNIC_PCI_IN_H_
 #define _BLOCKS__VNIC_PCI_IN_H_
 
+#include <nfp_chipres.h>
 #include <pkt/pkt.h>
 
 #include "nfd_user_cfg.h"
 
-#include <vnic/shared/nfcc_chipres.h>
 #include <vnic/shared/nfd_net.h>
 #include "shared/nfd_api_common.h"
 
@@ -81,51 +81,50 @@
 #ifdef NFD_IN_WQ_SHARED
 
 #define NFD_IN_RINGS_DECL_IND2(_isl, _emem)                             \
-    _emem##_queues_DECL                                                 \
-    ASM(.alloc_resource nfd_in_ring_nums0 _emem##_queues global         \
-        NFD_IN_NUM_WQS NFD_IN_NUM_WQS)                                  \
-    ASM(.declare_resource nfd_in_ring_nums_res0 global NFD_IN_NUM_WQS   \
-        nfd_in_ring_nums0)
-#define NFD_IN_RINGS_DECL_IND1(_isl, _emem)    \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_in_ring_nums0 _emem##_queues   \
+                     global NFD_IN_NUM_WQS NFD_IN_NUM_WQS)              \
+    _NFP_CHIPRES_ASM(.declare_resource nfd_in_ring_nums_res0            \
+                     global NFD_IN_NUM_WQS nfd_in_ring_nums0)
+#define NFD_IN_RINGS_DECL_IND1(_isl, _emem)     \
     NFD_IN_RINGS_DECL_IND2(_isl, _emem)
-#define NFD_IN_RINGS_DECL_IND0(_isl)                \
+#define NFD_IN_RINGS_DECL_IND0(_isl)            \
     NFD_IN_RINGS_DECL_IND1(_isl, NFD_IN_WQ_SHARED)
 #define NFD_IN_RINGS_DECL(_isl) NFD_IN_RINGS_DECL_IND0(_isl)
 
-#define NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)                           \
-    ASM(.alloc_resource nfd_in_ring_num0##_num nfd_in_ring_nums_res0    \
-        global 1)
+#define NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)               \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_in_ring_num0##_num \
+                     nfd_in_ring_nums_res0 global 1)
 #define NFD_IN_RING_NUM_ALLOC(_isl, _num) NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)
 
 #else /* !NFD_IN_WQ_SHARED */
 
 #define NFD_IN_RINGS_DECL_IND2(_isl, _emem)                             \
-    _emem##_queues_DECL                                                 \
-    ASM(.alloc_resource nfd_in_ring_nums##_isl _emem##_queues global    \
-        NFD_IN_NUM_WQS NFD_IN_NUM_WQS)                                  \
-    ASM(.declare_resource nfd_in_ring_nums_res##_isl global NFD_IN_NUM_WQS  \
-        nfd_in_ring_nums##_isl)
-#define NFD_IN_RINGS_DECL_IND1(_isl, _emem)    \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_in_ring_nums##_isl _emem##_queues \
+                     global NFD_IN_NUM_WQS NFD_IN_NUM_WQS)              \
+    _NFP_CHIPRES_ASM(.declare_resource nfd_in_ring_nums_res##_isl       \
+                     global NFD_IN_NUM_WQS nfd_in_ring_nums##_isl)
+#define NFD_IN_RINGS_DECL_IND1(_isl, _emem)     \
     NFD_IN_RINGS_DECL_IND2(_isl, _emem)
-#define NFD_IN_RINGS_DECL_IND0(_isl)                    \
+#define NFD_IN_RINGS_DECL_IND0(_isl)            \
     NFD_IN_RINGS_DECL_IND1(_isl, NFD_PCIE##_isl##_EMEM)
 #define NFD_IN_RINGS_DECL(_isl) NFD_IN_RINGS_DECL_IND0(_isl)
 
 #define NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)                           \
-    ASM(.alloc_resource nfd_in_ring_num##_isl##_num nfd_in_ring_nums_res##_isl \
-        global 1)
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_in_ring_num##_isl##_num        \
+                     nfd_in_ring_nums_res##_isl global 1)
 #define NFD_IN_RING_NUM_ALLOC(_isl, _num) NFD_IN_RING_NUM_ALLOC_IND(_isl, _num)
 
 #endif /* NFD_IN_WQ_SHARED */
 
-#define NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem, _num)                            \
-    _emem##_queues_DECL                                                 \
-    ASM(.alloc_resource nfd_in_issued_lso_ring_num##_isl##_num _emem##_queues global 1 1)
-#define NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, _emem, _num)    \
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem, _num)             \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_in_issued_lso_ring_num##_isl##_num \
+                     _emem##_queues global 1 1)
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, _emem, _num)     \
     NFD_IN_ISSUED_LSO_RING_DECL_IND2(_isl, _emem, _num)
-#define NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl, _num)                       \
+#define NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl, _num)            \
     NFD_IN_ISSUED_LSO_RING_DECL_IND1(_isl, NFD_PCIE##_isl##_EMEM, _num)
-#define NFD_IN_ISSUED_LSO_RING_DECL(_isl, _num) NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl, _num)
+#define NFD_IN_ISSUED_LSO_RING_DECL(_isl, _num)                 \
+    NFD_IN_ISSUED_LSO_RING_DECL_IND0(_isl, _num)
 
 #ifdef NFD_PCIE0_EMEM
     NFD_IN_RINGS_DECL(0);

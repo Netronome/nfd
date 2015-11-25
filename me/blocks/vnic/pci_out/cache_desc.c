@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <nfp.h>
+#include <nfp_chipres.h>
 
 #include <nfp/me.h>
 #include <nfp/pcie.h>
@@ -51,9 +52,9 @@
  * Forcing this to zero on all PCIe islands makes code to access credits
  * simpler and more efficient throughout the system.
  */
-#define NFD_ATOMICS_ALLOC_IND(_isl, _off)                                    \
-    ASM(.alloc_mem nfd_out_atomics##_isl pcie##_isl##.ctm+##_off global      \
-        (NFD_OUT_ATOMICS_SZ * NFD_OUT_MAX_QUEUES))
+#define NFD_ATOMICS_ALLOC_IND(_isl, _off)                               \
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_out_atomics##_isl pcie##_isl##.ctm+##_off global \
+                     (NFD_OUT_ATOMICS_SZ * NFD_OUT_MAX_QUEUES))
 #define NFD_ATOMICS_ALLOC(_isl, _off) NFD_ATOMICS_ALLOC_IND(_isl, _off)
 
 
@@ -103,16 +104,20 @@ __export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_SZ_PER_QUEUE)
 #define FL_CACHE_SIZE (NFD_OUT_MAX_QUEUES * NFD_OUT_FL_BUFS_PER_QUEUE * 8)
 
 #if (PCIE_ISL == 0)
-ASM(.alloc_mem fl_cache_mem0 i4.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
+_NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem0 i4.ctm \
+                 global FL_CACHE_SIZE FL_CACHE_SIZE);
 #define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem0))
 #elif (PCIE_ISL == 1)
-ASM(.alloc_mem fl_cache_mem1 i5.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
+_NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem1 i5.ctm \
+                 global FL_CACHE_SIZE FL_CACHE_SIZE);
 #define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem1))
 #elif (PCIE_ISL == 2)
-ASM(.alloc_mem fl_cache_mem2 i6.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
+_NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem2 i6.ctm \
+                 global FL_CACHE_SIZE FL_CACHE_SIZE);
 #define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem2))
 #elif (PCIE_ISL == 3)
-ASM(.alloc_mem fl_cache_mem3 i7.ctm global FL_CACHE_SIZE FL_CACHE_SIZE);
+_NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem3 i7.ctm \
+                 global FL_CACHE_SIZE FL_CACHE_SIZE);
 #define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem3))
 #else
 #error "Unknown PCIE_ISL value"

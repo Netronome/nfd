@@ -5,9 +5,9 @@
  * @brief         Fill the local (LM) cache of MU buffers
  */
 
-#include <vnic/shared/nfcc_chipres.h>
-#include <nfp.h>
 #include <assert.h>
+#include <nfp.h>
+#include <nfp_chipres.h>
 
 #include <nfp/me.h>
 #include <nfp/mem_ring.h>

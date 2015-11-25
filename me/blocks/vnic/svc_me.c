@@ -17,8 +17,8 @@
  * @brief  Main entry point for the service ME
  */
 #include <assert.h>
-#include <vnic/shared/nfcc_chipres.h>
 #include <nfp.h>
+#include <nfp_chipres.h>
 
 #include <nfp/me.h>
 #include <nfp/mem_bulk.h>

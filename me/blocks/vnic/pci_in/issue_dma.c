@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <nfp.h>
+#include <nfp_chipres.h>
 #include <types.h>
 
 #include <nfp/cls.h>
@@ -28,6 +29,10 @@
 #include <vnic/utils/ctm_ring.h>
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
+
+#ifndef _link_sym
+#define _link_sym(x) __link_sym(#x)
+#endif
 
 /* TODO Make this test cover precache_bufs.c as well */
 #ifndef PCI_IN_ISSUE_DMA_IDX
@@ -160,23 +165,24 @@ __visible volatile SIGNAL nfd_in_gather_compl_refl_sig1;
 
 #endif
 
-#define NFD_IN_ISSUED_LSO_RING_INIT_IND2(_isl, _emem, _num)                        \
-    ASM(.alloc_mem nfd_in_issued_lso_ring_mem##_isl##_num _emem global             \
-        NFD_IN_ISSUED_LSO_RING_SZ NFD_IN_ISSUED_LSO_RING_SZ)                 \
-    ASM(.init_mu_ring nfd_in_issued_lso_ring_num##_isl##_num                    \
-        nfd_in_issued_lso_ring_mem##_isl##_num)
-#define NFD_IN_ISSUED_LSO_RING_INIT_IND1(_isl, _emem, _num)                        \
+#define NFD_IN_ISSUED_LSO_RING_INIT_IND2(_isl, _emem, _num)               \
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_in_issued_lso_ring_mem##_isl##_num    \
+                     _emem global                                         \
+                     NFD_IN_ISSUED_LSO_RING_SZ NFD_IN_ISSUED_LSO_RING_SZ) \
+    _NFP_CHIPRES_ASM(.init_mu_ring nfd_in_issued_lso_ring_num##_isl##_num \
+                     nfd_in_issued_lso_ring_mem##_isl##_num)
+#define NFD_IN_ISSUED_LSO_RING_INIT_IND1(_isl, _emem, _num)     \
     NFD_IN_ISSUED_LSO_RING_INIT_IND2(_isl, _emem, _num)
-#define NFD_IN_ISSUED_LSO_RING_INIT_IND0(_isl, _num)                               \
+#define NFD_IN_ISSUED_LSO_RING_INIT_IND0(_isl, _num)                    \
     NFD_IN_ISSUED_LSO_RING_INIT_IND1(_isl, NFD_PCIE##_isl##_EMEM, _num)
-#define NFD_IN_ISSUED_LSO_RING_INIT(_isl, _num)                                    \
+#define NFD_IN_ISSUED_LSO_RING_INIT(_isl, _num)         \
     NFD_IN_ISSUED_LSO_RING_INIT_IND0(_isl, _num)
 
 NFD_IN_ISSUED_LSO_RING_INIT(PCIE_ISL, NFD_IN_ISSUED_LSO_RING_NUM);
 
-#define NFD_IN_ISSUED_LSO_RING_ADDR_IND(_isl, _num)                                \
+#define NFD_IN_ISSUED_LSO_RING_ADDR_IND(_isl, _num)     \
     _link_sym(nfd_in_issued_lso_ring_mem##_isl##_num)
-#define NFD_IN_ISSUED_LSO_RING_ADDR(_isl, _num)                                    \
+#define NFD_IN_ISSUED_LSO_RING_ADDR(_isl, _num) \
     NFD_IN_ISSUED_LSO_RING_ADDR_IND(_isl, _num)
 
 static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr = 0;
@@ -201,11 +207,10 @@ static SIGNAL_MASK wait_msk;
 unsigned int next_ctx;
 
 /* CLS ring of batch information from the gather() block */
-CLS_RING_DECL;
-ASM(.alloc_resource nfd_in_batch_ring0_num cls_rings+NFD_IN_BATCH_RING0_NUM \
-    island 1 1);
-ASM(.alloc_resource nfd_in_batch_ring1_num cls_rings+NFD_IN_BATCH_RING1_NUM \
-    island 1 1);
+_NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring0_num \
+                 cls_rings+NFD_IN_BATCH_RING0_NUM island 1 1);
+_NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring1_num \
+                 cls_rings+NFD_IN_BATCH_RING1_NUM island 1 1);
 
 /* Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
  * swap token complete correctly for DMAs that aren't 4B multiples in size. */

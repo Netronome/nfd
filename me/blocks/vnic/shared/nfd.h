@@ -7,10 +7,10 @@
 #ifndef _BLOCKS__VNIC_SHARED_NFD_H_
 #define _BLOCKS__VNIC_SHARED_NFD_H_
 
+#include <nfp_chipres.h>
 #include <nfp/mem_atomic.h>     /* TEMP */
 
 #include "nfd_user_cfg.h"
-#include <vnic/shared/nfcc_chipres.h>
 
 /* Set defines */
 #define NFD_MAX_ISL     4   /* Maximum number of PCIe islands NFD may support */
@@ -71,9 +71,10 @@ enum pcie_cpp2pcie_bar {
 /* XXX Remove NFD_INIT_DONE_DECLARE or leave?
  * NB size 8 is minimum that NFCC and NFAS can share */
 #define NFD_INIT_DONE_DECLARE_IND1(_emem)                               \
-    ASM(.alloc_mem nfd_init_done_atomic _emem global 64 64)             \
-    ASM(.declare_resource nfd_init_done_mem global 8 nfd_init_done_atomic) \
-    ASM(.alloc_resource nfd_init_done nfd_init_done_mem global 8 8)
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_init_done_atomic _emem global 64 64) \
+    _NFP_CHIPRES_ASM(.declare_resource nfd_init_done_mem                \
+                     global 8 nfd_init_done_atomic)                     \
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_init_done nfd_init_done_mem global 8 8)
 
 #define NFD_INIT_DONE_DECLARE_IND0(_emem) NFD_INIT_DONE_DECLARE_IND1(_emem)
 #define NFD_INIT_DONE_DECLARE NFD_INIT_DONE_DECLARE_IND0(NFD_CFG_RING_EMEM)

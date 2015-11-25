@@ -97,17 +97,17 @@ struct nfd_out_input {
 
 #include "nfd_user_cfg.h"
 
-#include <vnic/shared/nfcc_chipres.h>
+#include <nfp_chipres.h>
 #include "shared/nfd_api_common.h"
 
 /** \cond DOXYGEN_SHOULD_SKIP_THIS */
 
 #define NFD_OUT_RINGS_DECL_IND2(_isl, _emem)                            \
-    _emem##_queues_DECL                                                 \
-    ASM(.alloc_resource nfd_out_ring_num##_isl##0 _emem##_queues global 1 1)
+    _NFP_CHIPRES_ASM(.alloc_resource nfd_out_ring_num##_isl##0          \
+                     _emem##_queues global 1 1)
 #define NFD_OUT_RINGS_DECL_IND1(_isl, _emem)    \
     NFD_OUT_RINGS_DECL_IND2(_isl, _emem)
-#define NFD_OUT_RINGS_DECL_IND0(_isl)                       \
+#define NFD_OUT_RINGS_DECL_IND0(_isl)           \
     NFD_OUT_RINGS_DECL_IND1(_isl, NFD_PCIE##_isl##_EMEM)
 #define NFD_OUT_RINGS_DECL(_isl) NFD_OUT_RINGS_DECL_IND0(_isl)
 
