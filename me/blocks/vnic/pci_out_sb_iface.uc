@@ -1,8 +1,8 @@
 #ifndef __PCI_OUT_SB_IFACE_UC
 #define __PCI_OUT_SB_IFACE_UC
 
-#include <nfd_common.h>
-#include <nfd_out.uc>   /* for NFD_OUT_MAX_QUEUES only */
+#include "nfd_common.h"
+#include "nfd_out.uc"   /* for NFD_OUT_MAX_QUEUES only */
 
 #define NFD_OUT_SB_WQ_SIZE_LW  1024
 

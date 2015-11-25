@@ -4,13 +4,13 @@
 #include <stdmac.uc>
 #include <aggregate.uc>
 
-#include <wsm.uc>
-#include <nfd_common.h>
-#include <nfd_internal.h>
-#include <nfd_cfg_pf_bars.uc>
-#include <nfd_out.uc>   /* for definitions only */
-#include <pci_out_sb.h>
-#include <pci_out_sb_iface.uc>
+#include "wsm.uc"
+#include "nfd_common.h"
+#include "shared/nfd_internal.h"
+#include "shared/nfd_cfg_pf_bars.uc"
+#include "nfd_out.uc"   /* for definitions only */
+#include "pci_out_sb.h"
+#include "pci_out_sb_iface.uc"
 
 
 /**

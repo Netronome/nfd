@@ -1,14 +1,15 @@
 #ifndef __NFD_OUT_UC
 #define __NFD_OUT_UC
 
-#include <nfd_net.h>
-#include "shared/nfd_api_common.h"
-#include <nfd_common.uc>
-#include <nfd_stats.uc>
 #include <nfp_chipres.h>
 #include <stdmac.uc>
 
-#include "nfd_user_cfg.h"
+#include <nfd_user_cfg.h>
+
+#include "shared/nfd_net.h"
+#include "shared/nfd_api_common.h"
+#include "nfd_common.uc"
+#include "nfd_stats.uc"
 
 /**
  * Packet prepend format for packets going to the host that need to

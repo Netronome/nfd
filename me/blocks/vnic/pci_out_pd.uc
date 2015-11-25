@@ -4,14 +4,17 @@
 #include <stdmac.uc>
 #include <cycle.uc>
 
-#include <wsm.uc>
-#include <pci_out_sb.h>
-#include <pci_out_sb_iface.uc>
-#include <nfd_common.h>
-#include <nfd_internal.h>
+#include <nfp_chipres.h>    // XXX TEMP until flowenv patch is in
 #include <libblm_pkt_fl.uc>
 
 #include <nfp6000/nfp_pcie.h>
+
+#include "wsm.uc"
+#include "pci_out_sb.h"
+#include "pci_out_sb_iface.uc"
+#include "nfd_common.h"
+#include "shared/nfd_internal.h"
+
 
 #ifndef STAGE_BATCH_MANAGER_CTX
 #define STAGE_BATCH_MANAGER_CTX 0

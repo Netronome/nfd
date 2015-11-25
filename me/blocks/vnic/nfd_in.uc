@@ -1,15 +1,17 @@
 #ifndef __NFD_IN_UC
 #define __NFD_IN_UC
 
-#include <nfd_net.h>
-#include "shared/nfd_api_common.h"
-#include <nfd_common.uc>
-#include <nfd_stats.uc>
 #include <nfp_chipres.h>
 #include <stdmac.uc>
 #include <bitfields.uc>
 
-#include "nfd_user_cfg.h"
+#include <nfd_user_cfg.h>
+
+#include "shared/nfd_net.h"
+#include "shared/nfd_api_common.h"
+#include "nfd_common.uc"
+#include "nfd_stats.uc"
+
 
 #ifndef NFD_IN_DATA_OFFSET
 #define NFD_IN_DATA_OFFSET      64

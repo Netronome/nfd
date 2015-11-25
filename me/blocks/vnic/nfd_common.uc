@@ -1,10 +1,11 @@
 #ifndef __NFD_COMMON_UC
 #define __NFD_COMMON_UC
 
-#include <nfd_common.h>
 #include <stdmac.uc>
 #include <nfd_user_cfg.h>
-#include <nfd_cfg_pf_bars.uc>
+
+#include "nfd_common.h"
+#include "shared/nfd_cfg_pf_bars.uc"
 
 #define NFD_MAX_ISL             4
 
