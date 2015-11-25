@@ -392,12 +392,7 @@ struct nfd_out_queue_info {
 
 #define NFD_OUT_QUEUE_INFO_SZ           32
 
-
-#if defined(__NFP_LANG_MICROC)
-#include <vnic/pci_out.h>
-#else
-#include <pci_out.h>
-#endif
+#include "../pci_out.h"
 
 /*
  * Freelist descriptor format

@@ -10,7 +10,7 @@
 #include <nfp_chipres.h>
 #include <nfp/mem_atomic.h>     /* TEMP */
 
-#include "nfd_user_cfg.h"
+#include <nfd_user_cfg.h>
 
 /* Set defines */
 #define NFD_MAX_ISL     4   /* Maximum number of PCIe islands NFD may support */

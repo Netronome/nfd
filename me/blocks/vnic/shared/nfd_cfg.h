@@ -12,9 +12,10 @@
 #include <nfp/mem_ring.h>
 #include <nfp_net_ctrl.h>
 
-#include <vnic/shared/nfd.h>
+#include <nfd_user_cfg.h>
 
-#include "nfd_user_cfg.h"
+#include "nfd.h"
+
 
 #ifndef _link_sym
 #define _link_sym(x) __link_sym(#x)

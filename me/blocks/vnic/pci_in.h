@@ -10,9 +10,9 @@
 #include <nfp_chipres.h>
 #include <pkt/pkt.h>
 
-#include "nfd_user_cfg.h"
+#include <nfd_user_cfg.h>
 
-#include <vnic/shared/nfd_net.h>
+#include "shared/nfd_net.h"
 #include "shared/nfd_api_common.h"
 
 

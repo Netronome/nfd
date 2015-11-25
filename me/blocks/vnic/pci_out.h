@@ -7,7 +7,7 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_H_
 #define _BLOCKS__VNIC_PCI_OUT_H_
 
-#include <nfd_net.h>
+#include "shared/nfd_net.h"
 
 /** The maximum number of queues a single PCI.OUT block can support */
 #define NFD_OUT_MAX_QUEUES              64
@@ -95,7 +95,7 @@ struct nfd_out_input {
 
 #include <pkt/pkt.h>
 
-#include "nfd_user_cfg.h"
+#include <nfd_user_cfg.h>
 
 #include <nfp_chipres.h>
 #include "shared/nfd_api_common.h"

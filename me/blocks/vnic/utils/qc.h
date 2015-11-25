@@ -13,7 +13,8 @@
 #include <nfp.h>
 #include <types.h>
 #include <std/event.h>
-#include <vnic/utils/qcntl.h>
+
+#include "qcntl.h"
 
 
 #define NFD_OUT_ACTIVE_BMSK_DECLARE                                     \
