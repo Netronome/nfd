@@ -658,8 +658,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         pcie_hi_word =                                                       \
               NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(tx_desc.pkt##_pkt##.dma_addr_hi);\
         pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;                      \
-        pcie_hi_word |= NFP_PCIE_DMA_CMD_RID(queue_data[queue].rid);         \
-        pcie_hi_word |= NFP_PCIE_DMA_CMD_RID_OVERRIDE;                       \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);    \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);  \
                                                                              \
