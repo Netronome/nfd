@@ -4,7 +4,6 @@
 #include <stdmac.uc>
 #include <cycle.uc>
 
-#include <nfp_chipres.h>    // XXX TEMP until flowenv patch is in
 #include <libblm_pkt_fl.uc>
 
 #include <nfp6000/nfp_pcie.h>
