@@ -145,7 +145,8 @@ _nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
 __intrinsic void
 nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
                              struct nfd_cfg_msg *cfg_msg,
-                             __dram void *isl_base)
+                             __dram void *isl_base,
+                             SIGNAL *cfg_sig)
 {
     __xwrite unsigned int result;
     __dram char *addr = (__dram char *) isl_base;
@@ -189,6 +190,10 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
         send_interthread_sig(nfd_isl_master, NFD_CFG_FLR_AP_CTX_NO,
                              NFD_CFG_FLR_AP_SIG_NO);
     }
+
+    /* Set cfg_sig so that "nfd_cfg_check_cfg_msg()" runs again */
+    signal_ctx(0, __signal_number(cfg_sig));
+    __implicit_write(cfg_sig);
 }
 
 
