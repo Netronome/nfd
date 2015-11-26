@@ -392,7 +392,13 @@ struct nfd_out_queue_info {
 
 #define NFD_OUT_QUEUE_INFO_SZ           32
 
+/* Host code may include this file, so provide a host-friendly path
+ * to dependencies */
+#if defined(__NFP_LANG_MICROC)
 #include "../pci_out.h"
+#else
+#include <pci_out.h>
+#endif
 
 /*
  * Freelist descriptor format

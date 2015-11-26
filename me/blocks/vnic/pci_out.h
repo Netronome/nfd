@@ -7,7 +7,8 @@
 #ifndef _BLOCKS__VNIC_PCI_OUT_H_
 #define _BLOCKS__VNIC_PCI_OUT_H_
 
-#include "shared/nfd_net.h"
+/* Host code may include this file, so use <> to allow non-local paths */
+#include <nfd_net.h>
 
 /** The maximum number of queues a single PCI.OUT block can support */
 #define NFD_OUT_MAX_QUEUES              64
