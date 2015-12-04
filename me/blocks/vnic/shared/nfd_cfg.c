@@ -194,6 +194,7 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
 
     /* Set cfg_sig so that "nfd_cfg_check_cfg_msg()" runs again */
     signal_ctx(0, __signal_number(cfg_sig));
+    __implicit_read(cfg_sig);
     __implicit_write(cfg_sig);
 }
 
