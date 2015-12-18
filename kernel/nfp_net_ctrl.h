@@ -38,6 +38,11 @@
 #define NFP_NET_RX_OFFSET               32
 
 /**
+ * Maximum header size supported for LSO frames
+ */
+#define NFP_NET_LSO_MAX_HDR_SZ		255
+
+/**
  * Hash type pre-pended when a RSS hash was computed
  */
 #define NFP_NET_RSS_NONE                0
@@ -97,8 +102,8 @@
 #define   NFP_NET_CFG_CTRL_TXRWB          (0x1 << 21) /* Write-back of TX ring*/
 #define   NFP_NET_CFG_CTRL_L2SWITCH       (0x1 << 22) /* L2 Switch */
 #define   NFP_NET_CFG_CTRL_L2SWITCH_LOCAL (0x1 << 23) /* Switch to local */
-#define   NFP_NET_CFG_CTRL_VXLAN          (0x1 << 24) /* Enable VXLAN */
-#define   NFP_NET_CFG_CTRL_NVGRE          (0x1 << 25) /* Enable NVGRE */
+#define   NFP_NET_CFG_CTRL_VXLAN	  (0x1 << 24) /* VXLAN tunnel support */
+#define   NFP_NET_CFG_CTRL_NVGRE	  (0x1 << 25) /* NVGRE tunnel support */
 #define NFP_NET_CFG_UPDATE              0x0004
 #define   NFP_NET_CFG_UPDATE_GEN          (0x1 <<  0) /* General update */
 #define   NFP_NET_CFG_UPDATE_RING         (0x1 <<  1) /* Ring config change */
@@ -157,11 +162,6 @@
  * @NFP_NET_CFG_SPARE_ADDR:  DMA address for ME code to use (e.g. YDS-155 fix)
  */
 #define NFP_NET_CFG_SPARE_ADDR          0x0050
-/**
- * NFP6000/NFP4000 - Prepend configuration
- */
-#define NFP_NET_CFG_RX_OFFSET		0x0050
-#define NFP_NET_CFG_RX_OFFSET_DYNAMIC		0	/* Prepend mode */
 
 /**
  * Reuse spare address to contain the offset from the start of
@@ -173,8 +173,17 @@
  * the RX descriptor indicates the presence or absence of metadata
  * along with the length thereof.
  */
-#define NFP_NET_CFG_RX_OFFSET_ADDR      0x0050
+/**
+ * NFP6000/NFP4000 - Prepend configuration
+ */
+#define NFP_NET_CFG_RX_OFFSET_ADDR		0x0050
+#define NFP_NET_CFG_RX_OFFSET_DYNAMIC		0	/* Prepend mode */
 
+/**
+ * NFP6000/NFP4000 - VXLAN/UDP encap configuration
+ * @NFP_NET_CFG_VXLAN_PORT:	Base address of table of tunnels' UDP dst ports
+ * @NFP_NET_CFG_VXLAN_SZ:	Size of the UDP port table in bytes
+ */
 #define NFP_NET_CFG_VXLAN_PORT          0x0060
 #define NFP_NET_CFG_VXLAN_SZ            0x0008
 
@@ -234,11 +243,11 @@
 /**
  * RX ring configuration (0x0800 - 0x0c00)
  * @NFP_NET_CFG_RXR_BASE:    Base offset for RX ring configuration
- * @NFP_NET_CFG_RXR_ADDR:    Per TX ring DMA address (8B entries)
- * @NFP_NET_CFG_RXR_SZ:      Per TX ring ring size (1B entries)
- * @NFP_NET_CFG_RXR_VEC:     Per TX ring MSI-X table entry (1B entries)
- * @NFP_NET_CFG_RXR_PRIO:    Per TX ring priority (1B entries)
- * @NFP_NET_CFG_RXR_IRQ_MOD: Per TX ring interrupt moderation (4B entries)
+ * @NFP_NET_CFG_RXR_ADDR:    Per RX ring DMA address (8B entries)
+ * @NFP_NET_CFG_RXR_SZ:      Per RX ring ring size (1B entries)
+ * @NFP_NET_CFG_RXR_VEC:     Per RX ring MSI-X table entry (1B entries)
+ * @NFP_NET_CFG_RXR_PRIO:    Per RX ring priority (1B entries)
+ * @NFP_NET_CFG_RXR_IRQ_MOD: Per RX ring interrupt moderation (4B entries)
  */
 #define NFP_NET_CFG_RXR_BASE            0x0800
 #define NFP_NET_CFG_RXR_ADDR(_x)        (NFP_NET_CFG_RXR_BASE + ((_x) * 0x8))
