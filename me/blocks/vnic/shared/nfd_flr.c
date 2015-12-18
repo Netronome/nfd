@@ -123,7 +123,7 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
                sizeof exn_lsc);
 
     mem_write8(&rx_off,
-               NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_RX_OFFSET_ADDR,
+               NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_RX_OFFSET,
                sizeof rx_off);
 #endif
 }
@@ -159,7 +159,7 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, unsigned int vf)
     mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
 
-    mem_write8(&rx_off, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_RX_OFFSET_ADDR,
+    mem_write8(&rx_off, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_RX_OFFSET,
                sizeof rx_off);
 #endif
 }

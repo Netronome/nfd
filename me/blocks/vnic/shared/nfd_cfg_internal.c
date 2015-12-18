@@ -417,7 +417,7 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
                sizeof exn_lsc);
 
     mem_write8(&rx_off,
-               NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_RX_OFFSET_ADDR,
+               NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_RX_OFFSET,
                sizeof rx_off);
 #endif
 }
@@ -447,7 +447,7 @@ _nfd_cfg_init_pf_ctrl_bar()
 
     mem_write8(&rx_off,
                NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
-                    NFP_NET_CFG_RX_OFFSET_ADDR,
+                    NFP_NET_CFG_RX_OFFSET,
                sizeof rx_off);
 #endif
 }

@@ -176,7 +176,7 @@
 /**
  * NFP6000/NFP4000 - Prepend configuration
  */
-#define NFP_NET_CFG_RX_OFFSET_ADDR		0x0050
+#define NFP_NET_CFG_RX_OFFSET		0x0050
 #define NFP_NET_CFG_RX_OFFSET_DYNAMIC		0	/* Prepend mode */
 
 /**
