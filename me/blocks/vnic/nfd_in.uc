@@ -25,16 +25,16 @@
 #define NFD_IN_NUM_WQS          8
 #endif
 
-#ifndef NFD_IN_BLM_BLS
-#error "NFD_IN_BLM_BLS must be defined by the user"
+#ifndef NFD_IN_BLM_REG_BLS
+#error "NFD_IN_BLM_REG_BLS must be defined by the user"
 #endif
 
-#ifndef NFD_IN_BLM_POOL
-#error "NFD_IN_BLM_POOL must be defined by the user"
+#ifndef NFD_IN_BLM_REG_POOL
+#error "NFD_IN_BLM_REG_POOL must be defined by the user"
 #endif
 
-#ifndef NFD_IN_BLM_BUF_SZ
-#error "NFD_IN_BLM_BUF_SZ must be defined by the user"
+#ifndef NFD_IN_BLM_REG_SIZE
+#error "NFD_IN_BLM_REG_SIZE must be defined by the user"
 #endif
 
 #ifndef NFD_IN_BLM_JUMBO_BLS
@@ -274,14 +274,14 @@
 
     bitfield_extract(len, BF_AML(in_nfd_meta, NFD_IN_DATALEN_fld))
 
-#if (NFD_IN_BLM_BLS == NFD_IN_BLM_JUMBO_BLS)
-    bitfield_insert(v, 0, NFD_IN_BLM_BLS, BF_ML(PKT_META_BUFLIST_bf))
+#if (NFD_IN_BLM_REG_BLS == NFD_IN_BLM_JUMBO_BLS)
+    bitfield_insert(v, 0, NFD_IN_BLM_REG_BLS, BF_ML(PKT_META_BUFLIST_bf))
 #else
-    move(split_thresh, (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET))
+    move(split_thresh, (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET))
     .if (len > split_thresh)
         bitfield_insert(v, 0, NFD_IN_BLM_JUMBO_BLS, BF_ML(PKT_META_BUFLIST_bf))
     .else
-        bitfield_insert(v, 0, NFD_IN_BLM_BLS, BF_ML(PKT_META_BUFLIST_bf))
+        bitfield_insert(v, 0, NFD_IN_BLM_REG_BLS, BF_ML(PKT_META_BUFLIST_bf))
     .endif
 #endif
 

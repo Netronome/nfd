@@ -30,16 +30,16 @@
 #define NFD_IN_NUM_WQS         8
 #endif
 
-#ifndef NFD_IN_BLM_BLS
-#error "NFD_IN_BLM_BLS must be defined by the user"
+#ifndef NFD_IN_BLM_REG_BLS
+#error "NFD_IN_BLM_REG_BLS must be defined by the user"
 #endif
 
-#ifndef NFD_IN_BLM_POOL
-#error "NFD_IN_BLM_POOL must be defined by the user"
+#ifndef NFD_IN_BLM_REG_POOL
+#error "NFD_IN_BLM_REG_POOL must be defined by the user"
 #endif
 
-#ifndef NFD_IN_BLM_BUF_SZ
-#error "NFD_IN_BLM_BUF_SZ must be defined by the user"
+#ifndef NFD_IN_BLM_REG_SIZE
+#error "NFD_IN_BLM_REG_SIZE must be defined by the user"
 #endif
 
 #ifndef NFD_IN_BLM_JUMBO_BLS

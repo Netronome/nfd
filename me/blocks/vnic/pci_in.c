@@ -181,13 +181,13 @@ nfd_in_fill_meta(void *pkt_info,
      * for all packets.
      * XXX The test applied in this API must match the test used internally
      * in issue_dma.c. */
-#if (NFD_IN_BLM_JUMBO_BLS == NFD_IN_BLM_BLS)
-    ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_BLS;
+#if (NFD_IN_BLM_JUMBO_BLS == NFD_IN_BLM_REG_BLS)
+    ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_REG_BLS;
 #else
-    if (data_len > (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET)) {
+    if (data_len > (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET)) {
         ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_JUMBO_BLS;
     } else {
-        ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_BLS;
+        ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_REG_BLS;
     }
 #endif
 

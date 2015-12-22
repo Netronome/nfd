@@ -83,7 +83,7 @@ struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt7;
 };
 
-NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
+NFD_BLM_Q_ALLOC(NFD_IN_BLM_REG_POOL);
 NFD_BLM_Q_ALLOC(NFD_IN_BLM_JUMBO_POOL);
 
 #define NFD_IN_DESC_RING_SZ (NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ * \
@@ -387,7 +387,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
             if (queue_data[bmsk_queue].jumbo) {
                 blm_rnum = NFD_BLM_Q_LINK(NFD_IN_BLM_JUMBO_POOL);
             } else {
-                blm_rnum = NFD_BLM_Q_LINK(NFD_IN_BLM_POOL);
+                blm_rnum = NFD_BLM_Q_LINK(NFD_IN_BLM_REG_POOL);
             }
             mem_ring_journal_fast(blm_rnum, blm_raddr,
                                   queue_data[bmsk_queue].curr_buf);
@@ -974,10 +974,10 @@ DECLARE_PROC_LSO(7);
  * buf_store buffer for a jumbo_store buffer, or to issue separate
  * NFD_IN_DMA_SPLIT_LEN DMAs, or both.  _ISSUE_PROC_JUMBO_TEST
  * takes the "min" of the two thresholds. */
-#if ((NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET) < NFD_IN_DMA_SPLIT_THRESH)
+#if ((NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET) < NFD_IN_DMA_SPLIT_THRESH)
 /* We will need to replace the MU buffer before we need to split packets
  * into multiple DMAs. */
-#define _ISSUE_PROC_JUMBO_TEST (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET)
+#define _ISSUE_PROC_JUMBO_TEST (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET)
 #else
 /* We will need to split the packet into multiple DMAs before we need to
  * replace the MU buffer. */
@@ -1037,7 +1037,7 @@ do {                                                                    \
             /* using the dma_len which is immediately available */      \
             /* rather than the packet length.  This is slightly */      \
             /* pessimistic but efficient in terms of code store. */     \
-            if (dma_len > (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET)) {   \
+            if (dma_len > (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET)) { \
                 precache_bufs_return(buf_addr);                         \
                 while (precache_bufs_jumbo_use(&buf_addr) != 0) {       \
                     /* Allow service context to run */                  \
@@ -1153,7 +1153,7 @@ do {                                                                    \
                                                                         \
             /* XXX check efficiency */                                  \
             if (tx_desc.pkt##_pkt##.data_len >                          \
-                (NFD_IN_BLM_BUF_SZ - NFD_IN_DATA_OFFSET)) {             \
+                (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET)) {           \
                 while (precache_bufs_jumbo_use(&curr_buf) != 0) {       \
                     /* Allow service context to run */                  \
                     /* to refill jumbo_store */                         \

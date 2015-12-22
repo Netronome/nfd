@@ -45,7 +45,7 @@ struct precache_bufs_state {
 };
 
 
-NFD_BLM_Q_ALLOC(NFD_IN_BLM_POOL);
+NFD_BLM_Q_ALLOC(NFD_IN_BLM_REG_POOL);
 NFD_BLM_Q_ALLOC(NFD_IN_BLM_JUMBO_POOL);
 
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
@@ -241,7 +241,7 @@ precache_bufs_setup()
     local_csr_write(local_csr_ctx_enables, cfg.__raw);
 
     blm_queue_addr = ((unsigned long long) NFD_IN_BLM_RADDR >> 8) & 0xff000000;
-    blm_queue_num = NFD_BLM_Q_LINK(NFD_IN_BLM_POOL);
+    blm_queue_num = NFD_BLM_Q_LINK(NFD_IN_BLM_REG_POOL);
 
     buf_store_start = (unsigned int) &buf_store;
     local_csr_write(local_csr_active_lm_addr_3, buf_store_start);
