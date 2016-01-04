@@ -232,13 +232,12 @@
 #endm
 
 
-#macro _set_queue_state(in_vnic, in_q, in_up)
+#macro _set_queue_state(in_vnic, in_q, in_up, in_rid)
 .begin
 
     .reg qid
     .reg lma
     .reg changed
-    .reg rid
     .reg currently_up
     .reg base_addr
 
@@ -261,8 +260,7 @@
 
         .if (in_up != 0)
 
-            alu[rid, in_vnic, +, NFD_CFG_VF_OFFSET]
-            wsm_set(LM_QSTATE, LM_QSTATE_RID, rid)
+            wsm_set(LM_QSTATE, LM_QSTATE_RID, in_rid)
             wsm_set(LM_QSTATE, LM_QSTATE_ENABLED, 1)
             move(LM_SEQ, 0)
             // Precomputation to save cycles later
@@ -307,6 +305,7 @@
     .reg q
     .reg up
     .reg maxqs
+    .reg rid
 
     .reg read $bar[6]
     .xfer_order $bar
@@ -318,8 +317,10 @@
 
     .if (in_vnic < NFD_MAX_VFS)
         move(maxqs, NFD_MAX_VF_QUEUES)
+        alu[rid, in_vnic, +, NFD_CFG_VF_OFFSET]
     .else
         move(maxqs, NFD_MAX_PF_QUEUES)
+        immed[rid, 0]
     .endif
 
 
@@ -329,7 +330,7 @@
         move(q, 0)
         .while (q < maxqs)
 
-            _set_queue_state(in_vnic, q, up)
+            _set_queue_state(in_vnic, q, up, rid)
             alu[q, q, +, 1]
 
         .endw
@@ -351,7 +352,7 @@
 
             .endif
 
-            _set_queue_state(in_vnic, q, up)
+            _set_queue_state(in_vnic, q, up, rid)
             alu[q, q, +, 1]
 
         .endw
