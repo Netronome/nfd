@@ -1,10 +1,8 @@
-/**
- * Copyright (C) 2013 Netronome Systems, Inc.  All rights reserved.
+/*
+ * Copyright (C) 2013 - 2016 Netronome Systems, Inc.  All rights reserved.
  *
- * File:        wsm.uc
- * Description: Field extraction/set utilities for fields defined
- *              in _wrd/_shf/_msk format.
- *
+ * @file          blocks/vnic/wsm.uc
+ * @brief         Extraction/set utilities for _wrd/_shf/_msk defined fields
  */
 
 #ifndef __WSM_UC

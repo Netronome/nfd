@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2014 - 2016 Netronome Systems, Inc.  All rights reserved.
+ *
+ * @file          blocks/vnic/nfd_stats.uc
+ * @brief         Microcode interface to NFD atomic stats
+ */
+
 #ifndef __NFD_STATS_UC
 #define __NFD_STATS_UC
 

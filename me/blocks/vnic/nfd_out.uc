@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2014 - 2016 Netronome Systems, Inc.  All rights reserved.
+ *
+ * @file          blocks/vnic/nfd_out.uc
+ * @brief         Microcode interface to PCI.OUT
+ */
+
 #ifndef __NFD_OUT_UC
 #define __NFD_OUT_UC
 

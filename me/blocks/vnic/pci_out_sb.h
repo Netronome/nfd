@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2014 - 2016 Netronome Systems, Inc.  All rights reserved.
+ *
+ * @file          blocks/vnic/pci_out_sb.h
+ * @brief         Implement "stage batch" (SB) task for PCI.OUT
+ */
+
 #ifndef __PCI_OUT_SB_H
 #define __PCI_OUT_SB_H
 

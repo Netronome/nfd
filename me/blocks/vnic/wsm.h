@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2013 - 2016 Netronome Systems, Inc.  All rights reserved.
+ *
+ * @file          blocks/vnic/wsm.h
+ * @brief         Extraction/set utilities for _wrd/_shf/_msk defined fields
+ */
+
 #ifndef __WSM_H
 #define __WSM_H
 

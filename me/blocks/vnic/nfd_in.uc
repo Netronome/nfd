@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2014 - 2016 Netronome Systems, Inc.  All rights reserved.
+ *
+ * @file          blocks/vnic/nfd_in.uc
+ * @brief         Microcode interface to PCI.IN
+ */
+
 #ifndef __NFD_IN_UC
 #define __NFD_IN_UC
 

@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2014 - 2016 Netronome Systems, Inc.  All rights reserved.
+ *
+ * @file          blocks/vnic/shared/nfd_cfg_pf_bars.uc
+ * @brief         Microcode access to CFG BAR defines
+ */
+
 #ifndef _BLOCKS__SHARED_NFD_CFG_PF_BARS_UC_
 #define _BLOCKS__SHARED_NFD_CFG_PF_BARS_UC_
 

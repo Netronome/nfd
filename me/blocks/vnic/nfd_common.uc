@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2014 - 2016 Netronome Systems, Inc.  All rights reserved.
+ *
+ * @file          blocks/vnic/nfd_common.uc
+ * @brief         Microcode access to NFD defines and macros
+ */
+
 #ifndef __NFD_COMMON_UC
 #define __NFD_COMMON_UC
 

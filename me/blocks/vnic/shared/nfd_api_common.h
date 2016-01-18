@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2014 - 2016 Netronome Systems, Inc.  All rights reserved.
+ *
+ * @file          blocks/vnic/shared/nfd_api_common.h
+ * @brief         Common NFD API defines
+ */
+
 #ifndef __NFD_API_COMMON_H
 #define __NFD_API_COMMON_H
 
