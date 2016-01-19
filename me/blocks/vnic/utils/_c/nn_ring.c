@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/utils/_c/nn_ring.c
  * @brief         NFP next neighbour ring interface

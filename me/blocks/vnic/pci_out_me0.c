@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/pci_out_me0.c
  * @brief         Code to deploy on PCIe ME0 in NFD with 2 MEs per direction
