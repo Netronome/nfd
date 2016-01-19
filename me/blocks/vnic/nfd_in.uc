@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 - 2016 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/nfd_in.uc
  * @brief         Microcode interface to PCI.IN

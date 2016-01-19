@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/utils/qc.c
  * @brief         An API to manage queue controller accesses in NFD

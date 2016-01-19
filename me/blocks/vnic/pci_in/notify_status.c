@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2015-2016,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/pci_in/notify_status.c
  * @brief         Display the state of the notify block

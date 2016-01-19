@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          me/blocks/vnic/libnfd.c
  * @brief         NFD external API

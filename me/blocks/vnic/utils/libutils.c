@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          me/blocks/vnic/utils/libutils.c
  * @brief         Utils and temporary code

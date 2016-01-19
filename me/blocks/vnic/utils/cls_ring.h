@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2014,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2012-2016,  Netronome Systems, Inc.  All rights reserved.
  *
  * @file          blocks/vnic/utils/cls_ring.h
  * @brief         NFP CLS ring interface
