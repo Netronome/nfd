@@ -115,7 +115,7 @@
  *    3  |                            Unused                             |
  *       +---------------------------------------------------------------+
  *
- * The sequence number is shifted over 8 to enabled optimized use of the 
+ * The sequence number is shifted over 8 to enabled optimized use of the
  * alu[.., +8, ..] instruction to add in the host buffer's high 8 bits.
  */
 

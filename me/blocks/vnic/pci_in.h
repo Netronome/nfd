@@ -311,7 +311,7 @@ __intrinsic void nfd_in_recv(unsigned int pcie_isl, unsigned int workq,
  * @param sync          Type of synchronization
  * @param sig           Signal to report completion
  *
- * This function uses the stats engine to log the packet and byte 
+ * This function uses the stats engine to log the packet and byte
  * counts per TX queue.  The values are accumulated in the nfd_in_cntrsX
  * memory (where X is the PCIe unit number) and needs to be pushed to the
  * CFG BAR using the "__nfd_in_push_pkt_cnt" function.
@@ -330,7 +330,7 @@ __intrinsic void __nfd_in_cnt_pkt(unsigned int pcie_isl,
  *
  * This function updates the per TX queue packets and bytes counter
  * in the CFG BAR. It reads and clears the packet and byte
- * counts from the relevant nfd_in_cntrsX memory (where X is the 
+ * counts from the relevant nfd_in_cntrsX memory (where X is the
  * PCIe unit number) and updates the CFG BAR counters using the read values.
  */
 __intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,

@@ -213,7 +213,7 @@ __intrinsic unsigned int nfd_out_get_credit(unsigned int pcie_isl,
  *
  * This function uses the stats engine to log the packet and byte counts per
  * RX queue.  The values are accumulated in the nfd_out_cntrsX memory (where X
- * is the PCIe unit number) and needs to be pushed to the CFG BAR using the 
+ * is the PCIe unit number) and needs to be pushed to the CFG BAR using the
  * __nfd_out_push_pkt_cnt() function.
  */
 __intrinsic void __nfd_out_cnt_pkt(unsigned int pcie_isl,
@@ -230,7 +230,7 @@ __intrinsic void __nfd_out_cnt_pkt(unsigned int pcie_isl,
  *
  * This function updates the per RX queue packet and byte counters
  * in the CFG BAR. It reads and clears the packet and byte
- * counts from the relevant nfd_in_cntrsX memory (where X is the 
+ * counts from the relevant nfd_in_cntrsX memory (where X is the
  * PCIe unit number) and updates the CFG BAR counters using the read values.
  */
 __intrinsic void __nfd_out_push_pkt_cnt(unsigned int pcie_isl,

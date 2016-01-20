@@ -549,7 +549,7 @@ ctm_and_mu_dma#:
                 alu[tmp, len, -, 1]
                 sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
                 move(len, 0)
-            .else 
+            .else
                 alu[tmp, g_dma_max, -, 1]
                 sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
                 alu[len, len, -, g_dma_max]
@@ -647,7 +647,7 @@ mu_only_dma#:
                 alu[tmp, len, -, 1]
                 sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
                 move(len, 0)
-            .else 
+            .else
                 alu[tmp, g_dma_max, -, 1]
                 sm_set_noclr_to(out_dma0[3], pcie_hi_word, PCIE_DMA_XLEN, tmp, 1)
                 alu[len, len, -, g_dma_max]

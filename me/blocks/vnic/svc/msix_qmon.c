@@ -86,7 +86,7 @@
 #define MSIX_VF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_VF_QUEUES)
 
 
-/* 
+/*
  * Interrupt Moderation support;
  *
  * 1) Constrain minimum time between interrupts for same queue
@@ -97,7 +97,7 @@
  * 2) Issue interrupt if number of RX/TX packets since last interrupt
  *    exceeded some count
  *
- *    If number of RX/TX packets since last interrupt was issued 
+ *    If number of RX/TX packets since last interrupt was issued
  *    for same queue exceeds the configured packet count, an interrupt
  *    is issued.
  */
@@ -192,11 +192,11 @@ msix_qmon_init(unsigned int pcie_isl)
 
     /* initialize RX interrupt moderation parameters */
     for (i = 0; i < NFP_NET_RXR_MAX; i++)
-	msix_rx_irqc_cfg[pcie_isl][i] = MSIX_IRQC_DEFAULT_CFG;
+    msix_rx_irqc_cfg[pcie_isl][i] = MSIX_IRQC_DEFAULT_CFG;
 
     /* initialize TX interrupt moderation parameters */
     for (i = 0; i < NFP_NET_TXR_MAX; i++)
-	msix_tx_irqc_cfg[pcie_isl][i] = MSIX_IRQC_DEFAULT_CFG;
+    msix_tx_irqc_cfg[pcie_isl][i] = MSIX_IRQC_DEFAULT_CFG;
 }
 
 /*
@@ -313,7 +313,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
  */
 __intrinsic static void
 msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vnic,
-		      __mem char *cfg_bar, int rx_rings, uint64_t vf_rings)
+                      __mem char *cfg_bar, int rx_rings, uint64_t vf_rings)
 {
     unsigned int qnum;
     uint64_t rings;
@@ -332,7 +332,7 @@ msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vnic,
         qnum = ring + vnic * NFD_MAX_VF_QUEUES;
 
         /* Get interrupt moderation packet count and timeout and and stash
-	 * them into local memory */
+         * them into local memory */
         if (rx_rings)
             entry_addr = cfg_bar + NFP_NET_CFG_RXR_IRQ_MOD(ring);
         else
@@ -432,7 +432,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
             msix_cls_rx_new_enabled[pcie_isl] = 0;
             msix_cls_tx_new_enabled[pcie_isl] = 0;
         }
-    }   
+    }
 
     signal_ctx(pcie_isl + 1, SVC_RECONFIG_SIG_NUM);
     __implicit_write(&ack_sig);
@@ -478,8 +478,8 @@ __shared __lmem uint32_t msix_prev_tx_cnt[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX];
 
 /* maintains interrupt coalesce state or configuration for a given queue */
 struct msix_irq_coalesce {
-    uint32_t usecs;		 	/* time when 1st packet received */
-    uint32_t frames;			/* number of packets received */
+    uint32_t usecs;     /* time when 1st packet received */
+    uint32_t frames;    /* number of packets received */
 };
 
 __shared __cls struct msix_irq_coalesce \
@@ -522,7 +522,7 @@ msix_local_reconfig(const unsigned int pcie_isl)
         qnum = ffs64(new_enabled);
         new_enabled &= new_enabled - 1;
         msix_prev_rx_cnt[pcie_isl][qnum] = 0;
-        msix_rx_irqc_state[pcie_isl][qnum].usecs = 0; 
+        msix_rx_irqc_state[pcie_isl][qnum].usecs = 0;
         msix_rx_irqc_state[pcie_isl][qnum].frames = 0;
     }
 
@@ -621,7 +621,7 @@ msix_get_rx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
  * can not be issued
  */
 __intrinsic static int
-msix_imod_check_can_send(const unsigned int pcie_isl, int qnum, 
+msix_imod_check_can_send(const unsigned int pcie_isl, int qnum,
                          int rx_queue, unsigned int newpkts)
 {
     uint32_t current_ts;
@@ -650,7 +650,7 @@ msix_imod_check_can_send(const unsigned int pcie_isl, int qnum,
         msix_tx_irqc_state[pcie_isl][qnum].frames = pcnt;
 
     if (!ts) {
-        if (rx_queue) 
+        if (rx_queue)
             msix_rx_irqc_state[pcie_isl][qnum].usecs = current_ts;
         else
             msix_tx_irqc_state[pcie_isl][qnum].usecs = current_ts;
@@ -678,7 +678,7 @@ msix_imod_check_can_send(const unsigned int pcie_isl, int qnum,
 }
 
 /*
- * Performs cleanup of interrupt moderation support after an 
+ * Performs cleanup of interrupt moderation support after an
  * interrupt has been successfully issued
  * @pcie_isl:  PCIe Island number
  * @qnum:      Queue number
@@ -710,13 +710,13 @@ msix_imod_irq_issued(const unsigned int pcie_isl, int qnum, int rx_queue)
 
 /*
  * Updates the packet count for given PCIe island, queue number and queue type
- * and returns with the count of new packets 
+ * and returns with the count of new packets
  * @pcie_isl:  PCIe Island number
  * @qnum:      Queue number
  * @rx_queue:  Boolean, set if this is for an RX queue, TX queue otherwise
  * @count:     Current number of TX/RX packets for given queue
- * 
- * Returns number of new RX/TX packets 
+ *
+ * Returns number of new RX/TX packets
  */
 __intrinsic static unsigned int
 msix_update_packet_count(const unsigned int pcie_isl, int qnum,
@@ -759,7 +759,7 @@ msix_update_packet_count(const unsigned int pcie_isl, int qnum,
  * entry is already "masked".
  */
 __intrinsic static int
-msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue, 
+msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
                 unsigned int count)
 {
     unsigned int automask;
@@ -773,8 +773,8 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
 
     /* apply interrupt moderation */
     if (msix_imod_check_can_send(pcie_isl, qnum, rx_queue, count)) {
-	ret = 1;
-	goto out;
+        ret = 1;
+        goto out;
     }
 
     /* get MSI-X table entry value for the queue */
