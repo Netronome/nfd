@@ -103,6 +103,23 @@
  *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
+ *       Flag bits (31-24) expanded:
+ *          31       30      29      28      27      26      25     24
+ *       +-------+-------+-------+-------+-------+-------+-------+-------+
+ *    2  |TX_CSUM|IPV4_CS|TCP_CS |UDP_CS |TX_VLAN|TX_LSO |VXLAN  |GRE    |
+ *       +-------+-------+-------+-------+-------+-------+-------+-------+
+ *       This corresponds to nfp_net_pmd.h, TX descriptor format
+ *       (lines 152-160).
+ *
+ *       31  TX_CSUM -> PCIE_DESC_TX_CSUM
+ *       30  IPV4_CS -> PCIE_DESC_TX_IP4_CSUM
+ *       29  TCP_CS  -> PCIE_DESC_TX_TCP_CSUM
+ *       28  UDP_CS  -> PCIE_DESC_TX_UDP_CSUM
+ *       27  TX_VLAN -> PCIE_DESC_TX_VLAN
+ *       26  TX_LSO  -> PCIE_DESC_TX_LSO
+ *       25  VXLAN   -> PCIE_DESC_TX_ENCAP_VXLAN
+ *       24  GRE     -> PCIE_DESC_TX_ENCAP_GRE
+ *
  *      S -> sp0 (spare)
  *    itf -> intf
  */
@@ -112,6 +129,14 @@
 #define NFD_IN_QID_fld          0, 5, 0
 #define NFD_IN_BUFADDR_fld      1, 31, 0
 #define NFD_IN_FLAGS_fld        2, 31, 24
+#define NFD_IN_FLAGS_TX_CSUM_fld        2, 31, 31
+#define NFD_IN_FLAGS_TX_IPV4_CSUM_fld   2, 30, 30
+#define NFD_IN_FLAGS_TX_TCP_CSUM_fld    2, 29, 29
+#define NFD_IN_FLAGS_TX_UDP_CSUM_fld    2, 28, 28
+#define NFD_IN_FLAGS_TX_VLAN_fld        2, 27, 27
+#define NFD_IN_FLAGS_TX_LSO_fld         2, 26, 26
+#define NFD_IN_FLAGS_TX_ENCAP_VXLAN_fld 2, 25, 25
+#define NFD_IN_FLAGS_TX_ENCAP_GRE_fld   2, 24, 24
 #define NFD_IN_L4OFF_fld        2, 23, 16
 #define NFD_IN_LSO_fld          2, 15, 0
 #define NFD_IN_SEQ_fld          2, 15, 0
@@ -370,6 +395,46 @@
 .end
 #endm
 
+#macro nfd_in_get_tx_csum(out_value, in_nfd_meta)
+.begin
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_CSUM_fld))
+.end
+#endm
+#macro nfd_in_get_tx_ipv4_csum(out_value, in_nfd_meta)
+.begin
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_IPV4_CSUM_fld))
+.end
+#endm
+#macro nfd_in_get_tx_tcp_csum(out_value, in_nfd_meta)
+.begin
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_TCP_CSUM_fld))
+.end
+#endm
+#macro nfd_in_get_tx_udp_csum(out_value, in_nfd_meta)
+.begin
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_UDP_CSUM_fld))
+.end
+#endm
+#macro nfd_in_get_tx_vlan(out_value, in_nfd_meta)
+.begin
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_VLAN_fld))
+.end
+#endm
+#macro nfd_in_get_tx_lso(out_value, in_nfd_meta)
+.begin
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_LSO_fld))
+.end
+#endm
+#macro nfd_in_get_tx_encap_vxlan(out_value, in_nfd_meta)
+.begin
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_ENCAP_VXLAN_fld))
+.end
+#endm
+#macro nfd_in_get_tx_encap_gre(out_value, in_nfd_meta)
+.begin
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_ENCAP_GRE_fld))
+.end
+#endm
 
 #macro nfd_in_get_data_len(out_data_len, in_nfd_meta)
 .begin
