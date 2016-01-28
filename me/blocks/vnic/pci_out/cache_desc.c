@@ -105,15 +105,6 @@ __shared __lmem unsigned int fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
 NFD_ATOMICS_ALLOC(PCIE_ISL, NFD_OUT_CREDITS_BASE);
 
 
-#if 0
-
-__export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_SZ_PER_QUEUE)
-    struct nfd_out_fl_desc
-    fl_cache_mem[NFD_OUT_MAX_QUEUES][NFD_OUT_FL_BUFS_PER_QUEUE];
-
-#else
-
-
 #define FL_CACHE_SIZE (NFD_OUT_MAX_QUEUES * NFD_OUT_FL_BUFS_PER_QUEUE * 8)
 
 #define FL_CACHE_MEM_ALLOC_IND2(_isl, _mem)             \
@@ -131,8 +122,6 @@ FL_CACHE_MEM_ALLOC(PCIE_ISL);
     ((__mem char *) _link_sym(fl_cache_mem##_isl))
 #define FL_CACHE_MEM(_isl) FL_CACHE_MEM_IND(_isl)
 
-
-#endif
 
 static __gpr unsigned int fl_cache_mem_addr_lo;
 
