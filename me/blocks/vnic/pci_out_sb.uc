@@ -31,6 +31,8 @@
 #include "pci_out_sb.h"
 #include "pci_out_sb_iface.uc"
 
+#include "nfd_user_cfg.h"
+
 
 /**
  * For reference
@@ -177,9 +179,9 @@
 .init_mu_ring nfd_out_ring_num/**/PCIE_ISL/**/0 nfd_out_ring_mem/**/PCIE_ISL
 
 // Cache memory
-#define_eval NFD_OUT_CACHE_ISL (NFD_PCIE_ISL_BASE + PCIE_ISL)
 #define_eval NFD_OUT_CACHE_SIZE (NFD_OUT_FL_CACHE_SIZE_PER_QUEUE * NFD_OUT_MAX_QUEUES)
-.alloc_mem fl_cache_mem/**/PCIE_ISL i/**/NFD_OUT_CACHE_ISL/**/.ctm global NFD_OUT_CACHE_SIZE NFD_OUT_CACHE_SIZE
+#define_eval NFD_OUT_CACHE_LOC 'NFD_PCIE/**/PCIE_ISL/**/_FL_CACHE_MEM'
+.alloc_mem fl_cache_mem/**/PCIE_ISL NFD_OUT_CACHE_LOC global NFD_OUT_CACHE_SIZE NFD_OUT_CACHE_SIZE
 
 // Config rings
 .alloc_resource nfd_cfg_ring_nums NFD_CFG_RING_EMEM/**/_queues global 32

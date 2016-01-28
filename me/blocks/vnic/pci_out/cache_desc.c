@@ -113,27 +113,24 @@ __export __ctm __align(NFD_OUT_MAX_QUEUES * NFD_OUT_FL_SZ_PER_QUEUE)
 
 #else
 
+
 #define FL_CACHE_SIZE (NFD_OUT_MAX_QUEUES * NFD_OUT_FL_BUFS_PER_QUEUE * 8)
 
-#if (PCIE_ISL == 0)
-_NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem0 i4.ctm \
-                 global FL_CACHE_SIZE FL_CACHE_SIZE);
-#define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem0))
-#elif (PCIE_ISL == 1)
-_NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem1 i5.ctm \
-                 global FL_CACHE_SIZE FL_CACHE_SIZE);
-#define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem1))
-#elif (PCIE_ISL == 2)
-_NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem2 i6.ctm \
-                 global FL_CACHE_SIZE FL_CACHE_SIZE);
-#define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem2))
-#elif (PCIE_ISL == 3)
-_NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem3 i7.ctm \
-                 global FL_CACHE_SIZE FL_CACHE_SIZE);
-#define FL_CACHE_MEM ((__ctm char *) _link_sym(fl_cache_mem3))
-#else
-#error "Unknown PCIE_ISL value"
-#endif
+#define FL_CACHE_MEM_ALLOC_IND2(_isl, _mem)             \
+    _NFP_CHIPRES_ASM(.alloc_mem fl_cache_mem##_isl _mem \
+                     global FL_CACHE_SIZE FL_CACHE_SIZE);
+#define FL_CACHE_MEM_ALLOC_IND1(_isl, _mem) FL_CACHE_MEM_ALLOC_IND2(_isl, _mem)
+#define FL_CACHE_MEM_ALLOC_IND0(_isl)                               \
+    FL_CACHE_MEM_ALLOC_IND1(_isl, NFD_PCIE##_isl##_FL_CACHE_MEM)
+#define FL_CACHE_MEM_ALLOC(_isl) FL_CACHE_MEM_ALLOC_IND0(_isl)
+
+FL_CACHE_MEM_ALLOC(PCIE_ISL);
+
+
+#define FL_CACHE_MEM_IND(_isl)                      \
+    ((__mem char *) _link_sym(fl_cache_mem##_isl))
+#define FL_CACHE_MEM(_isl) FL_CACHE_MEM_IND(_isl)
+
 
 #endif
 
@@ -302,10 +299,12 @@ cache_desc_setup_shared()
     descr_tmp.cpp_token = 0;
     descr_tmp.dma_cfg_index = NFD_OUT_FL_CFG_REG;
     /* cpp_addr_hi = 0 will target local CTM, as desired. */
-    descr_tmp.cpp_addr_hi = 0;
+    descr_tmp.cpp_addr_hi =
+        (((unsigned long long) FL_CACHE_MEM(PCIE_ISL) >> 32) & 0xff);
 
     /* Initialise addresses of the FL cache and credits */
-    fl_cache_mem_addr_lo = ((unsigned long long) FL_CACHE_MEM & 0xffffffff);
+    fl_cache_mem_addr_lo =
+        ((unsigned long long) FL_CACHE_MEM(PCIE_ISL) & 0xffffffff);
 }
 
 
@@ -318,7 +317,8 @@ cache_desc_setup_shared()
 void
 cache_desc_setup()
 {
-    fl_cache_mem_addr_lo = ((unsigned long long) FL_CACHE_MEM & 0xffffffff);
+    fl_cache_mem_addr_lo =
+        ((unsigned long long) FL_CACHE_MEM(PCIE_ISL) & 0xffffffff);
 }
 
 
@@ -756,7 +756,8 @@ send_desc_setup_shared()
     rx_descr_tmp.cpp_token = 0;
     rx_descr_tmp.dma_cfg_index = NFD_OUT_DESC_CFG_REG;
     /* cpp_addr_hi = 0 will target local CTM, as desired. */
-    rx_descr_tmp.cpp_addr_hi = 0;
+    rx_descr_tmp.cpp_addr_hi =
+        (((unsigned long long) FL_CACHE_MEM(PCIE_ISL) >> 32) & 0xff);
 }
 
 
