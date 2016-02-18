@@ -32,6 +32,7 @@
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
+#include <vnic/shared/nfd_vf_cfg_iface.h>
 
 
 #include <nfp_net_ctrl.h>
@@ -149,7 +150,7 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
  * e.g. NFD_CFG_BASE_LINK.
  */
 void
-nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, unsigned int vf)
+nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsigned int vf)
 {
 #if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
 #ifdef NFD_NO_ISOLATION
@@ -164,6 +165,9 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, unsigned int vf)
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
+    __xread unsigned int vf_cfg_rd[2];
+    __xwrite unsigned int vf_cfg_wr[2];
+
 
     mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
@@ -173,6 +177,13 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, unsigned int vf)
 
     mem_write8(&rx_off, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_RX_OFFSET,
                sizeof rx_off);
+
+    mem_read8(&vf_cfg_rd, NFD_VF_CFG_ADDR(vf_cfg_base, vf),
+              NFD_VF_CFG_MAC_SZ);
+    reg_cp(vf_cfg_wr, vf_cfg_rd, sizeof vf_cfg_rd);
+    mem_write8(&vf_cfg_wr, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_MACADDR,
+              NFD_VF_CFG_MAC_SZ);
+
 #endif
 }
 

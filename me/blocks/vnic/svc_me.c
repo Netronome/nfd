@@ -27,6 +27,8 @@
 
 #include "shared/nfd_cfg.h"
 #include <vnic/shared/nfd_flr.c>
+#include <vnic/shared/nfd_vf_cfg_iface.h>
+
 
 /* A global array with base addresses for the configuration
  * bars. Marked as volatile so the compiler doesn't optimise them
@@ -52,6 +54,7 @@ __xread unsigned int cfg_bar_data0[6];
 struct nfd_cfg_msg cfg_msg0;
 
 NFD_CFG_BASE_DECLARE(0);
+NFD_VF_CFG_DECLARE(0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
@@ -61,6 +64,7 @@ __xread unsigned int cfg_bar_data1[6];
 struct nfd_cfg_msg cfg_msg1;
 
 NFD_CFG_BASE_DECLARE(1);
+NFD_VF_CFG_DECLARE(1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
@@ -70,6 +74,7 @@ __xread unsigned int cfg_bar_data2[6];
 struct nfd_cfg_msg cfg_msg2;
 
 NFD_CFG_BASE_DECLARE(2);
+NFD_VF_CFG_DECLARE(2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
@@ -79,10 +84,11 @@ __xread unsigned int cfg_bar_data3[6];
 struct nfd_cfg_msg cfg_msg3;
 
 NFD_CFG_BASE_DECLARE(3);
+NFD_VF_CFG_DECLARE(3);
 #endif
 
 NFD_FLR_DECLARE;
-
+NFD_VF_CFG_MAX_VFS;
 
 #define CHECK_CFG_MSG(_isl)                                             \
 do {                                                                    \
@@ -111,7 +117,8 @@ do {                                                                    \
             } else {                                                    \
                 /* We have a VF FLR */                                  \
                 nfd_flr_init_vf_ctrl_bar(NFD_CFG_BASE_LINK(_isl),       \
-                                     cfg_msg##_isl.vnic);               \
+                                         NFD_VF_CFG_BASE_LINK(_isl), \
+                                         cfg_msg##_isl.vnic);           \
                                                                         \
             }                                                           \
         }                                                               \
