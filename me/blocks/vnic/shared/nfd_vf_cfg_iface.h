@@ -19,8 +19,9 @@
 #ifndef _BLOCKS__SHARED_NFD_VF_CFG_IFACE_H_
 #define _BLOCKS__SHARED_NFD_VF_CFG_IFACE_H_
 
+#if defined(__NFP_LANG_MICROC) || defined (__NFP_LANG_ASM)
 #include <nfd_user_cfg.h>
-
+#endif
 
 #define NFD_VF_CFG_ABI_VER      1
 
@@ -42,7 +43,6 @@
 #define NFD_VF_CFG_OFF(_vf)     (NFD_VF_CFG_SZ * _vf)
 
 #define NFD_VF_CFG_MAX_VFS_SZ           4
-#define NFD_VF_CFG_MAX_VFS_OFF(_isl)    (NFD_VF_CFG_MAX_VFS_SZ * _isl)
 
 
 #if defined(__NFP_LANG_MICROC)
