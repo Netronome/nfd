@@ -1008,7 +1008,6 @@ do {                                                                    \
     unsigned int pcie_hi_word;                                          \
     unsigned int pcie_addr_lo;                                          \
                                                                         \
-    dma_len = tx_desc.pkt##_pkt##.dma_len;                              \
     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                          \
                          NFD_IN_LSO_CNTR_T_ISSUED_ALL_TX_DESC);         \
                                                                         \
@@ -1038,6 +1037,13 @@ do {                                                                    \
             (pcie_hi_word_part |                                        \
              NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(tx_desc.pkt##_pkt##.dma_addr_hi)); \
         pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;                 \
+                                                                        \
+                                                                        \
+        /* Get the data/dma length */                                   \
+        /* This is a simple packet so use the data_len, which is */     \
+        /* passed on to the application.  dma_len in the descriptor */  \
+        /* is ignored.  */                                              \
+        dma_len = tx_desc.pkt##_pkt##.data_len;                         \
                                                                         \
         /* Check for and handle large (jumbo) packets  */               \
         if (dma_len > _ISSUE_PROC_JUMBO_TEST) {                         \
@@ -1184,6 +1190,11 @@ do {                                                                    \
         }                                                               \
         __asm { alu[curr_buf, --, B, NFD_IN_Q_STATE_PTR[1]] }           \
                                                                         \
+        /* Get the data/dma length */                                   \
+        /* This is a gather packet so use the dma_len from the */       \
+        /* descriptor is used for this segment. */                      \
+        dma_len = tx_desc.pkt##_pkt##.dma_len;                          \
+                                                                        \
         /* Use continuation data */                                     \
         cpp_addr_lo = curr_buf << 11;                                   \
         __asm { alu[cpp_addr_lo, cpp_addr_lo, +, NFD_IN_Q_STATE_PTR[2]] } \
@@ -1194,6 +1205,7 @@ do {                                                                    \
             (pcie_hi_word_part |                                        \
              NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(tx_desc.pkt##_pkt##.dma_addr_hi)); \
         pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;                 \
+                                                                        \
                                                                         \
         /* Check for and handle large (jumbo) packets  */               \
         if (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                        \
