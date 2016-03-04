@@ -375,7 +375,6 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         /* Initialise queue state */
         queue_data[bmsk_queue].sp0 = 0;
         queue_data[bmsk_queue].lso_hdr_len = 0;
-        queue_data[bmsk_queue].lso_payload_len = 0;
         queue_data[bmsk_queue].rid = 0;
         if (cfg_msg->vnic != NFD_MAX_VFS) {
             queue_data[bmsk_queue].rid = cfg_msg->vnic + NFD_CFG_VF_OFFSET;
@@ -384,7 +383,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].up = 1;
         queue_data[bmsk_queue].jumbo = 0;
         queue_data[bmsk_queue].curr_buf = 0;
-        queue_data[bmsk_queue].offset = 0;
+        queue_data[bmsk_queue].store0 = 0;
+        queue_data[bmsk_queue].store1 = 0;
 
     } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* Free the MU buffer */
@@ -408,7 +408,6 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         /* Clear queue state */
         queue_data[bmsk_queue].sp0 = 0;
         queue_data[bmsk_queue].lso_hdr_len = 0;
-        queue_data[bmsk_queue].lso_payload_len = 0;
         /* Leave RID configured after first set */
         /* "cont" is used as part of the "up" signalling,
          * to move the "up" test off the fast path. */
@@ -416,7 +415,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].up = 0;
         queue_data[bmsk_queue].jumbo = 0;
         queue_data[bmsk_queue].curr_buf = 0;
-        queue_data[bmsk_queue].offset = 0;
+        queue_data[bmsk_queue].store0 = 0;
+        queue_data[bmsk_queue].store1 = 0;
 
     }
 }
@@ -734,7 +734,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 ctx_swap();                                                  \
             }                                                                \
             __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, curr_buf] }            \
-            /* clear queue_data[queue].lso_payload_len */                    \
+            /* clear lso_payload_len in queue_data[queue].store1 */          \
             __asm { alu[NFD_IN_Q_STATE_PTR[3], --, B, 0] }                   \
             offset = NFD_IN_DATA_OFFSET - tx_desc.pkt##_pkt.offset;          \
                                                                              \
@@ -742,11 +742,11 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             hdr_pkt_ptr = (__addr40 void *)(((uint64_t)curr_buf << 11) |     \
                            offset);                                          \
             offset += lso_hdr_len;                                           \
-            /* save queue_data[queue].offset */                              \
+            /* save in queue_data[queue].store0 */                           \
             __asm { alu[NFD_IN_Q_STATE_PTR[2], --, B, offset] }              \
         }                                                                    \
         /* 3. Copy the header */                                             \
-        /* get queue_data[queue].lso_payload_len */                          \
+        /* get lso_payload_len from queue_data[queue].store1 */              \
         __asm { alu[lso_payload_len, --, B, NFD_IN_Q_STATE_PTR[3]] }         \
         if (lso_payload_len == 0) {                                          \
             header_to_read = ((lso_hdr_len + 0x3F) & ~0x3F);                 \
@@ -828,7 +828,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                     dma_length] }                                            \
         __asm { alu[NFD_IN_Q_STATE_PTR[3], NFD_IN_Q_STATE_PTR[3], +,         \
                     amount_extra_dmaed] }                                    \
-        /* get queue_data[queue].lso_payload_len */                          \
+        /* get lso_payload_len from queue_data[queue].store1 */              \
         __asm { alu[lso_payload_len, --, B, NFD_IN_Q_STATE_PTR[3]] }         \
         /* add to offset the dma_length */                                   \
         __asm { alu[NFD_IN_Q_STATE_PTR[2], NFD_IN_Q_STATE_PTR[2], +,         \

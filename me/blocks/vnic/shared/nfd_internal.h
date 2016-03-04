@@ -364,9 +364,9 @@ struct nfd_in_dma_state {
             unsigned int sp1:1;
             unsigned int curr_buf:29;
 
-            int offset;
+            int store0;
 
-            unsigned int lso_payload_len; /* length of lso payload filled used in
+            unsigned int store1; /* length of lso payload filled used in
                                              issue_dma */
         };
         unsigned int __raw[4];
