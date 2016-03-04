@@ -115,6 +115,8 @@
 #define NFD_IN_DMA_SPLIT_THRESH     (3 * 1024)
 #define NFD_IN_DMA_SPLIT_LEN        2048
 
+#define NFD_IN_DMA_INVALID_LEN      64
+
 /* Debug defines */
 #define NFD_IN_DBG_GATHER_INTVL     1000000
 #define NFD_IN_DBG_ISSUE_DMA_INTVL  1000000

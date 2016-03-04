@@ -1042,11 +1042,14 @@ do {                                                                    \
         /* Get the data/dma length */                                   \
         /* This is a simple packet so use the data_len, which is */     \
         /* passed on to the application.  dma_len in the descriptor */  \
-        /* is ignored.  */                                              \
-        dma_len = tx_desc.pkt##_pkt##.data_len;                         \
+        /* is ignored. */                                               \
+        /* XXX Store the value as "length - 1" so that */               \
+        /* dma_len = 0 is implicitly checked in the oversize */         \
+        /* packet checks. */                                            \
+        dma_len = tx_desc.pkt##_pkt##.data_len - 1;                     \
                                                                         \
         /* Check for and handle large (jumbo) packets  */               \
-        if (dma_len > _ISSUE_PROC_JUMBO_TEST) {                         \
+        if (dma_len > (_ISSUE_PROC_JUMBO_TEST - 1)) {                   \
             /* We may need to swap the buffer allocated from */         \
             /* buf_store for one allocated from jumbo_store. */         \
             /* This must be done before context swapping. */            \
@@ -1054,7 +1057,9 @@ do {                                                                    \
             /* using the dma_len which is immediately available */      \
             /* rather than the packet length.  This is slightly */      \
             /* pessimistic but efficient in terms of code store. */     \
-            if (dma_len > (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET)) { \
+            if (dma_len > (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET - 1)) { \
+                unsigned int pkt_len;                                   \
+                                                                        \
                 precache_bufs_return(buf_addr);                         \
                 while (precache_bufs_jumbo_use(&buf_addr) != 0) {       \
                     /* Allow service context to run */                  \
@@ -1066,6 +1071,21 @@ do {                                                                    \
                 /* cpp_addr_lo is now stale and must be recomputed */   \
                 cpp_addr_lo = buf_addr << 11;                           \
                 cpp_addr_lo -= tx_desc.pkt##_pkt##.offset;              \
+                                                                        \
+                /* Check that the packet will fit within */             \
+                /* a buffer of NFD_IN_BLM_JUMBO_SIZE.  This is */       \
+                /* determined by the packet length rather than the */   \
+                /* DMA length, because the amount of meta data */       \
+                /* the DMA start address, but not the packet start */   \
+                /* address. */                                          \
+                pkt_len = dma_len - tx_desc.pkt##_pkt##.offset;         \
+                if (pkt_len > (NFD_IN_BLM_JUMBO_SIZE -                  \
+                               NFD_IN_DATA_OFFSET - 1)) {               \
+                    /* Flag the packet as invalid and set dma_len */    \
+                    /* to a harmless value. */                          \
+                    buf_addr |= (1 << NFD_IN_DMA_STATE_INVALID);        \
+                    dma_len = NFD_IN_DMA_INVALID_LEN - 1;               \
+                }                                                       \
             }                                                           \
                                                                         \
             /* We may need to break this packet up into */              \
@@ -1073,13 +1093,13 @@ do {                                                                    \
             /* XXX if we aren't splitting packets, then we will */      \
             /* only refill the jumbo_store when it tests empty */       \
             /* in precache_bufs_jumbo_use() above.  */                  \
-            if (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                    \
+            if (dma_len > NFD_IN_DMA_SPLIT_THRESH - 1) {                \
                 do {                                                    \
                     _ISSUE_PROC_JUMBO(_pkt, buf_addr);                  \
                     NFD_IN_LSO_CNTR_INCR(                               \
                         nfd_in_lso_cntr_addr,                           \
                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_JUMBO_TX_DESC); \
-                } while (dma_len > NFD_IN_DMA_SPLIT_LEN);               \
+                } while (dma_len > NFD_IN_DMA_SPLIT_LEN - 1);           \
             }                                                           \
         }                                                               \
                                                                         \
@@ -1087,7 +1107,7 @@ do {                                                                    \
         dma_out.pkt##_pkt##.__raw[0] = cpp_addr_lo + NFD_IN_DATA_OFFSET; \
         dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                    \
         dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word |                  \
-                                 NFP_PCIE_DMA_CMD_LENGTH(dma_len - 1)); \
+                                        NFP_PCIE_DMA_CMD_LENGTH(dma_len)); \
                                                                         \
         if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                      \
             dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_no_sig_part |        \
