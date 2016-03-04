@@ -28,11 +28,14 @@
 
 #include <std/reg_utils.h>
 
+#include <nfp6000/nfp_qc.h>
+
 #include <vnic/nfd_common.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_vf_cfg_iface.h>
+#include <vnic/utils/qcntl.h>
 
 
 #include <nfp_net_ctrl.h>
@@ -106,6 +109,40 @@ nfd_flr_clr_bar(__emem char *addr)
              addr += sizeof zero) {
         mem_write64(zero, addr, sizeof zero);
     }
+}
+
+
+/** Reset the vNIC CFG QC queue to its initial state
+ * @param pcie_isl      PCIe island to reset
+ * @param vnic          vNIC to reset
+ * @param event_type    event type to configure
+ *
+ * Reset the CFG QC to a clean state, in case the previous
+ * user left it broken.  This is done twice, once when the
+ * FLR is first noticed to set the queue in a state where
+ * it cannot generate any new configuration messages, and
+ * again after the CFG BAR has been zeroed out to renable
+ * configuration message events.
+ */
+__intrinsic void
+nfd_flr_init_cfg_queue(unsigned int pcie_isl, unsigned int vnic,
+                       unsigned int event_type)
+{
+    struct qc_queue_config nfd_cfg_queue;
+
+    /*
+     * Config queues are small and issue events on not empty.
+     * The confq for VNIC N is CONFQ_START + N * vnic_block_size.
+     * All confqs are monitored by a single bitmask32 filter.
+     */
+    nfd_cfg_queue.watermark  = PCIE_QC_WM_4;
+    nfd_cfg_queue.size       = PCIE_QC_SZ_256;
+    nfd_cfg_queue.event_data = NFD_EVENT_DATA;
+    nfd_cfg_queue.event_type = event_type;
+    nfd_cfg_queue.ptr        = 0;
+
+    qc_init_queue(pcie_isl, NFD_CFG_QUEUE + (4 * NFD_MAX_VF_QUEUES * vnic),
+                  &nfd_cfg_queue);
 }
 
 

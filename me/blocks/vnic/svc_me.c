@@ -109,6 +109,8 @@ do {                                                                    \
                                                                         \
             /* NB: This function writes ~8K of data */                  \
             nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic)); \
+            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vnic,            \
+                                   PCIE_QC_EVENT_NOT_EMPTY);            \
                                                                         \
             if (cfg_msg##_isl.vnic == NFD_MAX_VFS) {                    \
                 /* We have a PF FLR */                                  \

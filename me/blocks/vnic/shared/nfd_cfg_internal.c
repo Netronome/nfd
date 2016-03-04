@@ -672,16 +672,32 @@ nfd_cfg_next_vnic()
         /* We haven't found a configuration queue to service */
         vnic = -1;
     } else {
+        __xread unsigned int wptr_raw;
+        struct nfp_qc_sts_hi wptr;
+        unsigned int qc_queue;
+
         /* We have a configuration queue to service */
 
-        /* Compute the vNIC associated with that queue */
+        /* Compute the vNIC and QC queue associated with that CFG queue */
         vnic = NFD_CFGQ2VNIC(queue);
+        qc_queue = NFD_NATQ2QC(queue, NFD_CFG_QUEUE);
+
+        /* Confirm that the queue is not empty */
+        wptr.__raw = qc_read(PCIE_ISL, qc_queue, QC_WPTR);
+
+        if (!wptr.empty) {
+            qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, 1);
+        } else {
+            /* The qc queue was already empty, which might indicate
+             * an FLR has occurred after the CFG message was started.
+             * There is nothing to do on this CFG queue. */
+            vnic = -1;
+        }
 
         /* Clear the bit in the bitmask so the queue isn't picked again,
          * and increment the QC queue read pointer */
         clear_queue(&queue, &cfg_queue_bmsk);
-        qc_add_to_ptr(PCIE_ISL, NFD_NATQ2QC(queue, NFD_CFG_QUEUE), QC_RPTR, 1);
-    }
+   }
 
     return vnic;
 }
@@ -799,6 +815,8 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
             /* Rewrite the CFG BAR for other components */
             nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), NFD_MAX_VFS);
+            nfd_flr_init_cfg_queue(PCIE_ISL, NFD_MAX_VFS,
+                                   NFP_QC_STS_LO_EVENT_TYPE_NEVER);
 
 #else
             /* We're not using the PF, just ACK. */
@@ -830,6 +848,8 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
                 /* Rewrite the CFG BAR for other components */
                 nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vf);
+                nfd_flr_init_cfg_queue(PCIE_ISL, vf,
+                                       NFP_QC_STS_LO_EVENT_TYPE_NEVER);
 
             } else {
 
@@ -864,6 +884,9 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
                 /* Rewrite the CFG BAR for other components */
                 nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vf);
+                nfd_flr_init_cfg_queue(PCIE_ISL, vf,
+                                       NFP_QC_STS_LO_EVENT_TYPE_NEVER);
+
 
             } else {
                 /* We aren't using this VF, simply acknowledge the FLR. */
