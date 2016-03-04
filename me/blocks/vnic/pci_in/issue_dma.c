@@ -997,6 +997,17 @@ DECLARE_PROC_LSO(7);
 #endif
 
 
+/* Setup _ISSUE_PROC_LSO_TEST, used to disable LSO if the capability
+ * is not advertised on either the PF or VFs. */
+#if ((NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_LSO) || \
+     (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_LSO))
+#define _ISSUE_PROC_LSO_TEST(_pkt)                  \
+    (tx_desc.pkt##_pkt##.flags & PCIE_DESC_TX_LSO)
+#else
+#define _ISSUE_PROC_LSO_TEST(_pkt) (0)
+#endif
+
+
 #define _ISSUE_PROC(_pkt, _type, _src)                                  \
 do {                                                                    \
     unsigned int dma_len;                                               \
@@ -1014,7 +1025,7 @@ do {                                                                    \
                          NFD_IN_LSO_CNTR_T_ISSUED_ALL_TX_DESC);         \
                                                                         \
     /* if tx descr is LSO */                                            \
-    if (tx_desc.pkt##_pkt##.flags & PCIE_DESC_TX_LSO) {                 \
+    if (_ISSUE_PROC_LSO_TEST(_pkt)) {                                   \
         /* do the lso function processing */                            \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_TX_DESC); \
