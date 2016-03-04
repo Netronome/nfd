@@ -316,19 +316,18 @@
     .reg v
     .reg len
     .reg off
-    .reg split_thresh
+    .reg bls
 
     bitfield_extract(len, BF_AML(in_nfd_meta, NFD_IN_DATALEN_fld))
 
 #if (NFD_IN_BLM_REG_BLS == NFD_IN_BLM_JUMBO_BLS)
     bitfield_insert(v, 0, NFD_IN_BLM_REG_BLS, BF_ML(PKT_META_BUFLIST_bf))
 #else
-    move(split_thresh, (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET))
-    .if (len > split_thresh)
-        bitfield_insert(v, 0, NFD_IN_BLM_JUMBO_BLS, BF_ML(PKT_META_BUFLIST_bf))
-    .else
-        bitfield_insert(v, 0, NFD_IN_BLM_REG_BLS, BF_ML(PKT_META_BUFLIST_bf))
-    .endif
+   move(bls, NFD_IN_BLM_JUMBO_BLS)
+   .if (BIT(BF_A(in_nfd_meta, NFD_IN_JUMBO_fld), BL_L(in_nfd_meta, NFD_IN_JUMBO_fld)) == 0)
+       move(bls, NFD_IN_BLM_REG_BLS)
+   .endif
+    bitfield_insert(v, 0, bls, BF_ML(PKT_META_BUFLIST_bf))
 #endif
 
     bitfield_extract(off, BF_AML(in_nfd_meta, NFD_IN_OFFSET_fld))

@@ -501,9 +501,10 @@ precache_bufs_jumbo_use(__gpr unsigned int *buf_addr)
 
     if (jumbo_cnt > 0) {
         /* Decrement jumbo_cnt then use that as the jumbo_store offset
-         * to account for C array indexing. */
+         * to account for C array indexing.  Mark buf_addr as from the
+         * jumbo queue. */
         jumbo_cnt--;
-        *buf_addr = jumbo_store[jumbo_cnt];
+        *buf_addr = jumbo_store[jumbo_cnt] | (1 << NFD_IN_DMA_STATE_JUMBO);
     } else {
         /* The jumbo_store is depleted and threads are spinning.
          * Allow CTX0 to execute precache_bufs_jumbo() again to

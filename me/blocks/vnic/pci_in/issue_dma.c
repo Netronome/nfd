@@ -1171,12 +1171,9 @@ do {                                                                    \
                     /* to refill jumbo_store */                         \
                     ctx_swap();                                         \
                 }                                                       \
-                __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0], \
-                            OR, 1, <<NFD_IN_DMA_STATE_JUMBO] }          \
+                                                                        \
             } else {                                                    \
                 curr_buf = precache_bufs_use();                         \
-                __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0], \
-                            AND~, 1, <<NFD_IN_DMA_STATE_JUMBO] }        \
             }                                                           \
             _ISSUE_PROC_MU_CHK(curr_buf);                               \
             __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
@@ -1250,8 +1247,6 @@ do {                                                                    \
                 NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);          \
             __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
                         AND~, 1, <<NFD_IN_DMA_STATE_CONT] }             \
-            __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
-                        AND~, 1, <<NFD_IN_DMA_STATE_JUMBO] }            \
             __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, 0] }              \
             __asm { alu[NFD_IN_Q_STATE_PTR[2], --, B, 0] }              \
         }                                                               \

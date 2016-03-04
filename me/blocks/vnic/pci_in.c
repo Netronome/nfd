@@ -176,6 +176,7 @@ nfd_in_fill_meta(void *pkt_info,
                  __xread struct nfd_in_pkt_desc *nfd_in_meta)
 {
     unsigned int data_len;
+    unsigned int bls;
 
     ctassert(__is_in_reg_or_lmem(pkt_info));
 
@@ -196,11 +197,11 @@ nfd_in_fill_meta(void *pkt_info,
 #if (NFD_IN_BLM_JUMBO_BLS == NFD_IN_BLM_REG_BLS)
     ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_REG_BLS;
 #else
-    if (data_len > (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET)) {
-        ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_JUMBO_BLS;
-    } else {
-        ((struct nbi_meta_pkt_info *) pkt_info)->bls = NFD_IN_BLM_REG_BLS;
+    bls = NFD_IN_BLM_JUMBO_BLS;
+    if (!nfd_in_meta->jumbo) {
+        bls = NFD_IN_BLM_REG_BLS;
     }
+    ((struct nbi_meta_pkt_info *) pkt_info)->bls = bls;
 #endif
 
     ((struct nbi_meta_pkt_info *) pkt_info)->muptr = nfd_in_meta->buf_addr;
