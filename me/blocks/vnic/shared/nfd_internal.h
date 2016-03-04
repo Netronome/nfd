@@ -338,14 +338,16 @@ struct nfd_in_queue_info {
 };
 
 
-
 #define NFD_IN_DMA_STATE_UP   31
 #define NFD_IN_DMA_STATE_CONT 30
 #define NFD_IN_DMA_STATE_LSO_HDR_LEN_MASK 0xFF
 #define NFD_IN_DMA_STATE_LSO_HDR_LEN_SHIFT 16
 #define NFD_IN_DMA_STATE_INVALID    31
 #define NFD_IN_DMA_STATE_JUMBO      30
-
+#define NFD_IN_DMA_STATE_OFFSET_MASK    0x3f
+#define NFD_IN_DMA_STATE_OFFSET_SHIFT   24
+#define NFD_IN_DMA_STATE_DATA_LEN_MASK  0xFFFF
+#define NFD_IN_DMA_STATE_DATA_LEN_SHIFT 0
 
 struct nfd_in_dma_state {
     union {

@@ -1183,77 +1183,159 @@ do {                                                                    \
         }                                                               \
                                                                         \
     } else {                                                            \
+        unsigned int data_len;                                          \
+        unsigned int offset;                                            \
+        int len_chk;                                                    \
+                                                                        \
         if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT) == 0) { \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                  \
                          NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_TX_DESC);\
             /* Initialise continuation data */                          \
+            data_len = tx_desc.pkt##_pkt##.data_len;                    \
+            offset = tx_desc.pkt##_pkt##.offset;                        \
+            __asm { alu[NFD_IN_Q_STATE_PTR[3], --, b,                   \
+                        offset, <<NFD_IN_DMA_STATE_OFFSET_SHIFT] }      \
+            __asm { alu[NFD_IN_Q_STATE_PTR[3], NFD_IN_Q_STATE_PTR[3], or, \
+                        data_len, <<NFD_IN_DMA_STATE_DATA_LEN_SHIFT] }  \
                                                                         \
             /* XXX check efficiency */                                  \
-            if (tx_desc.pkt##_pkt##.data_len >                          \
-                (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET)) {           \
+            if (data_len > (NFD_IN_BLM_REG_SIZE - NFD_IN_DATA_OFFSET)) { \
+                unsigned int pkt_len;                                   \
+                                                                        \
                 while (precache_bufs_jumbo_use(&curr_buf) != 0) {       \
                     /* Allow service context to run */                  \
                     /* to refill jumbo_store */                         \
                     ctx_swap();                                         \
                 }                                                       \
                                                                         \
+                /* Check that the packet will fit within */             \
+                /* a buffer of NFD_IN_BLM_JUMBO_SIZE.  This is */       \
+                /* determined by the packet length rather than the */   \
+                /* DMA length, because the amount of meta data */       \
+                /* the DMA start address, but not the packet start */   \
+                /* address. */                                          \
+                pkt_len = data_len - offset;                            \
+                if (pkt_len > (NFD_IN_BLM_JUMBO_SIZE -                  \
+                               NFD_IN_DATA_OFFSET)) {                   \
+                    /* Flag the packet as invalid */                    \
+                    curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID);        \
+                }                                                       \
+                                                                        \
             } else {                                                    \
                 curr_buf = precache_bufs_use();                         \
+                                                                        \
+                if (data_len == 0) {                                    \
+                    /* Flag the packet as invalid */                    \
+                    curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID);        \
+                }                                                       \
             }                                                           \
             _ISSUE_PROC_MU_CHK(curr_buf);                               \
             __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],   \
                         OR, 1, <<NFD_IN_DMA_STATE_CONT] }               \
-            __asm { alu[temp, 0x7f, AND, tx_desc.pkt##_pkt##.__raw[0], >>24] } \
-            __asm { alu[NFD_IN_Q_STATE_PTR[2], NFD_IN_Q_STATE_PTR[2], -, \
-                        temp] }                                         \
             __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, curr_buf] }       \
+            __asm { alu[NFD_IN_Q_STATE_PTR[2], --, b, 0] }              \
         }                                                               \
-        __asm { alu[curr_buf, --, B, NFD_IN_Q_STATE_PTR[1]] }           \
                                                                         \
-        /* Get the data/dma length */                                   \
+        /* Get and check the data/dma length */                         \
         /* This is a gather packet so use the dma_len from the */       \
         /* descriptor is used for this segment. */                      \
         dma_len = tx_desc.pkt##_pkt##.dma_len;                          \
-                                                                        \
-        /* Use continuation data */                                     \
-        cpp_addr_lo = curr_buf << 11;                                   \
-        __asm { alu[cpp_addr_lo, cpp_addr_lo, +, NFD_IN_Q_STATE_PTR[2]] } \
-        __asm { alu[NFD_IN_Q_STATE_PTR[2], NFD_IN_Q_STATE_PTR[2], +,    \
-                    dma_len] }                                          \
-                                                                        \
-        pcie_hi_word =                                                  \
-            (pcie_hi_word_part |                                        \
-             NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(tx_desc.pkt##_pkt##.dma_addr_hi)); \
-        pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;                 \
-                                                                        \
-                                                                        \
-        /* Check for and handle large (jumbo) packets  */               \
-        if (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                        \
-            do {                                                        \
-                _ISSUE_PROC_JUMBO(_pkt, curr_buf);                      \
-                NFD_IN_LSO_CNTR_INCR(                                   \
-                    nfd_in_lso_cntr_addr,                               \
-                    NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_JUMBO_TX_DESC); \
-            } while (dma_len > NFD_IN_DMA_SPLIT_LEN);                   \
+        if (dma_len == 0) {                                             \
+            /* Set invalid bit in curr_buf */                           \
+            __asm { alu[NFD_IN_Q_STATE_PTR[1], NFD_IN_Q_STATE_PTR[1],   \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID] }            \
         }                                                               \
                                                                         \
-        /* Issue final DMA for the packet */                            \
-        dma_out.pkt##_pkt##.__raw[0] = cpp_addr_lo + NFD_IN_DATA_OFFSET; \
-        dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                    \
-        dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word |                  \
-                                 NFP_PCIE_DMA_CMD_LENGTH(dma_len - 1)); \
+        /* Use continuation data */                                     \
+        /* cpp_addr_lo = ((curr_buf << 11) + */                         \
+        /*                - offset + bytes_dmaed) */                    \
+        /* XXX NFD_IN_DATA_OFFSET is added while copying to xfers */    \
+        __asm { alu[cpp_addr_lo, --, b, NFD_IN_Q_STATE_PTR[1], <<11] }  \
+        __asm { alu[offset, NFD_IN_DMA_STATE_OFFSET_MASK, and,          \
+                    NFD_IN_Q_STATE_PTR[3],                              \
+                    >>NFD_IN_DMA_STATE_OFFSET_SHIFT] }                  \
+        cpp_addr_lo -= offset;                                          \
+        __asm { alu[cpp_addr_lo, cpp_addr_lo, +, NFD_IN_Q_STATE_PTR[2]] } \
                                                                         \
-        if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                      \
-            dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_no_sig_part |        \
-                                            (curr_buf >> 21));          \
-            pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
-                                NFD_IN_DATA_DMA_QUEUE);                 \
+        /* Update bytes_dmaed, and check it's <= data_len */            \
+        __asm { alu[NFD_IN_Q_STATE_PTR[2], NFD_IN_Q_STATE_PTR[2], +,    \
+                    dma_len] }                                          \
+        __asm { ld_field_w_clr[data_len, 3, NFD_IN_Q_STATE_PTR[3]] }    \
+        __asm { alu[len_chk, data_len, -, NFD_IN_Q_STATE_PTR[2]] }      \
+        if (len_chk < 0) {                                              \
+            /* Set invalid bit in curr_buf */                           \
+            __asm { alu[NFD_IN_Q_STATE_PTR[1], NFD_IN_Q_STATE_PTR[1],   \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID] }            \
+        }                                                               \
+                                                                        \
+        /* We have finished the per segment host checks */              \
+        /* Copy curr_buf into a GPR for the rest of the processing. */  \
+        __asm { alu[curr_buf, --, b, NFD_IN_Q_STATE_PTR[1]] }           \
+                                                                        \
+        /* Test whether any host sanity checks have failured so far */  \
+        if ((curr_buf & (1 << NFD_IN_DMA_STATE_INVALID)) == 0) {        \
+            /* Perform the segment DMA */                               \
+            pcie_hi_word =                                              \
+                (pcie_hi_word_part |                                    \
+                 NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(                         \
+                     tx_desc.pkt##_pkt##.dma_addr_hi));                 \
+            pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;             \
+                                                                        \
+                                                                        \
+            /* Check for and handle large (jumbo) packets  */           \
+            if (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                    \
+                do {                                                    \
+                    _ISSUE_PROC_JUMBO(_pkt, curr_buf);                  \
+                    NFD_IN_LSO_CNTR_INCR(                               \
+                        nfd_in_lso_cntr_addr,                           \
+                        NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_JUMBO_TX_DESC); \
+                } while (dma_len > NFD_IN_DMA_SPLIT_LEN);               \
+            }                                                           \
+                                                                        \
+            /* Issue final DMA for the packet */                        \
+            dma_out.pkt##_pkt##.__raw[0] = cpp_addr_lo + NFD_IN_DATA_OFFSET; \
+            dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                \
+            dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word |              \
+                                            NFP_PCIE_DMA_CMD_LENGTH(    \
+                                                dma_len - 1));          \
+                                                                        \
+            if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                  \
+                dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_no_sig_part |    \
+                                                (curr_buf >> 21));      \
+                pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,     \
+                                    NFD_IN_DATA_DMA_QUEUE);             \
+            } else {                                                    \
+                cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src); \
+                dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_word |           \
+                                                (curr_buf >> 21));      \
+                __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,          \
+                               NFD_IN_DATA_DMA_QUEUE,                   \
+                               sig_done, &last_of_batch_dma_sig);       \
+            }                                                           \
         } else {                                                        \
-            cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src);   \
-            dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word | (curr_buf >> 21); \
-             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,             \
-                            NFD_IN_DATA_DMA_QUEUE,                      \
-                            sig_done, &last_of_batch_dma_sig);          \
+            /* Suppress segment DMA */                                  \
+            /* Handle the DMA sequence numbers for the batch */         \
+            if (_type == NFD_IN_DATA_EVENT_TYPE) {                      \
+                cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE, \
+                                                  PCI_IN_ISSUE_DMA_IDX); \
+                cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, _src);     \
+                cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(              \
+                    NFD_IN_DATA_DMA_TOKEN);                             \
+                cpp_hi_word |=                                          \
+                    NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(                     \
+                        NFD_IN_DATA_CFG_REG_SIG_ONLY);                  \
+                                                                        \
+                dma_out.pkt##_pkt##.__raw[0] = 0;                       \
+                dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;             \
+                dma_out.pkt##_pkt##.__raw[2] = 0;                       \
+                dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |     \
+                                                NFP_PCIE_DMA_CMD_LENGTH(0)); \
+                cpp_hi_word |= NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(          \
+                    NFD_IN_DATA_CFG_REG);                               \
+                __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,            \
+                               NFD_IN_DATA_DMA_QUEUE,                   \
+                               sig_done, &last_of_batch_dma_sig);       \
+            }                                                           \
         }                                                               \
                                                                         \
         /* Set up notify message */                                     \
@@ -1270,9 +1352,35 @@ do {                                                                    \
         batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];  \
         batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
                                                                         \
-        /* Clear continuation data on EOP */                            \
+        /* Do final host checks and clear continuation data on EOP */   \
         if (tx_desc.pkt##_pkt##.eop) {                                  \
-            /* XXX could combine clearing "cont" and "jumbo" */         \
+            int info_chk;                                               \
+                                                                        \
+            data_len = tx_desc.pkt##_pkt##.data_len;                    \
+            offset = tx_desc.pkt##_pkt##.offset;                        \
+                                                                        \
+            /* Check data_len and offset match original */              \
+            info_chk = offset << NFD_IN_DMA_STATE_OFFSET_SHIFT;         \
+            info_chk |= data_len;                                       \
+            __asm { alu[info_chk, NFD_IN_Q_STATE_PTR[3], -, info_chk] } \
+            if (info_chk != 0) {                                        \
+                /* The original information supplied does not */        \
+                /* match the final information supplied. */             \
+                curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID);            \
+            }                                                           \
+                                                                        \
+            /* Check the amount of data matches the requested */        \
+            __asm { alu[info_chk, NFD_IN_Q_STATE_PTR[2], -, data_len] } \
+            if (info_chk != 0) {                                        \
+                /* The amount of data actually DMAed does not match */  \
+                /* the amount of data advertised.  */                   \
+                curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID);            \
+            }                                                           \
+                                                                        \
+            /* Rewrite the curr_buf message in case it changed above */ \
+            batch_out.pkt##_pkt##.__raw[1] = curr_buf;                  \
+                                                                        \
+            /* Clear state data */                                      \
             NFD_IN_LSO_CNTR_INCR(                                       \
                 nfd_in_lso_cntr_addr,                                   \
                 NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);          \
@@ -1280,6 +1388,7 @@ do {                                                                    \
                         AND~, 1, <<NFD_IN_DMA_STATE_CONT] }             \
             __asm { alu[NFD_IN_Q_STATE_PTR[1], --, B, 0] }              \
             __asm { alu[NFD_IN_Q_STATE_PTR[2], --, B, 0] }              \
+            __asm { alu[NFD_IN_Q_STATE_PTR[3], --, B, 0] }              \
         }                                                               \
     }                                                                   \
                                                                         \
