@@ -69,6 +69,7 @@ static volatile SIGNAL_PAIR precache_sig1;
 static __xread unsigned int bufs_rd[NFD_IN_BUF_RECACHE_WM];
 static unsigned int blm_queue_addr;
 static unsigned int blm_queue_num;
+static unsigned int buf_addr_msk;
 
 __shared __lmem unsigned int jumbo_store[NFD_IN_JUMBO_STORE_SZ];
 __shared __gpr unsigned int jumbo_cnt = 0;
@@ -195,43 +196,43 @@ do {                                                                         \
     /* Move to empty slot */                                                 \
     __asm { alu[--, --, b, NFD_IN_BUF_STORE_PTR++] }                         \
                                                                              \
-    /* Perform bulk copy */                                                  \
+    /* Perform bulk copy, masking out top 3 bits in the process */           \
     switch(_num) {                                                           \
     case 16:                                                                 \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 60] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 56] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 52] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 48] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 60,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 56,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 52,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 48,     \
+                    and, buf_addr_msk] }                                     \
     case 12:                                                                 \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 44] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 40] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 36] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 32] }                           \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 44,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 40,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 36,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 32,     \
+                    and, buf_addr_msk] }                                     \
     case 8:                                                                  \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 28] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 24] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 20] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 16] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 12] }                           \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 8] }                            \
-        __asm { alu[NFD_IN_BUF_STORE_PTR++, --, b,                           \
-                    bufs_rd + (4 * _start) + 4] }                            \
-        __asm { alu[NFD_IN_BUF_STORE_PTR, --, b,                             \
-                    bufs_rd + (4 * _start) + 0] }                            \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 28,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 24,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 20,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 16,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 12,     \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 8,      \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR++, bufs_rd + (4 * _start) + 4,      \
+                    and, buf_addr_msk] }                                     \
+        __asm { alu[NFD_IN_BUF_STORE_PTR, bufs_rd + (4 * _start) + 0,        \
+                    and, buf_addr_msk] }                                     \
     }                                                                        \
 } while (0)
 
@@ -261,6 +262,10 @@ precache_bufs_setup()
     /* Write a magic value to buf_store[0]. This should never be
      * used and will help to identify buf_store underflows */
     buf_store[0] = 0x195fde01; /* Magically becomes 0xcafef00800 */
+
+    /* buf_addr_msk is used to mask buffers from the BLM to 29 bits.
+     * The high 3 bits are used for other purposes so must be cleared. */
+    buf_addr_msk = 0x1fffffff;
 }
 
 

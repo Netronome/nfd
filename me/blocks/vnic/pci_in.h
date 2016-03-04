@@ -230,9 +230,9 @@ struct nfd_in_tx_desc {
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+-----------------------------+---+-------------+
  *    0  |S|    offset   |           seq_num           |itf|    q_num    |
- *       +-+-------------+-----------------------------+---+-------------+
- *    1  |                           buf_addr                            |
- *       +---------------+---------------+-+-+---------------------------+
+ *       +-+-+-+---------+-----------------------------+---+-------------+
+ *    1  |I|J|S|                       buf_addr                          |
+ *       +-+-+-+---------+---------------+-+-+---------------------------+
  *    2  |     flags     |   l4_offset   |L|S|           mss             |
  *       +---------------+---------------+-+-+---------------------------+
  *    3  |            data_len           |              vlan             |
@@ -240,7 +240,7 @@ struct nfd_in_tx_desc {
  *
  *    itf -> intf
  *    L -> Last packet in a series of LSO packets
- *    S -> sp0 and sp1 (spare)
+ *    S -> sp0, sp1, and sp2 (spare)
  */
 /**
  * NFD-to-App (TX) packet descriptor
@@ -256,7 +256,10 @@ struct nfd_in_pkt_desc {
             unsigned int intf:2;        /**< PCIe num the packet arrived on */
             unsigned int q_num:6;       /**< Queue num the packet arrived on */
 
-            unsigned int buf_addr:32;   /**< Bits [39:11] of the MU buffer */
+            unsigned int invalid:1;     /**< Packet invalid, recommend drop */
+            unsigned int jumbo:1;       /**< buf_addr from jumbo pool */
+            unsigned int sp2:1;         /**< Spare bit (unused) */
+            unsigned int buf_addr:29;   /**< Bits [39:11] of the MU buffer */
 
             unsigned int flags:8;       /**< Flags for the packet */
             unsigned int l4_offset:8;   /**< Offset of L4 header in packet */

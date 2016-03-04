@@ -95,9 +95,9 @@
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+-------------------------------+---+-----------+
  *    0  |S|    offset   |           reserved            |itf|   q_num   |
- *       +-+-------------+-------------------------------+---+-----------+
- *    1  |                           buf_addr                            |
- *       +---------------+---------------+-------------------------------+
+ *       +-+-+-+---------+-------------------------------+---+-----------+
+ *    1  |I|J|S|                       buf_addr                          |
+ *       +-+-+-+---------+---------------+-------------------------------+
  *    2  |     flags     |   l4_offset   |               lso             |
  *       +---------------+---------------+-------------------------------+
  *    3  |            data_len           |              vlan             |
@@ -127,7 +127,9 @@
 #define NFD_IN_SEQN_fld         0, 23, 8
 #define NFD_IN_INTF_fld         0, 7, 6
 #define NFD_IN_QID_fld          0, 5, 0
-#define NFD_IN_BUFADDR_fld      1, 31, 0
+#define NFD_IN_INVALID_fld      1, 31, 31
+#define NFD_IN_JUMBO_fld        1, 30, 30
+#define NFD_IN_BUFADDR_fld      1, 28, 0
 #define NFD_IN_FLAGS_fld        2, 31, 24
 #define NFD_IN_FLAGS_TX_CSUM_fld        2, 31, 31
 #define NFD_IN_FLAGS_TX_IPV4_CSUM_fld   2, 30, 30
