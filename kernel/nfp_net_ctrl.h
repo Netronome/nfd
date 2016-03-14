@@ -104,6 +104,7 @@
 #define   NFP_NET_CFG_CTRL_L2SWITCH_LOCAL (0x1 << 23) /* Switch to local */
 #define   NFP_NET_CFG_CTRL_VXLAN	  (0x1 << 24) /* VXLAN tunnel support */
 #define   NFP_NET_CFG_CTRL_NVGRE	  (0x1 << 25) /* NVGRE tunnel support */
+#define   NFP_NET_CFG_CTRL_MSIX_TX_OFF	  (0x1 << 26) /* MSIX TX off */
 #define NFP_NET_CFG_UPDATE              0x0004
 #define   NFP_NET_CFG_UPDATE_GEN          (0x1 <<  0) /* General update */
 #define   NFP_NET_CFG_UPDATE_RING         (0x1 <<  1) /* Ring config change */

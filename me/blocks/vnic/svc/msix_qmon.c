@@ -403,6 +403,11 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
             vf_rx_rings_new &= MSIX_VF_RINGS_MASK;
         }
 
+	/* Avoiding TX interrupts if requested */
+        if (control & NFP_NET_CFG_CTRL_MSIX_TX_OFF)
+            vf_tx_rings_new = 0;
+	
+
         /* Set MSI-X automask bits.  We assume that a VF/PF has the same
          * number of RX and TX rings and simple set the auto-mask bits for
          * all queues of the VF/PF depending on the auto-mask bit in the
