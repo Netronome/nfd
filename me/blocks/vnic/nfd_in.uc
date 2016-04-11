@@ -165,13 +165,13 @@
     #define __EMEM_NUM
     #define_eval __EMEM_NUM strright('NFD_IN_WQ_SHARED', 1)
 
-    #if defined(NFD_PCIE0_EMEM) || defined(NFD_PCIE0_EMEM) || defined(NFD_PCIE0_EMEM) || defined(NFD_PCIE0_EMEM)
+    #if defined(NFD_PCIE0_EMEM) || defined(NFD_PCIE1_EMEM) || defined(NFD_PCIE2_EMEM) || defined(NFD_PCIE3_EMEM)
 
         .alloc_resource nfd_in_ring_nums0 NFD_IN_WQ_SHARED/**/_queues global NFD_IN_NUM_WQS NFD_IN_NUM_WQS
         .declare_resource nfd_in_ring_nums_res0 global NFD_IN_NUM_WQS nfd_in_ring_nums0
         .alloc_resource nfd_in_ring_num00 nfd_in_ring_nums_res0 global 1
 
-    #endif /* defined(NFD_PCIE0_EMEM) || defined(NFD_PCIE0_EMEM) || defined(NFD_PCIE0_EMEM) || defined(NFD_PCIE0_EMEM) */
+    #endif /* defined(NFD_PCIE0_EMEM) || defined(NFD_PCIE1_EMEM) || defined(NFD_PCIE2_EMEM) || defined(NFD_PCIE3_EMEM) */
 
     #ifdef NFD_PCIE0_EMEM
 
