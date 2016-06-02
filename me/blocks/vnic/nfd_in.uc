@@ -64,6 +64,10 @@
 #error "NFD_IN_BLM_JUMBO_POOL must be defined by the user"
 #endif
 
+#ifndef NFD_IN_BLM_JUMBO_SIZE
+#error "NFD_IN_BLM_JUMBO_SIZE must be defined by the user"
+#endif
+
 #ifndef NFD_IN_BLM_RADDR
 #error "NFD_IN_BLM_RADDR must be defined by the user"
 #endif
