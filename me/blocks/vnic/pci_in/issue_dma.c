@@ -678,7 +678,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         /*cpp_hi_word = NFP_PCIE_DMA_CMD_CPP_ADDR_HI(__ISLAND | (2 << 6));*/ \
         cpp_hi_word = 0;                                                     \
         cpp_addr_lo = buf_addr & 0xFFFFFFFF;                                 \
-        pcie_hi_word =                                                       \
+        pcie_hi_word = pcie_hi_word_part |                                   \
               NFP_PCIE_DMA_CMD_PCIE_ADDR_HI(tx_desc.pkt##_pkt##.dma_addr_hi);\
         pcie_addr_lo = tx_desc.pkt##_pkt##.dma_addr_lo;                      \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);    \
