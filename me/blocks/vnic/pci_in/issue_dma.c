@@ -842,7 +842,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd]] }      \
                                                                              \
     while (lso_dma_index < dma_len) {                                        \
-        if (curr_buf == 0) {                                                 \
+        if ((curr_buf & NFD_IN_DMA_STATE_CURR_BUF_msk) == 0) {               \
             /* 2. Get an MU buffer */                                        \
             while (precache_bufs_jumbo_use(&curr_buf) != 0) {                \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
@@ -971,8 +971,9 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                             &lso_journal_sig);                               \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING);\
-            /* clear curr_buf */                                             \
-            curr_buf = 0;                                                    \
+            /* clear curr_buf, leaving invalid untouched */                  \
+            curr_buf &= (NFD_IN_DMA_STATE_INVALID_msk <<                     \
+                         NFD_IN_DMA_STATE_INVALID_shf);                      \
             /* used to track how many desc we have put on ring will */       \
             /* set value in the batch out for the packet so that */          \
             /* notify how how many to read in  */                            \
@@ -982,7 +983,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
     /* Check whether this is the last LSO segment */                         \
     if ((tx_desc.pkt##_pkt##.eop)) {                                         \
-        if (curr_buf) {                                                      \
+        if (curr_buf & NFD_IN_DMA_STATE_CURR_BUF_msk) {                      \
             /* We have a partially filled final buffer.  Send it. */         \
             issued_tmp.eop = 1;                                              \
             issued_tmp.sp1 = 0;                                              \
@@ -1007,9 +1008,10 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 nfd_in_lso_cntr_addr,                                        \
                 NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING_END);    \
             lso_issued_cnt++;                                                \
-            /* clear curr_buf */                                             \
-            curr_buf = 0;                                                    \
         }                                                                    \
+                                                                             \
+        /* clear curr_buf, including the invalid bit */                      \
+        curr_buf = 0;                                                        \
                                                                              \
         /* clear CONT bit */                                                 \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CONT_wrd],           \
