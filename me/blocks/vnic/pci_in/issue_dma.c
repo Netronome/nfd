@@ -938,14 +938,14 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word |                       \
                                         NFP_PCIE_DMA_CMD_LENGTH(             \
                                             dma_length - 1));                \
+        /* XXX Issue DMA with ctx_swap to ensure we can reuse the XFERs */   \
+        /* (dma_out.pkt##_pkt##) when we wake up again.  */                  \
         __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                       \
-                       NFD_IN_DATA_DMA_QUEUE, sig_done, &lso_enq_sig);       \
+                       NFD_IN_DATA_DMA_QUEUE, ctx_swap, &lso_enq_sig);       \
         /* get lso_payload_len from LM */                                    \
         __asm { alu[lso_payload_len, --, B,                                  \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd]] }  \
                                                                              \
-        /* Make sure we can reuse the XFERs (dma_out.pkt##_pkt##) */         \
-        while (!signal_test(&lso_enq_sig));                                  \
         /* if we are at end of mu_buf */                                     \
         if (lso_payload_len >= mss) {                                        \
             /* put finished mu buffer on lso_ring to notify */               \
@@ -970,7 +970,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                             nfd_in_issued_lso_ring_addr,                     \
                             &batch_out.pkt##_pkt##,                          \
                             sizeof(struct nfd_in_issued_desc),               \
-                            sizeof(struct nfd_in_issued_desc), sig_done,     \
+                            sizeof(struct nfd_in_issued_desc), ctx_swap,     \
                             &lso_journal_sig);                               \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING);\
@@ -982,7 +982,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* set value in the batch out for the packet so that */          \
             /* notify how how many to read in  */                            \
             lso_issued_cnt++;                                                \
-            while (!signal_test(&lso_journal_sig));                          \
         }                                                                    \
     } /* while */                                                            \
                                                                              \
@@ -1007,7 +1006,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                           nfd_in_issued_lso_ring_addr,                       \
                           &batch_out.pkt##_pkt##,                            \
                           sizeof(struct nfd_in_issued_desc),                 \
-                          sizeof(struct nfd_in_issued_desc), sig_done,       \
+                          sizeof(struct nfd_in_issued_desc), ctx_swap,       \
                           &lso_journal_sig);                                 \
             NFD_IN_LSO_CNTR_INCR(                                            \
                 nfd_in_lso_cntr_addr,                                        \
@@ -1016,7 +1015,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* clear curr_buf */                                             \
             __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd],   \
                         --, B, 0] }                                          \
-            while (!signal_test(&lso_journal_sig));                          \
         }                                                                    \
                                                                              \
         /* clear CONT bit */                                                 \
