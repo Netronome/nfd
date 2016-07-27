@@ -405,6 +405,7 @@ do {                                                                         \
             wait_for_all_single(&lso_sig_pair.even);                         \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                               NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING); \
+            _NOTIFY_MU_CHK(_pkt)                                             \
             pkt_desc_tmp.sp0 = 0;                                            \
             pkt_desc_tmp.offset = lso_pkt.offset;                            \
             NFD_IN_ADD_SEQN_PROC;                                            \

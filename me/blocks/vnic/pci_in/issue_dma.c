@@ -856,6 +856,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);  \
                     ctx_swap();                                              \
                 }                                                            \
+                _ISSUE_PROC_MU_CHK(curr_buf);                                \
                 __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd], \
                             --, B, curr_buf] }                               \
                                                                              \
@@ -896,6 +897,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 /* use the regular buffer associated with this _pkt slot */  \
                 /* in the batch. */                                          \
                 curr_buf = precache_bufs_use();                              \
+                _ISSUE_PROC_MU_CHK(curr_buf);                                \
                 curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);             \
             }                                                                \
             /* Build the ring message more or less as normal, so that */     \
