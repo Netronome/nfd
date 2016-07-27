@@ -20,7 +20,7 @@
 #define _BLOCKS__VNIC_PCI_IN_ISSUE_DMA_STATUS_H_
 
 #define STATUS_ISSUE_DMA_START   24
-#define STATUS_QUEUE_START1      20 /* XXX avoid name clash, add rtsym rather */
+#define STATUS_QUEUE_START1      16 /* XXX avoid name clash, add rtsym rather */
 #define STATUS_Q_SEL_START1      63 /* XXX avoid name clash, add rtsym rather */
 
 struct nfd_in_issue_dma_status {

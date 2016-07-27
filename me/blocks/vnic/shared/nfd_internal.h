@@ -338,17 +338,59 @@ struct nfd_in_queue_info {
 };
 
 
-#define NFD_IN_DMA_STATE_UP   31
-#define NFD_IN_DMA_STATE_CONT 30
-#define NFD_IN_DMA_STATE_LOCKED     29
-#define NFD_IN_DMA_STATE_LSO_HDR_LEN_MASK 0xFF
-#define NFD_IN_DMA_STATE_LSO_HDR_LEN_SHIFT 16
-#define NFD_IN_DMA_STATE_INVALID    31
-#define NFD_IN_DMA_STATE_JUMBO      30
-#define NFD_IN_DMA_STATE_OFFSET_MASK    0x3f
-#define NFD_IN_DMA_STATE_OFFSET_SHIFT   24
-#define NFD_IN_DMA_STATE_DATA_LEN_MASK  0xFFFF
-#define NFD_IN_DMA_STATE_DATA_LEN_SHIFT 0
+#define NFD_IN_DMA_STATE_UP_msk             1
+#define NFD_IN_DMA_STATE_UP_shf             31
+#define NFD_IN_DMA_STATE_UP_wrd             0
+#define NFD_IN_DMA_STATE_CONT_msk           1
+#define NFD_IN_DMA_STATE_CONT_shf           30
+#define NFD_IN_DMA_STATE_CONT_wrd           0
+#define NFD_IN_DMA_STATE_LOCKED_msk         1
+#define NFD_IN_DMA_STATE_LOCKED_shf         29
+#define NFD_IN_DMA_STATE_LOCKED_wrd         0
+#define NFD_IN_DMA_STATE_LSO_HDR_LEN_msk    0xFF
+#define NFD_IN_DMA_STATE_LSO_HDR_LEN_shf    16
+#define NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd    0
+#define NFD_IN_DMA_STATE_LSO_SEQ_CNT_msk    0xFF
+#define NFD_IN_DMA_STATE_LSO_SEQ_CNT_shf    8
+#define NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd    0
+#define NFD_IN_DMA_STATE_RID_msk            0xFF
+#define NFD_IN_DMA_STATE_RID_shf            0
+#define NFD_IN_DMA_STATE_RID_wrd            0
+
+#define NFD_IN_DMA_STATE_INVALID_msk        1
+#define NFD_IN_DMA_STATE_INVALID_shf        31
+#define NFD_IN_DMA_STATE_INVALID_wrd        1
+#define NFD_IN_DMA_STATE_JUMBO_msk          1
+#define NFD_IN_DMA_STATE_JUMBO_shf          30
+#define NFD_IN_DMA_STATE_JUMBO_wrd          1
+#define NFD_IN_DMA_STATE_CURR_BUF_msk       0x1FFFFFFF
+#define NFD_IN_DMA_STATE_CURR_BUF_shf       0
+#define NFD_IN_DMA_STATE_CURR_BUF_wrd       1
+
+#define NFD_IN_DMA_STATE_FLAGS_msk          0xFF
+#define NFD_IN_DMA_STATE_FLAGS_shf          24
+#define NFD_IN_DMA_STATE_FLAGS_wrd          2
+#define NFD_IN_DMA_STATE_L4OFFSET_msk       0xFF
+#define NFD_IN_DMA_STATE_L4OFFSET_shf       16
+#define NFD_IN_DMA_STATE_L4OFFSET_wrd       2
+#define NFD_IN_DMA_STATE_LSO_RES_msk        3
+#define NFD_IN_DMA_STATE_LSO_RES_shf        14
+#define NFD_IN_DMA_STATE_LSO_RES_wrd        2
+#define NFD_IN_DMA_STATE_LSO_MSS_msk        0x3FFF
+#define NFD_IN_DMA_STATE_LSO_MSS_shf        0
+#define NFD_IN_DMA_STATE_LSO_MSS_wrd        2
+
+#define NFD_IN_DMA_STATE_OFFSET_msk         0x3f
+#define NFD_IN_DMA_STATE_OFFSET_shf         24
+#define NFD_IN_DMA_STATE_OFFSET_wrd         3
+#define NFD_IN_DMA_STATE_DATA_LEN_msk       0xFFFFFF
+#define NFD_IN_DMA_STATE_DATA_LEN_shf       0
+#define NFD_IN_DMA_STATE_DATA_LEN_wrd       3
+
+#define NFD_IN_DMA_STATE_BYTES_DMAED_wrd    4
+#define NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd    5
+#define NFD_IN_DMA_STATE_LSO_OFFSET_wrd     6
+
 
 struct nfd_in_dma_state {
     union {
@@ -368,12 +410,21 @@ struct nfd_in_dma_state {
             unsigned int sp1:1;
             unsigned int curr_buf:29;
 
-            int store0;
+            unsigned int flags:8;       /* Original flags for the packet */
+            unsigned int l4_offset:8;   /* Original LSO l4_offset */
+            unsigned int res:2;         /* Not tested for consistency */
+            unsigned int mss:14;        /* Original LSO MSS */
 
-            unsigned int store1; /* length of lso payload filled used in
-                                             issue_dma */
+            unsigned int offset:8;      /* Original TX desc offset (meta len) */
+            unsigned int data_len:24;   /* Original TX desc data_len */
+
+            unsigned int bytes_dmaed;   /* Total bytes dmaed for data_len */
+            unsigned int lso_payload_len;   /* Bytes dmaed for current mss */
+
+            unsigned int spare0;
+            unsigned int spare1;
         };
-        unsigned int __raw[4];
+        unsigned int __raw[8];
     };
 };
 

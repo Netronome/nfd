@@ -55,7 +55,8 @@ extern __shared __lmem struct nfd_in_dma_state queue_data[NFD_IN_MAX_QUEUES];
  * Xfers to display state
  */
 static __xread unsigned int status_queue_sel = 0;
-static __xwrite struct nfd_in_dma_state status_queue_info = {0, 0, 0, 0};
+static __xwrite struct nfd_in_dma_state status_queue_info = {0, 0, 0, 0,
+                                                             0, 0, 0, 0};
 static __xwrite struct nfd_in_issue_dma_status status_issued = _ZERO_ARRAY;
 
 SIGNAL status_throttle;
