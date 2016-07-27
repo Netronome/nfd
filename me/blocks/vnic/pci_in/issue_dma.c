@@ -662,9 +662,16 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     unsigned int mode;                                                       \
     unsigned int header_to_read;                                             \
     unsigned int hdr_remainder;                                              \
-    __gpr unsigned int curr_buf = 0;                                         \
-    __gpr unsigned int lso_hdr_len = 0;                                      \
+    __gpr unsigned int curr_buf;                                             \
+    __gpr unsigned int lso_hdr_len;                                          \
     __gpr unsigned int lso_payload_len;                                      \
+    unsigned int data_len;                                                   \
+    unsigned int offset;                                                     \
+    unsigned int l4_offset;                                                  \
+    unsigned int mss;                                                        \
+    unsigned int lso_req_wrd;                                                \
+                                                                             \
+                                                                             \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                                   \
                                                                              \
     /* data_dma_seq_issued was pre-incremented once we could */              \
@@ -676,10 +683,56 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
     if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT_shf) == 0) { \
         /* This is a new LSO packet, prepare internal state */               \
-                                                                             \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CONT_wrd],           \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CONT_wrd],           \
                     OR, 1, <<NFD_IN_DMA_STATE_CONT_shf] }                    \
+                                                                             \
+        /* Initialise continuation data */                                   \
+        data_len = tx_desc.pkt##_pkt##.data_len;                             \
+        offset = tx_desc.pkt##_pkt##.offset;                                 \
+        if (data_len <= offset) {                                            \
+            /* LSO packet size can be up to 64kB (inclusive), */             \
+            /* but we only have 16 bits in the descriptor for data_len. */   \
+            /* data_len = meta_len + pkt_len, where meta_len == offset */    \
+            /* Hence the full data_len could be 0x10000 + offset, and */     \
+            /* the extreme wrapped value would be "offset". */               \
+            /* We unwrap the value by adding 64kB data_len. */               \
+            data_len += (64 * 1024);                                         \
+        }                                                                    \
+        __asm {                                                              \
+            alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_OFFSET_wrd],             \
+                --, b, offset, <<NFD_IN_DMA_STATE_OFFSET_shf] }              \
+        __asm {                                                              \
+            alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_DATA_LEN_wrd],           \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_DATA_LEN_wrd],           \
+                or, data_len, <<NFD_IN_DMA_STATE_DATA_LEN_shf] }             \
+                                                                             \
+        l4_offset = tx_desc.pkt##_pkt##.l4_offset;                           \
+        mss = tx_desc.pkt##_pkt##.mss;                                       \
+        lso_req_wrd = tx_desc.pkt##_pkt##.__raw[2];                          \
+        /* Copy aside the LSO request parameters for consistency checks */   \
+        /* Mask out the reserved bits during copy to avoid false positives */ \
+        __asm {                                                              \
+            alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_FLAGS_wrd],              \
+                lso_req_wrd, and~,                                           \
+                NFD_IN_DMA_STATE_LSO_RES_msk,                                \
+                <<NFD_IN_DMA_STATE_LSO_RES_shf] }                            \
+                                                                             \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],    \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],    \
+                    AND~, NFD_IN_DMA_STATE_LSO_HDR_LEN_msk,                  \
+                    <<NFD_IN_DMA_STATE_LSO_HDR_LEN_shf] }                    \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd],    \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd],    \
+                    AND~, NFD_IN_DMA_STATE_LSO_SEQ_CNT_msk,                  \
+                    <<NFD_IN_DMA_STATE_LSO_SEQ_CNT_shf] }                    \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd],    \
+                    --, B, 0] }                                              \
+                                                                             \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],    \
+                    --, b, 0] }                                              \
+        /* TODO How should curr_buf be handled */                            \
+                                                                             \
     } else {                                                                 \
         /* This is an existing LSO packet, sanity check internal state */    \
                                                                              \
@@ -755,7 +808,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         lso_dma_index += dma_length;                                         \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ);         \
-        queue_data[queue].lso_seq_cnt = 0;                                   \
         __wait_for_all(&lso_hdr_enq_sig, &lso_hdr_dma_sig);                  \
         /* We need to optimize here and kick the first LSO packet's data */  \
         /* including the header directly to emem buffer.*/                   \
@@ -951,11 +1003,25 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CONT_wrd],           \
                     AND~, 1, <<NFD_IN_DMA_STATE_CONT_shf] }                  \
                                                                              \
-        /* clear queue_data[queue].lso_hdr_len */                            \
+        /* clear LSO specific state */                                       \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],    \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],    \
                     AND~, NFD_IN_DMA_STATE_LSO_HDR_LEN_msk,                  \
                     <<NFD_IN_DMA_STATE_LSO_HDR_LEN_shf] }                    \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd],    \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd],    \
+                    AND~, NFD_IN_DMA_STATE_LSO_SEQ_CNT_msk,                  \
+                    <<NFD_IN_DMA_STATE_LSO_SEQ_CNT_shf] }                    \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_FLAGS_wrd],          \
+                    --, b, 0] }                                              \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd],    \
+                    --, B, 0] }                                              \
+                                                                             \
+        /* clear state shared with gather code */                            \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],    \
+                    --, b, 0] }                                              \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_OFFSET_wrd],     \
+                        --, B, 0] }                                          \
     }                                                                        \
     NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
                         NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS);              \
