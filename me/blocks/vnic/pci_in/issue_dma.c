@@ -836,8 +836,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
         }                                                                    \
                                                                              \
-        /* TODO How should curr_buf be handled */                            \
-                                                                             \
     } else {                                                                 \
         unsigned int mss_msk = NFD_IN_DMA_STATE_LSO_MSS_msk;                 \
                                                                              \
@@ -1148,8 +1146,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             dma_length = dma_left;                                           \
         }                                                                    \
                                                                              \
-        /* Update bytes_dmaed, and check it's <= data_len */                 \
-        /* TODO implement check and handle failure */                        \
+        /* Update bytes_dmaed for how much will be transfered */             \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],    \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],    \
                     +, dma_length] }                                         \
@@ -1173,9 +1170,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                                  NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_TX_DESC);\
         }                                                                    \
-        /* ASK Jon :*/                                                       \
-        /* Is it possible that at this point dma_length == 0 ? */            \
-        /* If so we don't need the following DMA !*/                         \
                                                                              \
         /* Get a DMA slot, we're using the DMAs allocated for jumbos */      \
         /* also for LSO. */                                                  \
