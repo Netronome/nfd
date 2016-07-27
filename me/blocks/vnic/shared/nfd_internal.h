@@ -137,6 +137,10 @@
 #define NFD_IN_ISSUED_LSO_RING1_SZ  65536  /* ring needs 204B per batch * number Queues */
 #define NFD_IN_MAX_LSO_HDR_SZ       256
 
+#ifndef NFD_IN_MIN_LSO_HDR_SZ
+#define NFD_IN_MIN_LSO_HDR_SZ       54
+#endif
+
 #ifndef NFD_IN_MAX_LSO_SEQ_CNT
 #define NFD_IN_MAX_LSO_SEQ_CNT      64
 #endif
@@ -388,6 +392,7 @@ struct nfd_in_queue_info {
 #define NFD_IN_DMA_STATE_DATA_LEN_msk       0xFFFFFF
 #define NFD_IN_DMA_STATE_DATA_LEN_shf       0
 #define NFD_IN_DMA_STATE_DATA_LEN_wrd       3
+#define NFD_IN_DMA_STATE_DATA_LEN_ORIG_msk  0xFFFF
 
 #define NFD_IN_DMA_STATE_BYTES_DMAED_wrd    4
 #define NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd    5

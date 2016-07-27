@@ -671,6 +671,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     unsigned int mss;                                                        \
     unsigned int lso_req_wrd;                                                \
     unsigned int lso_seq_cnt;                                                \
+    unsigned int bytes_dmaed;                                                \
                                                                              \
                                                                              \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                                   \
@@ -732,6 +733,38 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],    \
                     --, b, 0] }                                              \
+                                                                             \
+                                                                             \
+        /* Sanity check internal state */                                    \
+        if (mss == 0) {                                                      \
+            /* MSS == 0 leaves no room for payload data */                   \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+        if (l4_offset < NFD_IN_MIN_LSO_HDR_SZ) {                             \
+            /* The lso_hdr_len is too small for TCP */                       \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+        if (data_len <= (l4_offset + offset)) {                              \
+            /* The total length doesn't leave any data after accounting */   \
+            /* for lso_hdr_len and meta data length */                       \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+        if ((mss + l4_offset) >                                              \
+            (NFD_IN_BLM_JUMBO_SIZE - NFD_IN_DATA_OFFSET)) {                  \
+            /* The generated packets won't fit in the available packets. */  \
+            /* This might mean that the host didn't respect the MTU that */  \
+            /* the device advertised. */                                     \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+                                                                             \
         /* TODO How should curr_buf be handled */                            \
                                                                              \
     } else {                                                                 \
@@ -753,6 +786,61 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_MSS_wrd],        \
                     >>NFD_IN_DMA_STATE_LSO_MSS_shf] }                        \
                                                                              \
+        /* Sanity check internal state */                                    \
+        lso_req_wrd = tx_desc.pkt##_pkt##.__raw[2];                          \
+        lso_req_wrd &= ~(NFD_IN_DMA_STATE_LSO_RES_msk <<                     \
+                         NFD_IN_DMA_STATE_LSO_RES_shf);                      \
+        __asm { alu[lso_req_wrd, lso_req_wrd, -,                             \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_MSS_wrd]] }      \
+        if (lso_req_wrd != 0) {                                              \
+            /* Something has changed in the LSO request parameters */        \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+        if (offset != tx_desc.pkt##_pkt##.offset) {                          \
+            /* offset doesn't match original request */                      \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+        if ((data_len & NFD_IN_DMA_STATE_DATA_LEN_ORIG_msk) !=               \
+            tx_desc.pkt##_pkt##.data_len) {                                  \
+            /* data_len doesn't match original request */                    \
+            /* XXX only test the low 16bits because data_len was unwrapped */ \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+                                                                             \
+    }                                                                        \
+                                                                             \
+    __asm {                                                                  \
+        alu[bytes_dmaed, --, b,                                              \
+            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd]] }          \
+    if (tx_desc.pkt##_pkt##.eop) {                                           \
+        /* This descriptor must finish the LSO transfer */                   \
+        if ((bytes_dmaed + dma_len) != data_len) {                           \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+    } else {                                                                 \
+        /* This descriptor does not finish the LSO transfer */               \
+        if ((bytes_dmaed + dma_len) >= data_len) {                           \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+    }                                                                        \
+                                                                             \
+    if (dma_len == 0) {                                                      \
+        /* Flag the packet as invalid and set dma_len */                     \
+        /* to a harmless value. */                                           \
+        dma_len = NFD_IN_DMA_INVALID_LEN;                                    \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],        \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],        \
+                    or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }                 \
     }                                                                        \
                                                                              \
     /* We need to :                                             */           \
@@ -766,12 +854,16 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* Again per LSO handling                                   */           \
     /* 6. Send the message to notify (cls ring)                 */           \
                                                                              \
+    /* get queue_data[queue].curr_buf */                                     \
+    __asm { alu[curr_buf, --, B,                                             \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd]] }         \
     /* get the queue_data[queue].lso_hdr_len */                              \
     __asm { alu[lso_hdr_len, NFD_IN_DMA_STATE_LSO_HDR_LEN_msk, AND,          \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],        \
                 >>NFD_IN_DMA_STATE_LSO_HDR_LEN_shf] }                        \
     /* 1. Load the header to CTM buffer */                                   \
-    if (lso_hdr_len != l4_offset) {                                          \
+    if ((lso_hdr_len != l4_offset) &&                                        \
+        !(curr_buf & NFD_IN_DMA_STATE_INVALID_shf)) {                        \
         /* We use the DMA slot granted to this tx_descp. We are issuing */   \
         /* a "signal" based DMA since we must wait for the header loading */ \
         /* to complete.*/                                                    \
@@ -830,9 +922,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
                                                                              \
     /* Load running variables from LM */                                     \
-    /* get queue_data[queue].curr_buf */                                     \
-    __asm { alu[curr_buf, --, B,                                             \
-                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd]] }         \
     /* get queue_data[queue].lso_seq_cnt */                                  \
     __asm { alu[lso_seq_cnt, NFD_IN_DMA_STATE_LSO_SEQ_CNT_msk, and,          \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd],        \
