@@ -631,7 +631,8 @@ do {                                                                    \
     jumbo_dma_seq_issued++;                                             \
                                                                         \
     /* Lock the queue state so we can swap freely */                    \
-    __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],           \
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],        \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],        \
                 OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }                 \
                                                                         \
     jumbo_seq_test = (NFD_IN_JUMBO_MAX_IN_FLIGHT - jumbo_dma_seq_issued); \
@@ -663,7 +664,8 @@ do {                                                                    \
                                                                         \
     /* Re-increment data_dma_seq_issued and unlock the queue state */   \
     data_dma_seq_issued++;                                              \
-    __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],           \
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],        \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],        \
                 AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }               \
 } while (0)
 
@@ -1474,13 +1476,15 @@ do {                                                                    \
                     /* Allow service context to run */                  \
                     /* to refill jumbo_store */                         \
                     /* Lock the queue state while we're swapped */      \
-                    __asm { alu[NFD_IN_Q_STATE_PTR[0],                  \
-                                NFD_IN_Q_STATE_PTR[0],                  \
-                                OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] } \
+                    __asm {                                             \
+                        alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
+                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
+                            OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }     \
                     ctx_swap();                                         \
-                    __asm { alu[NFD_IN_Q_STATE_PTR[0],                  \
-                                NFD_IN_Q_STATE_PTR[0],                  \
-                                AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] } \
+                    __asm {                                             \
+                        alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
+                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
+                            AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }   \
                 }                                                       \
                 _ISSUE_PROC_MU_CHK(buf_addr);                           \
                                                                         \
@@ -1627,13 +1631,15 @@ do {                                                                    \
                     /* Allow service context to run */                  \
                     /* to refill jumbo_store */                         \
                     /* Lock the queue state while we're swapped */      \
-                    __asm { alu[NFD_IN_Q_STATE_PTR[0],                  \
-                                NFD_IN_Q_STATE_PTR[0],                  \
-                                OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] } \
+                    __asm {                                             \
+                        alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
+                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
+                            OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }     \
                     ctx_swap();                                         \
-                    __asm { alu[NFD_IN_Q_STATE_PTR[0],                  \
-                                NFD_IN_Q_STATE_PTR[0],                  \
-                                AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] } \
+                    __asm {                                             \
+                        alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
+                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
+                            AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }   \
                 }                                                       \
                                                                         \
                 /* Check that the packet will fit within */             \
