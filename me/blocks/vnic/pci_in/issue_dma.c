@@ -805,6 +805,10 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],    \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd], OR, \
                     lso_hdr_len, <<NFD_IN_DMA_STATE_LSO_HDR_LEN_shf] }       \
+        /* update bytes_dmaed */                                             \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],    \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd], +, \
+                    dma_length] }                                            \
         lso_dma_index += dma_length;                                         \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ);         \
@@ -866,6 +870,12 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* fill in descriptor length to dma */                           \
             dma_length = dma_left;                                           \
         }                                                                    \
+                                                                             \
+        /* Update bytes_dmaed, and check it's <= data_len */                 \
+        /* TODO implement check and handle failure */                        \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],    \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],    \
+                    +, dma_length] }                                         \
                                                                              \
         cpp_addr_lo = curr_buf << 11;                                        \
         cpp_addr_lo -= tx_desc.pkt##_pkt.offset;                             \
