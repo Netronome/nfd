@@ -1407,7 +1407,7 @@ DECLARE_PROC_LSO(7);
 #endif
 
 
-#define _ISSUE_PROC(_pkt, _type, _src)                                  \
+#define _ISSUE_PROC(_pkt, _type, _src, _priority)                       \
 do {                                                                    \
     unsigned int dma_len;                                               \
     __gpr unsigned int buf_addr;                                        \
@@ -1436,7 +1436,6 @@ do {                                                                    \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
                       NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);    \
         /* Fast path, use buf_store data */                             \
-        __critical_path();                                              \
                                                                         \
         /* Set NFP buffer address and offset */                         \
         buf_addr = precache_bufs_use();                                 \
@@ -1521,6 +1520,11 @@ do {                                                                    \
                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_JUMBO_TX_DESC); \
                 } while (dma_len > NFD_IN_DMA_SPLIT_LEN - 1);           \
             }                                                           \
+        } else {                                                        \
+            /* Tag the inner most branch of the critical path */        \
+            /* Use a _priority tag to distinguish between full */       \
+            /* partial batches. */                                      \
+            __critical_path(_priority);                                 \
         }                                                               \
                                                                         \
         /* Issue final DMA for the packet */                            \
@@ -1983,17 +1987,15 @@ issue_dma()
         /* Maybe add "full" bit */
         if (num == 8) {
             /* Full batches are the critical path */
-            /* XXX maybe tricks with an extra nfd_in_dma_state
-             * struct would convince nfcc to use one set LM index? */
-            __critical_path();
-            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(3, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(4, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(5, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(6, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(7, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+            /* XXX assign _ISSUE_PROC max priorty (100) on this branch. */
+            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0, 100);
+            _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0, 100);
+            _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0, 100);
+            _ISSUE_PROC(3, NFD_IN_DATA_IGN_EVENT_TYPE, 0, 100);
+            _ISSUE_PROC(4, NFD_IN_DATA_IGN_EVENT_TYPE, 0, 100);
+            _ISSUE_PROC(5, NFD_IN_DATA_IGN_EVENT_TYPE, 0, 100);
+            _ISSUE_PROC(6, NFD_IN_DATA_IGN_EVENT_TYPE, 0, 100);
+            _ISSUE_PROC(7, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued, 100);
         } else if (num <= 4) {
             static unsigned int exc_cnt = 0;
 
@@ -2002,24 +2004,25 @@ issue_dma()
             /* in one semi-unwrapped loop. */
             /* _ISSUE_FLOW_CTRL() sets event_type and seqn if */
             /* _num == _test + 1, and branches out if _num == _test. */
+            /* XXX assign _ISSUE_PROC lower priorty (50) on this branch. */
             unsigned int event_type = NFD_IN_DATA_IGN_EVENT_TYPE;
 
             exc_cnt++;
             local_csr_write(local_csr_mailbox_2, exc_cnt);
 
             _ISSUE_FLOW_CTRL(num, 0, batch_error);
-            _ISSUE_PROC(0, event_type, data_dma_seq_issued);
+            _ISSUE_PROC(0, event_type, data_dma_seq_issued, 50);
 
             _ISSUE_FLOW_CTRL(num, 1, issue_clr1);
-            _ISSUE_PROC(1, event_type, data_dma_seq_issued);
+            _ISSUE_PROC(1, event_type, data_dma_seq_issued, 50);
 
             _ISSUE_FLOW_CTRL(num, 2, issue_clr2);
-            _ISSUE_PROC(2, event_type, data_dma_seq_issued);
+            _ISSUE_PROC(2, event_type, data_dma_seq_issued, 50);
 
             if (num == 3) {
                 goto issue_clr3;
             }
-            _ISSUE_PROC(3, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+            _ISSUE_PROC(3, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued, 50);
             goto issue_clr4;
 
         issue_clr1:
