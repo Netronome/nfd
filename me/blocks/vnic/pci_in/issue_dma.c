@@ -842,32 +842,117 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd]] }      \
                                                                              \
     while (lso_dma_index < dma_len) {                                        \
-        if ((curr_buf & NFD_IN_DMA_STATE_CURR_BUF_msk) == 0) {               \
-            /* 2. Get an MU buffer */                                        \
-            while (precache_bufs_jumbo_use(&curr_buf) != 0) {                \
-                NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
-                          NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);\
-                ctx_swap();                                                  \
+        /* XXX deliberately test "invalid" together with MU buffer */        \
+        /* If the descriptor is invalid, we suppress buffer allocation */    \
+        /* and header copy. */                                               \
+        if (curr_buf == 0) {                                                 \
+            /* Ensure we haven't exceeded NFD_IN_MAX_LSO_SEQ_CNT */          \
+            lso_seq_cnt++;                                                   \
+            if (lso_seq_cnt <= NFD_IN_MAX_LSO_SEQ_CNT) {                     \
+                /* 2. Get an MU buffer */                                    \
+                while (precache_bufs_jumbo_use(&curr_buf) != 0) {            \
+                    NFD_IN_LSO_CNTR_INCR(                                    \
+                        nfd_in_lso_cntr_addr,                                \
+                        NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);  \
+                    ctx_swap();                                              \
+                }                                                            \
+                __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd], \
+                            --, B, curr_buf] }                               \
+                                                                             \
+                /* 3. Copy the header */                                     \
+                hdr_pkt_ptr = (((uint64_t)curr_buf << 11) |                  \
+                               (NFD_IN_DATA_OFFSET - offset));               \
+                                                                             \
+                header_to_read = ((lso_hdr_len + 0x3F) & ~0x3F);             \
+                __mem_pe_dma_ctm_to_mu(                                      \
+                    (__mem void *)hdr_pkt_ptr,                               \
+                    (__ctm void *)&lso_hdr_data[                             \
+                        (queue << __log2(NFD_IN_MAX_LSO_HDR_SZ))],           \
+                    header_to_read, sig_done, &lso_hdr_sig);                 \
+                                                                             \
+                /* clear lso_payload_len */                                  \
+                lso_payload_len = 0;                                         \
+                                                                             \
+                /* wait for header copy to complete */                       \
+                __wait_for_all(&lso_hdr_sig);                                \
+                                                                             \
+            } else {                                                         \
+                /* The LSO descriptors have generated too may segments. */   \
+                /* This could be malicious. */                               \
+                curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);             \
+                                                                             \
             }                                                                \
-            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd],   \
-                        --, B, curr_buf] }                                   \
+        }                                                                    \
                                                                              \
-            /* 3. Copy the header */                                         \
-            hdr_pkt_ptr = (__addr40 void *)(((uint64_t)curr_buf << 11) |     \
-                                            (NFD_IN_DATA_OFFSET - offset));  \
+        /* Handle invalid at a single point */                               \
+        if (curr_buf & (1 << NFD_IN_DMA_STATE_INVALID_shf)) {                \
+            NFD_IN_LSO_CNTR_INCR(                                            \
+                nfd_in_lso_cntr_addr,                                        \
+                NFD_IN_LSO_CNTR_T_ISSUED_LSO_EXC_PKT_TO_NOTIFY_RING);        \
                                                                              \
-            header_to_read = ((lso_hdr_len + 0x3F) & ~0x3F);                 \
-            __mem_pe_dma_ctm_to_mu((__mem void *)hdr_pkt_ptr,                \
-                                   (__ctm void *)&lso_hdr_data[(queue <<     \
-                                   __log2(NFD_IN_MAX_LSO_HDR_SZ))],          \
-                                   header_to_read, sig_done, &lso_hdr_sig);  \
+            if ((curr_buf & NFD_IN_DMA_STATE_CURR_BUF_msk) == 0) {           \
+                /* We haven't yet allocated an MU buffer, but the issued */  \
+                /* ring must always hold legitimate MU buffers.   We can */  \
+                /* use the regular buffer associated with this _pkt slot */  \
+                /* in the batch. */                                          \
+                curr_buf = precache_bufs_use();                              \
+                curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);             \
+            }                                                                \
+            /* Build the ring message more or less as normal, so that */     \
+            /* whatever debugging info may be available is preserved. */     \
+            /* Setting EOP ensures that the app gets this message. */        \
+            issued_tmp.eop = 1;                                              \
+            issued_tmp.sp1 = 0;                                              \
+            issued_tmp.offset = offset;                                      \
+            issued_tmp.buf_addr = curr_buf;                                  \
+            issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
+            issued_tmp.l4_offset = lso_seq_cnt;                              \
+            issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
+            /* send the lso pkt desc to the lso ring */                      \
+            batch_out.pkt##_pkt## = issued_tmp;                              \
+            __mem_ring_journal(nfd_in_issued_lso_ring_num,                   \
+                               nfd_in_issued_lso_ring_addr,                  \
+                               &batch_out.pkt##_pkt##,                       \
+                               sizeof(struct nfd_in_issued_desc),            \
+                               sizeof(struct nfd_in_issued_desc),            \
+                               ctx_swap, &lso_journal_sig);                  \
+            /* used to track how many desc we have put on ring will */       \
+            /* set value in the batch out for the packet so that */          \
+            /* notify how how many to read in  */                            \
+            lso_issued_cnt++;                                                \
                                                                              \
-            /* clear lso_payload_len */                                      \
-            lso_payload_len = 0;                                             \
+            if (tx_desc.pkt##_pkt##.eop) {                                   \
+                /* clear curr_buf, including the invalid bit */              \
+                curr_buf = 0;                                                \
+                /* clear CONT bit */                                         \
+                __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CONT_wrd],   \
+                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CONT_wrd],   \
+                            AND~, 1, <<NFD_IN_DMA_STATE_CONT_shf] }          \
+                /* clear LSO specific state */                               \
+                __asm {                                                      \
+                    alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd], \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd], \
+                        AND~, NFD_IN_DMA_STATE_LSO_HDR_LEN_msk,              \
+                        <<NFD_IN_DMA_STATE_LSO_HDR_LEN_shf] }                \
+                lso_seq_cnt = 0;                                             \
+                __asm {                                                      \
+                    alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_FLAGS_wrd],      \
+                        --, b, 0] }                                          \
+                lso_payload_len = 0;                                         \
+                /* clear state shared with gather code */                    \
+                __asm {                                                      \
+                    alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd], \
+                        --, b, 0] }                                          \
+                __asm {                                                      \
+                    alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_OFFSET_wrd],     \
+                        --, B, 0] }                                          \
+            } else {                                                         \
+                /* clear curr_buf, but leave invalid set */                  \
+                curr_buf = (1 << NFD_IN_DMA_STATE_INVALID_shf);              \
+            }                                                                \
                                                                              \
-            /* wait for header copy to complete */                           \
-            __wait_for_all(&lso_hdr_sig);                                    \
-                                                                             \
+            /* break out of while loop to prevent further processing */      \
+            break;                                                           \
         }                                                                    \
                                                                              \
         /* 4. Issue the data DMA (use Jumbo seq numbers) */                  \
@@ -952,7 +1037,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             issued_tmp.offset = offset;                                      \
             issued_tmp.buf_addr = curr_buf;                                  \
             issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
-            issued_tmp.l4_offset = ++lso_seq_cnt;                            \
+            issued_tmp.l4_offset = lso_seq_cnt;                              \
             issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
             issued_tmp.data_len = (offset + lso_hdr_len + lso_payload_len);  \
             /* if last of LSO segment set lso end flag and we have no */     \
@@ -988,8 +1073,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         --, B, 0] }                                          \
             } else {                                                         \
                 /* clear curr_buf, leaving invalid untouched */              \
-                curr_buf &= (NFD_IN_DMA_STATE_INVALID_msk <<                 \
-                             NFD_IN_DMA_STATE_INVALID_shf);                  \
+                curr_buf &= (1 << NFD_IN_DMA_STATE_INVALID_shf);             \
             }                                                                \
             /* send the lso pkt desc to the lso ring */                      \
             batch_out.pkt##_pkt## = issued_tmp;                              \
