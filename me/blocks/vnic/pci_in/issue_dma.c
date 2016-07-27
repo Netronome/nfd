@@ -1054,9 +1054,10 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         l4_offset);                                          \
     /* prep batch_out for LSO segment info */                                \
     issued_tmp.eop = 0;                                                      \
+    issued_tmp.offset = 0;                                                   \
     issued_tmp.lso_issued_cnt = lso_issued_cnt & 0xFF;                       \
     batch_out.pkt##_pkt## = issued_tmp;                                      \
-    issued_tmp.__raw[0] = 0;                                                 \
+    issued_tmp.lso_issued_cnt = 0;                                           \
     /* Re-increment data_dma_seq_issued */                                   \
     data_dma_seq_issued++;                                                   \
     /* Handle the DMA sequence numbers */                                    \
