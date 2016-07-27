@@ -131,10 +131,15 @@
 #define NFD_IN_BATCH_RING1_NUM          2
 
 /* LSO defines */
+/* Ring is sized to hold the worst case of (NFD_IN_MAX_LSO_SEQ_CNT + 1)
+ * descriptors per slot in nfd_in_issued_ringX.  Each descriptor is 16B.
+ * NFD_IN_ISSUED_RINGX_SZ (128) is in descriptors, and for full batches
+ * of LSO descriptors each could generate the full number of segments.
+ * Hence 128 * 65 * 16, rounded up to 128 * 128 * 16 = 256kB */
 #define NFD_IN_ISSUED_LSO_RING0_NUM 0
-#define NFD_IN_ISSUED_LSO_RING0_SZ  65536  /* ring needs 204B per batch * number Queues */
+#define NFD_IN_ISSUED_LSO_RING0_SZ  262144
 #define NFD_IN_ISSUED_LSO_RING1_NUM 1
-#define NFD_IN_ISSUED_LSO_RING1_SZ  65536  /* ring needs 204B per batch * number Queues */
+#define NFD_IN_ISSUED_LSO_RING1_SZ  262144
 #define NFD_IN_MAX_LSO_HDR_SZ       256
 
 #ifndef NFD_IN_MIN_LSO_HDR_SZ
