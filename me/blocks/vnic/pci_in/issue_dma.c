@@ -1016,9 +1016,13 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         /* If the descriptor is invalid, we suppress buffer allocation */    \
         /* and header copy. */                                               \
         if (curr_buf == 0) {                                                 \
+            /* We are starting a new buffer */                               \
             /* Ensure we haven't exceeded NFD_IN_MAX_LSO_SEQ_CNT */          \
+            /* and that the queue is still up. */                            \
             lso_seq_cnt++;                                                   \
-            if (lso_seq_cnt <= NFD_IN_MAX_LSO_SEQ_CNT) {                     \
+            if ((lso_seq_cnt <= NFD_IN_MAX_LSO_SEQ_CNT) &&                   \
+                issue_dma_queue_state_bit_set_test(                          \
+                    NFD_IN_DMA_STATE_UP_shf)) {                              \
                 /* 2. Get an MU buffer */                                    \
                 while (precache_bufs_jumbo_use(&curr_buf) != 0) {            \
                     NFD_IN_LSO_CNTR_INCR(                                    \
@@ -1048,8 +1052,9 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 __wait_for_all(&lso_hdr_sig);                                \
                                                                              \
             } else {                                                         \
-                /* The LSO descriptors have generated too may segments. */   \
-                /* This could be malicious. */                               \
+                /* The LSO descriptors have either generated too many */     \
+                /* segments or the queue has gone down while processing */   \
+                /* the descriptor.  Either could be malicious. */            \
                 curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);             \
                                                                              \
             }                                                                \
