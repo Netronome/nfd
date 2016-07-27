@@ -761,6 +761,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     data_dma_seq_issued--;                                                   \
                                                                              \
     if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT_shf) == 0) { \
+        unsigned int hdr_len_chk;                                            \
+                                                                             \
         /* This is a new LSO packet, prepare internal state */               \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CONT_wrd],           \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CONT_wrd],           \
@@ -825,9 +827,20 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
                         or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
         }                                                                    \
-        if (data_len <= (l4_offset + offset)) {                              \
+        hdr_len_chk = l4_offset + offset;                                    \
+        if (data_len <= hdr_len_chk) {                                       \
             /* The total length doesn't leave any data after accounting */   \
             /* for lso_hdr_len and meta data length */                       \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+        if (hdr_len_chk > NFD_IN_MAX_LSO_HDR_SZ) {                           \
+            /* The meta length consumes some space in the */                 \
+            /* LSO header cache so drivers which prepend meta data */        \
+            /* must restrict the header length to account for it. */         \
+            /* This could be an attack aiming at overwriting the */          \
+            /* header of another LSO packet in a different queue. */         \
             __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
                         NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
                         or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
@@ -947,7 +960,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],        \
                 >>NFD_IN_DMA_STATE_LSO_HDR_LEN_shf] }                        \
     /* 1. Load the header to CTM buffer */                                   \
-    if ((lso_hdr_len != l4_offset) &&                                        \
+    if ((lso_hdr_len != (l4_offset + offset)) &&                             \
         !(curr_buf & NFD_IN_DMA_STATE_INVALID_shf)) {                        \
         /* We use the DMA slot granted to this tx_descp. We are issuing */   \
         /* a "signal" based DMA since we must wait for the header loading */ \
@@ -964,9 +977,9 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);    \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);  \
                                                                              \
-        if (dma_len >= (l4_offset - lso_hdr_len)) {                          \
+        if (dma_len >= (l4_offset + offset - lso_hdr_len)) {                 \
             /* we have full header in this TX descriptor */                  \
-            dma_length = l4_offset - lso_hdr_len;                            \
+            dma_length = l4_offset + offset - lso_hdr_len;                   \
         } else {                                                             \
             /* not enough header available */                                \
             dma_length = dma_len;                                            \
