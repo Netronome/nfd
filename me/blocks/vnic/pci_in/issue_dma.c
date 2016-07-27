@@ -1018,8 +1018,10 @@ DECLARE_PROC_LSO(7);
  * is not advertised on either the PF or VFs. */
 #if ((NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_LSO) || \
      (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_LSO))
-#define _ISSUE_PROC_LSO_TEST(_pkt)                  \
-    (tx_desc.pkt##_pkt##.flags & PCIE_DESC_TX_LSO)
+#define _ISSUE_PROC_LSO_TEST(_pkt)                                  \
+    ((tx_desc.pkt##_pkt##.__raw[2] &                                \
+      (PCIE_DESC_TX_LSO << NFD_IN_DMA_STATE_FLAGS_shf)) &&          \
+     (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_UP_shf)))
 #else
 #define _ISSUE_PROC_LSO_TEST(_pkt) (0)
 #endif
