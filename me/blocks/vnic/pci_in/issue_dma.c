@@ -650,7 +650,8 @@ do {                                                                    \
     cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);   \
     cpp_hi_word |=                                                      \
         NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);            \
-    dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word | (_buf >> 21);          \
+    dma_out.pkt##_pkt##.__raw[1] =                                      \
+        cpp_hi_word | NFP_PCIE_DMA_CMD_CPP_ADDR_HI(_buf >> 21);         \
                                                                         \
     dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                        \
     dma_out.pkt##_pkt##.__raw[3] =                                      \
@@ -1206,9 +1207,9 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);    \
         cpp_hi_word |= NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);  \
         pcie_hi_word |= NFP_PCIE_DMA_CMD_LENGTH(dma_length - 1);             \
-        dma_out.pkt##_pkt##.__raw[0] = cpp_addr_lo + NFD_IN_DATA_OFFSET; \
-        dma_out.pkt##_pkt##.__raw[1] = (                                     \
-            cpp_hi_word | NFP_PCIE_DMA_CMD_CPP_ADDR_HI(curr_buf >> 21));     \
+        dma_out.pkt##_pkt##.__raw[0] = cpp_addr_lo + NFD_IN_DATA_OFFSET;     \
+        dma_out.pkt##_pkt##.__raw[1] =                                       \
+            cpp_hi_word | NFP_PCIE_DMA_CMD_CPP_ADDR_HI(curr_buf >> 21);      \
         dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                         \
         dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word |                       \
                                         NFP_PCIE_DMA_CMD_LENGTH(             \
@@ -1433,6 +1434,8 @@ do {                                                                    \
     } else if (tx_desc.pkt##_pkt##.eop &&                               \
         (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT_shf)  \
          == 0)) {                                                       \
+        unsigned int cpp_hi_addr;                                       \
+                                                                        \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
                       NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC);    \
         /* Fast path, use buf_store data */                             \
@@ -1533,14 +1536,16 @@ do {                                                                    \
         dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word |                  \
                                         NFP_PCIE_DMA_CMD_LENGTH(dma_len)); \
                                                                         \
+        /* Use asm to ensure this generates one fast path cycle */      \
+        __asm { alu[cpp_hi_addr, NFP_PCIE_DMA_CMD_CPP_ADDR_HI_msk, AND, \
+                    buf_addr, >>21] }                                   \
         if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                      \
-            dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_no_sig_part |        \
-                                            (buf_addr >> 21));          \
+            dma_out.pkt##_pkt##.__raw[1] = cpp_hi_addr | cpp_hi_no_sig_part; \
             pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
                                 NFD_IN_DATA_DMA_QUEUE);                 \
         } else {                                                        \
             cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src);   \
-            dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word | (buf_addr >> 21); \
+            dma_out.pkt##_pkt##.__raw[1] = cpp_hi_addr | cpp_hi_word;   \
             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,              \
                            NFD_IN_DATA_DMA_QUEUE,                       \
                            sig_done, &last_of_batch_dma_sig);           \
@@ -1762,14 +1767,16 @@ do {                                                                    \
                                                 dma_len - 1));          \
                                                                         \
             if (_type == NFD_IN_DATA_IGN_EVENT_TYPE) {                  \
-                dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_no_sig_part |    \
-                                                (curr_buf >> 21));      \
+                dma_out.pkt##_pkt##.__raw[1] = (                        \
+                    cpp_hi_no_sig_part |                                \
+                    NFP_PCIE_DMA_CMD_CPP_ADDR_HI(curr_buf >> 21));      \
                 pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,     \
                                     NFD_IN_DATA_DMA_QUEUE);             \
             } else {                                                    \
                 cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src); \
-                dma_out.pkt##_pkt##.__raw[1] = (cpp_hi_word |           \
-                                                (curr_buf >> 21));      \
+                dma_out.pkt##_pkt##.__raw[1] = (                        \
+                    cpp_hi_word |                                       \
+                    NFP_PCIE_DMA_CMD_CPP_ADDR_HI(curr_buf >> 21));      \
                 __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,          \
                                NFD_IN_DATA_DMA_QUEUE,                   \
                                sig_done, &last_of_batch_dma_sig);       \
