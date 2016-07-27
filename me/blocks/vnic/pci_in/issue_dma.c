@@ -673,6 +673,9 @@ do {                                                                         \
                                                                              \
     /* Take a jumbo frame sequence number and */                             \
     /* check it is safe to use */                                            \
+    /* XXX the queue is locked before this macro is invoked, */              \
+    /* in the LSO function the queue is locked during payload DMA */         \
+    /* by default. */                                                        \
     jumbo_dma_seq_issued++;                                                  \
                                                                              \
     jumbo_seq_test = (NFD_IN_JUMBO_MAX_IN_FLIGHT - jumbo_dma_seq_issued);    \
@@ -1010,6 +1013,13 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd]] }      \
                                                                              \
     while (lso_dma_index < dma_len) {                                        \
+        SIGNAL_MASK lso_wait_msk;                                            \
+                                                                             \
+        /* We are starting to work on MU buffers, so lock the queue state */ \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],         \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],         \
+                    OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }                  \
+                                                                             \
         /* XXX deliberately test "invalid" together with MU buffer */        \
         /* If the descriptor is invalid, we suppress buffer allocation */    \
         /* and header copy. */                                               \
@@ -1096,7 +1106,14 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* notify how how many to read in  */                            \
             lso_issued_cnt++;                                                \
                                                                              \
-            if (tx_desc.pkt##_pkt##.eop) {                                   \
+            if (tx_desc.pkt##_pkt##.eop ||                                   \
+                !issue_dma_queue_state_bit_set_test(                         \
+                    NFD_IN_DMA_STATE_UP_shf)) {                              \
+                /* Either this looks like an end of gather descriptor */     \
+                /* or the queue is in a down state. */                       \
+                /* In either case, it is a safe place to try and get */      \
+                /* the queue to a non-error state, so clean up everything. */ \
+                                                                             \
                 /* clear curr_buf, including the invalid bit */              \
                 curr_buf = 0;                                                \
                 /* clear CONT bit */                                         \
@@ -1197,7 +1214,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         /* XXX Issue DMA with ctx_swap to ensure we can reuse the XFERs */   \
         /* (dma_out.pkt##_pkt##) when we wake up again.  */                  \
         __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                       \
-                       NFD_IN_DATA_DMA_QUEUE, ctx_swap, &lso_enq_sig);       \
+                       NFD_IN_DATA_DMA_QUEUE, sig_done, &lso_enq_sig);       \
+        lso_wait_msk = __signals(&lso_enq_sig);                              \
                                                                              \
         /* if we are at end of mu_buf, or the end of the LSO buffer */       \
         if ((lso_payload_len == mss) ||                                      \
@@ -1252,8 +1270,10 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                             nfd_in_issued_lso_ring_addr,                     \
                             &batch_out.pkt##_pkt##,                          \
                             sizeof(struct nfd_in_issued_desc),               \
-                            sizeof(struct nfd_in_issued_desc), ctx_swap,     \
+                            sizeof(struct nfd_in_issued_desc), sig_done,     \
                             &lso_journal_sig);                               \
+            lso_wait_msk |= __signals(&lso_journal_sig);                     \
+                                                                             \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING);\
             /* clear curr_buf, leaving invalid untouched */                  \
@@ -1263,7 +1283,24 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* set value in the batch out for the packet so that */          \
             /* notify how how many to read in  */                            \
             lso_issued_cnt++;                                                \
-        }                                                                    \
+                                                                             \
+            /* Save (cleared) curr_buf back to LM */                         \
+            /* set queue_data[queue].curr_buf */                             \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd],   \
+                        --, B, curr_buf] }                                   \
+                                                                             \
+            /* Unlock the queue state to give a chance to process */         \
+            /* config messages for the queue during the next swap. */        \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],     \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],     \
+                        AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }            \
+        } /* End of ring put if statement  */                                \
+                                                                             \
+        /* Wait for IO to complete */                                        \
+        wait_sig_mask(lso_wait_msk);                                         \
+        __implicit_read(&lso_journal_sig);                                   \
+        __implicit_read(&lso_enq_sig);                                       \
+                                                                             \
     } /* while */                                                            \
                                                                              \
     NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
@@ -1318,6 +1355,11 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                        NFD_IN_DATA_DMA_QUEUE,                                \
                        sig_done, &last_of_batch_dma_sig);                    \
     }                                                                        \
+                                                                             \
+    /* We're done with the descriptor so unlock the queue state */           \
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],             \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],             \
+                AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }                    \
 }
 DECLARE_PROC_LSO(0);
 DECLARE_PROC_LSO(1);
