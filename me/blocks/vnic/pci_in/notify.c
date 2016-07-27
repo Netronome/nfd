@@ -366,14 +366,14 @@ notify_setup()
 #define _NOTIFY_PROC(_pkt, _lso_ring_num, _lso_ring_addr)                    \
 do {                                                                         \
     unsigned int i;                                                          \
-    unsigned int num_lso_to_read = batch_in.pkt##_pkt##.lso_issued_cnt;      \
+    unsigned int num_lso_to_read;                                            \
     __xread struct nfd_in_pkt_desc lso_pkt;                                  \
     SIGNAL lso_sig;                                                          \
     SIGNAL_PAIR lso_sig_pair;                                                \
     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                               \
                          NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC);             \
     /* finished packet and no LSO */                                         \
-    if ((batch_in.pkt##_pkt##.eop) && (num_lso_to_read == 0)) {              \
+    if (batch_in.pkt##_pkt##.eop) {                                          \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC);     \
         __critical_path();                                                   \
@@ -390,8 +390,9 @@ do {                                                                         \
         __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,          \
                              out_msg_sz, out_msg_sz, sig_done,               \
                              &wq_sig##_pkt);                                 \
-    } else if (num_lso_to_read != 0) {                                       \
+    } else if (batch_in.pkt##_pkt##.lso_issued_cnt != 0) {                   \
         /* else LSO packets */                                               \
+        num_lso_to_read = batch_in.pkt##_pkt##.lso_issued_cnt;               \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_NOTIFY_LSO_PKT_DESC);         \
          /* finished packet with LSO to handle */                            \
