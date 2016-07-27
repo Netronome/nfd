@@ -1729,6 +1729,22 @@ do {                                                                    \
 } while (0)
 
 
+/*
+ * Helper macro to implement logic to determine where to branch
+ * from processing packets in part-filled batches to "clearing"
+ * the batch entry.
+ */
+#define _ISSUE_FLOW_CTRL(_num, _test, _label)       \
+do {                                                \
+    if (_num <= (_test + 1)) {                      \
+        if (_num == _test) {                        \
+            goto _label;                            \
+        }                                           \
+        event_type = NFD_IN_DATA_EVENT_TYPE;        \
+    }                                               \
+} while (0)
+
+
 /**
  * Fetch batch messages from the CLS ring and process them, issuing up to
  * PCI_IN_MAX_BATCH_SZ DMAs, and placing a batch of messages onto the
@@ -1838,48 +1854,50 @@ issue_dma()
             _ISSUE_PROC(5, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
             _ISSUE_PROC(6, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
             _ISSUE_PROC(7, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-        } else if (num == 4) {
-            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(2, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
+        } else if (num <= 4) {
+            static unsigned int exc_cnt = 0;
+
+            /* We have a partial batch, so we compromise between */
+            /* cycle budget and code store by handling all cases */
+            /* in one semi-unwrapped loop. */
+            /* _ISSUE_FLOW_CTRL() sets event_type and seqn if */
+            /* _num == _test + 1, and branches out if _num == _test. */
+            unsigned int event_type = NFD_IN_DATA_IGN_EVENT_TYPE;
+
+            exc_cnt++;
+            local_csr_write(local_csr_mailbox_2, exc_cnt);
+
+            _ISSUE_FLOW_CTRL(num, 0, batch_error);
+            _ISSUE_PROC(0, event_type, data_dma_seq_issued);
+
+            _ISSUE_FLOW_CTRL(num, 1, issue_clr1);
+            _ISSUE_PROC(1, event_type, data_dma_seq_issued);
+
+            _ISSUE_FLOW_CTRL(num, 2, issue_clr2);
+            _ISSUE_PROC(2, event_type, data_dma_seq_issued);
+
+            if (num == 3) {
+                goto issue_clr3;
+            }
             _ISSUE_PROC(3, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
+            goto issue_clr4;
 
-            _ISSUE_CLR(4);
-            _ISSUE_CLR(5);
-            _ISSUE_CLR(6);
-            _ISSUE_CLR(7);
-        } else if (num == 3) {
-            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(2, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-            _ISSUE_CLR(3);
-            _ISSUE_CLR(4);
-            _ISSUE_CLR(5);
-            _ISSUE_CLR(6);
-            _ISSUE_CLR(7);
-        } else if (num == 2) {
-            _ISSUE_PROC(0, NFD_IN_DATA_IGN_EVENT_TYPE, 0);
-            _ISSUE_PROC(1, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-
-            _ISSUE_CLR(2);
-            _ISSUE_CLR(3);
-            _ISSUE_CLR(4);
-            _ISSUE_CLR(5);
-            _ISSUE_CLR(6);
-            _ISSUE_CLR(7);
-        } else if (num == 1) {
-            _ISSUE_PROC(0, NFD_IN_DATA_EVENT_TYPE, data_dma_seq_issued);
-
+        issue_clr1:
             _ISSUE_CLR(1);
+        issue_clr2:
             _ISSUE_CLR(2);
+        issue_clr3:
             _ISSUE_CLR(3);
+        issue_clr4:
             _ISSUE_CLR(4);
             _ISSUE_CLR(5);
             _ISSUE_CLR(6);
             _ISSUE_CLR(7);
+
         } else {
-            local_csr_write(local_csr_mailbox_0, 0xdeadbeef);
+        batch_error:
+            local_csr_write(local_csr_mailbox_0,
+                            NFD_IN_ISSUE_DMA_BATCH_INVALID);
             local_csr_write(local_csr_mailbox_1, batch.__raw);
             halt();
         }

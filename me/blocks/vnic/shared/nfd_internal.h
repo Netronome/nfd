@@ -588,6 +588,7 @@ struct nfd_out_send_desc_msg {
 #define NFD_IN_NOTIFY_MU_PTR_INVALID    0x802
 #define NFD_IN_ISSUE_DMA_MU_PTR_INVALID 0x803
 #define NFD_IN_GATHER_INVALID_IDMA      0x804
+#define NFD_IN_ISSUE_DMA_BATCH_INVALID  0x805
 
 #endif /* __NFP_LANG_MICROC */
 
