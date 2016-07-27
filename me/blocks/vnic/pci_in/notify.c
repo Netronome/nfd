@@ -366,7 +366,7 @@ notify_setup()
 #define _NOTIFY_PROC(_pkt, _lso_ring_num, _lso_ring_addr)                    \
 do {                                                                         \
     unsigned int i;                                                          \
-    unsigned int num_lso_to_read = batch_in.pkt##_pkt##.sp0;                 \
+    unsigned int num_lso_to_read = batch_in.pkt##_pkt##.lso_issued_cnt;      \
     __xread struct nfd_in_pkt_desc lso_pkt;                                  \
     SIGNAL lso_sig;                                                          \
     SIGNAL_PAIR lso_sig_pair;                                                \

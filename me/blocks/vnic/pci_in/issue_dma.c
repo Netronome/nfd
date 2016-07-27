@@ -643,7 +643,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
 {                                                                            \
     unsigned int dma_len;                                                    \
     unsigned int lso_dma_index = 0;                                          \
-    unsigned int lso_issued_index = 0;                                       \
+    unsigned int lso_issued_cnt = 0;                                         \
     int jumbo_seq_test;                                                      \
     unsigned int cpp_hi_word;                                                \
     unsigned int cpp_addr_lo;                                                \
@@ -904,9 +904,9 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd],   \
                         --, B, curr_buf] }                                   \
             /* used to track how many desc we have put on ring will */       \
-            /* set value in the batch out sp0 for the packet so that */      \
+            /* set value in the batch out for the packet so that */          \
             /* notify how how many to read in  */                            \
-            lso_issued_index++;                                              \
+            lso_issued_cnt++;                                                \
             while (!signal_test(&lso_journal_sig));                          \
         }                                                                    \
     } /* while */                                                            \
@@ -935,7 +935,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                          &lso_journal_sig);                                  \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                     NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING_END);\
-        lso_issued_index++;                                                  \
+        lso_issued_cnt++;                                                    \
         /* clear queue_data[queue].lso_hdr_len */                            \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],    \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],    \
@@ -958,7 +958,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         tx_desc.pkt##_pkt##.l4_offset);                      \
     /* prep batch_out for LSO segment info */                                \
     issued_tmp.eop = 0;                                                      \
-    issued_tmp.sp0 = lso_issued_index & 0xFF;                                \
+    issued_tmp.lso_issued_cnt = lso_issued_cnt & 0xFF;                       \
     batch_out.pkt##_pkt## = issued_tmp;                                      \
     issued_tmp.__raw[0] = 0;                                                 \
     /* Re-increment data_dma_seq_issued */                                   \
@@ -1195,7 +1195,7 @@ do {                                                                    \
         /* NB: the rest of the message will be stale. */                \
         issued_tmp.eop = 0;                                             \
         issued_tmp.offset = 0;                                          \
-        issued_tmp.sp0 = 0;                                             \
+        issued_tmp.lso_issued_cnt = 0;                                  \
         issued_tmp.num_batch = 0;                                       \
         issued_tmp.lso_end = 0;                                         \
         issued_tmp.sp1 = 0;                                             \
@@ -1558,7 +1558,7 @@ issue_dma()
 
         local_csr_write(local_csr_active_lm_addr_2, &queue_data[queue]);
 
-        issued_tmp.sp0 = 0;
+        issued_tmp.lso_issued_cnt = 0;
         issued_tmp.num_batch = num;   /* Only needed in pkt0 */
         issued_tmp.lso_end = 0;
         issued_tmp.sp1 = 0;

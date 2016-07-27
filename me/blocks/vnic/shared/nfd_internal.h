@@ -446,7 +446,7 @@ struct nfd_in_batch_desc {
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+---------------+---------------+---+-----------+
- *    0  |E|    offset   |      sp0      |   num_batch   |sp1|   q_num   |
+ *    0  |E|    offset   | lso_issued_cnt|   num_batch   |sp1|   q_num   |
  *       +-+-------------+---------------+---------------+---+-----------+
  *    1  |                           buf_addr                            |
  *       +---------------+---------------+-+-+---------------------------+
@@ -465,7 +465,7 @@ struct nfd_in_issued_desc {
         struct {
             unsigned int eop:1;
             unsigned int offset:7;
-            unsigned int sp0:8;
+            unsigned int lso_issued_cnt:8;
             unsigned int num_batch:8;
             unsigned int sp1:2;
             unsigned int q_num:6;
