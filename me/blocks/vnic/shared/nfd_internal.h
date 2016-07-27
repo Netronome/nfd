@@ -340,6 +340,7 @@ struct nfd_in_queue_info {
 
 #define NFD_IN_DMA_STATE_UP   31
 #define NFD_IN_DMA_STATE_CONT 30
+#define NFD_IN_DMA_STATE_LOCKED     29
 #define NFD_IN_DMA_STATE_LSO_HDR_LEN_MASK 0xFF
 #define NFD_IN_DMA_STATE_LSO_HDR_LEN_SHIFT 16
 #define NFD_IN_DMA_STATE_INVALID    31
@@ -354,7 +355,8 @@ struct nfd_in_dma_state {
         struct {
             unsigned int up:1;
             unsigned int cont:1;
-            unsigned int sp0:6;
+            unsigned int locked:1;
+            unsigned int sp0:5;
             unsigned int lso_hdr_len:8; /* length of header and if we have a header
                                          * non-zero used in issue_dma */
             unsigned int lso_seq_cnt:8; /* last sequence count for lso segments sent

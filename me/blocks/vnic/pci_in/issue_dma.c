@@ -358,9 +358,13 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 {
     unsigned int queue;
     unsigned int bmsk_queue;
+    struct nfd_cfg_msg cfg_msg_cp;
 
     ctassert(__is_log2(NFD_MAX_VF_QUEUES));
     ctassert(__is_log2(NFD_MAX_PF_QUEUES));
+
+    /* save aside cfg_msg in case we need to revert the queue processing */
+    cfg_msg_cp = *cfg_msg;
 
     nfd_cfg_next_queue(cfg_msg, &queue);
 
@@ -371,7 +375,14 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
     queue += cfg_msg->vnic * NFD_MAX_VF_QUEUES;
     bmsk_queue = NFD_NATQ2BMQ(queue);
 
-    if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
+    if (queue_data[bmsk_queue].locked) {
+        /* The queue is locked by the worker contexts so
+         * we can't change it's configuration.  Revert the
+         * queue selection process so that the queue will be
+         * selected again on the next round. */
+        *cfg_msg = cfg_msg_cp;
+
+    } else if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
         /* Initialise queue state */
         queue_data[bmsk_queue].sp0 = 0;
         queue_data[bmsk_queue].lso_hdr_len = 0;
@@ -535,10 +546,14 @@ do {                                                                    \
     /* check it is safe to use */                                       \
     jumbo_dma_seq_issued++;                                             \
                                                                         \
+    /* Lock the queue state so we can swap freely */                    \
+    __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],           \
+                OR, 1, <<NFD_IN_DMA_STATE_LOCKED] }                     \
+                                                                        \
     jumbo_seq_test = (NFD_IN_JUMBO_MAX_IN_FLIGHT - jumbo_dma_seq_issued); \
     while ((int) (jumbo_seq_test + jumbo_dma_seq_compl) <= 0) {         \
-        /* It is safe to simply swap for CTX0 */                        \
-        /* to advance jumbo_dma_seq_compl. */                           \
+        /* The queue state is locked so it is safe to simply swap */    \
+        /* for CTX0 to advance jumbo_dma_seq_compl. */                  \
         ctx_swap();                                                     \
     }                                                                   \
                                                                         \
@@ -562,8 +577,10 @@ do {                                                                    \
     cpp_addr_lo += NFD_IN_DMA_SPLIT_LEN;                                \
     dma_len -= NFD_IN_DMA_SPLIT_LEN;                                    \
                                                                         \
-    /* Re-increment data_dma_seq_issued */                              \
+    /* Re-increment data_dma_seq_issued and unlock the queue state */   \
     data_dma_seq_issued++;                                              \
+    __asm { alu[NFD_IN_Q_STATE_PTR[0], NFD_IN_Q_STATE_PTR[0],           \
+                AND~, 1, <<NFD_IN_DMA_STATE_LOCKED] }                   \
 } while (0)
 
 #define _ISSUE_PROC_LSO_JUMBO(_pkt, _buf)                                    \
@@ -1064,7 +1081,14 @@ do {                                                                    \
                 while (precache_bufs_jumbo_use(&buf_addr) != 0) {       \
                     /* Allow service context to run */                  \
                     /* to refill jumbo_store */                         \
+                    /* Lock the queue state while we're swapped */      \
+                    __asm { alu[NFD_IN_Q_STATE_PTR[0],                  \
+                                NFD_IN_Q_STATE_PTR[0],                  \
+                                OR, 1, <<NFD_IN_DMA_STATE_LOCKED] }     \
                     ctx_swap();                                         \
+                    __asm { alu[NFD_IN_Q_STATE_PTR[0],                  \
+                                NFD_IN_Q_STATE_PTR[0],                  \
+                                AND~, 1, <<NFD_IN_DMA_STATE_LOCKED] }   \
                 }                                                       \
                 _ISSUE_PROC_MU_CHK(buf_addr);                           \
                                                                         \
@@ -1205,7 +1229,14 @@ do {                                                                    \
                 while (precache_bufs_jumbo_use(&curr_buf) != 0) {       \
                     /* Allow service context to run */                  \
                     /* to refill jumbo_store */                         \
+                    /* Lock the queue state while we're swapped */      \
+                    __asm { alu[NFD_IN_Q_STATE_PTR[0],                  \
+                                NFD_IN_Q_STATE_PTR[0],                  \
+                                OR, 1, <<NFD_IN_DMA_STATE_LOCKED] }     \
                     ctx_swap();                                         \
+                    __asm { alu[NFD_IN_Q_STATE_PTR[0],                  \
+                                NFD_IN_Q_STATE_PTR[0],                  \
+                                AND~, 1, <<NFD_IN_DMA_STATE_LOCKED] }   \
                 }                                                       \
                                                                         \
                 /* Check that the packet will fit within */             \
