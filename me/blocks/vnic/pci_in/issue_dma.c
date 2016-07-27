@@ -263,6 +263,27 @@ issue_dma_queue_state_bit_set_test(int bit_num)
 
 
 /**
+ * Test whether the queue state indicates an LSO packet in process
+ */
+__intrinsic int
+issue_dma_queue_state_proc_lso()
+{
+    int result = 1;
+    unsigned int bit_num;
+
+    bit_num = (NFD_IN_DMA_STATE_FLAGS_shf + __log2(PCIE_DESC_TX_LSO));
+    __asm {
+        br_bset[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_FLAGS_wrd], \
+                __ct_const_val(bit_num, match];
+        alu[result, --, B, 0];
+        match:
+    }
+
+    return result;
+}
+
+
+/**
  * Add a length to a PCIe address, with carry to PCIe HI
  * @param pcie_hi_word     hi part of the address to be updated
  * @param pcie_lo_word     lo part of the address to be updated
@@ -524,6 +545,7 @@ issue_dma_gather_seq_recv()
 #define _ISSUE_PROC_MU_CHK(_val)
 #endif
 
+
 #ifdef NFD_IN_LSO_CNTR_ENABLE
 #define _LSO_TX_DESC_TYPE_CNTR(_pkt)                                \
     if (tx_desc.pkt##_pkt##.eop) {                                  \
@@ -536,6 +558,55 @@ issue_dma_gather_seq_recv()
 #else
 #define _LSO_TX_DESC_TYPE_CNTR(_pkt)
 #endif
+
+
+/**
+ * Clean up LM queue LSO state
+ * If an LSO gather series is accidentally or maliciously truncated,
+ * we may see the LSO state in the regular gather DMA branch.  If this
+ * happens, we need to clean up the queue state.
+ */
+__noinline void
+issue_dma_cleanup_lso_state()
+{
+    unsigned int curr_buf;
+    /* XXX leave CONT bit untouched, it gets cleared on EOP descriptors */
+
+    /* clear LSO specific state */
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],   \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd],   \
+                AND~, NFD_IN_DMA_STATE_LSO_HDR_LEN_msk,                 \
+                <<NFD_IN_DMA_STATE_LSO_HDR_LEN_shf] }
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd],   \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd],   \
+                AND~, NFD_IN_DMA_STATE_LSO_SEQ_CNT_msk,                 \
+                <<NFD_IN_DMA_STATE_LSO_SEQ_CNT_shf] }
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_FLAGS_wrd],         \
+                --, b, 0] }
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd],   \
+                --, B, 0] }
+    /* clear state shared with gather code */
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd],   \
+                --, b, 0] }
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_OFFSET_wrd],        \
+                --, B, 0] }
+
+    /* ensure that we have a valid MU buffer */
+    /* XXX the gather code sends TX descriptors to the application
+     * with the invalid bit set on EOP, and the application frees the
+     * MU buffer. */
+    __asm { alu[curr_buf, --, B,                                        \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd]] }
+    if ((curr_buf & NFD_IN_DMA_STATE_CURR_BUF_msk) == 0) {
+        /* We can use the regular buffer associated with
+         * this _pkt slot in the batch. */
+        curr_buf = precache_bufs_use();
+    }
+    _ISSUE_PROC_MU_CHK(curr_buf);
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd],      \
+                --, B, curr_buf] }
+}
+
 
 /* This macro issues a DMA for a NFD_IN_DMA_SPLIT_LEN chunk of the
  * current packet. It updates the addresses and remaining dma_len before
@@ -787,6 +858,16 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                     >>NFD_IN_DMA_STATE_LSO_MSS_shf] }                        \
                                                                              \
         /* Sanity check internal state */                                    \
+        if (issue_dma_queue_state_proc_lso() == 0) {                         \
+            /* The previous descriptor was not LSO.  We can't do anything */ \
+            /* meaningful with this descriptor so simply flag it invalid. */ \
+            /* XXX curr_buf may hold an MU pointer, but that case is */      \
+            /* already handled. */                                           \
+            __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],    \
+                        or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
+        }                                                                    \
+                                                                             \
         lso_req_wrd = tx_desc.pkt##_pkt##.__raw[2];                          \
         lso_req_wrd &= ~(NFD_IN_DMA_STATE_LSO_RES_msk <<                     \
                          NFD_IN_DMA_STATE_LSO_RES_shf);                      \
@@ -1543,6 +1624,18 @@ do {                                                                    \
                         --, B, curr_buf] }                              \
             __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_BYTES_DMAED_wrd], \
                         --, b, 0] }                                     \
+        } else {                                                        \
+            /* We have existing packet state, check it isn't LSO  */    \
+            if (issue_dma_queue_state_proc_lso() == 1) {                \
+                /* It is LSO, call a helper function to clean up */     \
+                /* and set the invalid bit */                           \
+                /* XXX the helper function ensures we have a */         \
+                /* valid buffer available */                            \
+                issue_dma_cleanup_lso_state();                          \
+                __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd], \
+                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd], \
+                            or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }    \
+            }                                                           \
         }                                                               \
                                                                         \
         /* Get and check the data/dma length */                         \
