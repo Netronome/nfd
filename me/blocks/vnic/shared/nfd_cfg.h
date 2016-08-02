@@ -76,11 +76,6 @@
 #define NFD_CFG_NUM_RINGS       8
 
 
-#ifndef NFD_MAX_PFS
-#error "NFD_MAX_PFS is not defined but is required"
-#endif
-
-
 #define NFD_CFG_RINGS_RES_IND(_emem)                                    \
     _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues   \
                      global NFD_CFG_TOTAL_RINGS NFD_CFG_TOTAL_RINGS)

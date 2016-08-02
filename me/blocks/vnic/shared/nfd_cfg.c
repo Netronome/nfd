@@ -189,12 +189,15 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
 
     /* Check for and handle FLRs */
     if (update_request & NFP_NET_CFG_UPDATE_RESET) {
-        if ((NFD_NUM_VFS == 0) || NFD_VNIC_IS_PF(cfg_msg->vnic)) {
-            /* We have a PF FLR */
-            _nfd_flr_ack_pf(pcie_isl);
-        } else {
+        if ((NFD_NUM_VFS != 0) && NFD_VNIC_IS_VF(cfg_msg->vnic)) {
             /* We have a VF FLR */
             _nfd_flr_ack_vf(pcie_isl, cfg_msg->vnic);
+        } else {
+            /* We have a PF FLR, but is it the last PF vNIC? */
+            if (cfg_msg->vnic == NFD_LAST_PF) {
+                /* Only ack the FLR on the message for the last PF vNIC */
+                _nfd_flr_ack_pf(pcie_isl);
+            }
         }
 
         /* Notify the relevant PCIe island master to recheck

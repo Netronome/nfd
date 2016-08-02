@@ -33,6 +33,7 @@
 #include <nfp6000/nfp_pcie.h>
 #include <nfp6000/nfp_qc.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
@@ -155,12 +156,11 @@ NFD_FLR_DECLARE;
 __shared __gpr struct qc_bitmask cfg_queue_bmsk;
 
 /*
- * "flr_pend_status" is a bit mask containing indicators of whether
- * an FLR is pending service, and which types.  It contains
- * the following bits:
+ * "flr_pend_status" is a mixed register containing processing state
+ * The bits indicate whether an FLR is pending service, and which types.
+ * They are:
  *
- * NFD_FLR_PF_ind: A PF FLR is pending.  This is sufficient basis to
- *                 process the PF FLR as there is only one PF vNIC per island.
+ * NFD_FLR_PF_ind: A PF FLR is pending or in progress.
  * NFD_FLR_VF_LO_ind: A VF FLR is pending on at least one of VFs 0..31.
  *                    flr_pend_vf[NFD_FLR_VF_LO_ind] must be examined
  *                    to determine which VFs have pending FLRs.
@@ -169,8 +169,15 @@ __shared __gpr struct qc_bitmask cfg_queue_bmsk;
  *                    to determine which VFs have pending FLRs.
  * NFD_FLR_PEND_BUSY_shf: One of the above bits is set.  Used to short
  *                        circuit nfd_cfg_next_flr() if no FLRs pending.
+ *
+ * The other processing state indicates which, if any, PF vNIC should be
+ * processed next.  The number stored is the NFD vnic number so in the
+ * range 0..63.
  */
 static __shared __gpr unsigned int flr_pend_status = 0;
+
+#define NFD_CFG_FLR_NEXT_PF_shf     8
+#define NFD_CFG_FLR_NEXT_PF_msk     0x3f
 
 /*
  * "flr_pend_vf" consists of two 32-bit bitmask covering the up-to 64 VFs
@@ -462,7 +469,7 @@ _nfd_cfg_init_pf_ctrl_bar(unsigned int vnic)
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
 
-    mem_write64(&cfg, (NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION),
+    mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 
     mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_LSC,
@@ -502,7 +509,7 @@ nfd_cfg_setup()
     }
 #endif
 
-    for (vnic = NFD_MAX_VFS; vnic < (NFD_MAX_VFS + NFD_MAX_PFS); vnic++) {
+    for (vnic = NFD_FIRST_PF; vnic <= NFD_LAST_PF; vnic++) {
         _nfd_cfg_init_pf_ctrl_bar(vnic);
     }
 }
@@ -806,35 +813,59 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
 __intrinsic int
 nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 {
-    __gpr unsigned int vnic;
-    __gpr unsigned int end_vnic;
-
     if (bit_test(flr_pend_status, NFD_FLR_PEND_BUSY_shf)) {
         if (bit_test(flr_pend_status, NFD_FLR_PF_ind)) {
             /* The PF gets priority */
-
-            flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
+            unsigned int vnic;
 
 #if NFD_MAX_PFS != 0
-            end_vnic = NFD_MAX_VFS + NFD_MAX_PFS - 1;
-            for (vnic = NFD_MAX_VFS; vnic <= end_vnic; vnic += 1) {
-                /* Setup the parse_msg info */
-                cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
-                cfg_msg->vnic = vnic;
-                cfg_msg->interested = 1;
-                cfg_msg->msg_valid = 1;
 
-                cfg_ring_enables[0] = 0;
-                cfg_ring_enables[1] = 0;
-
-                /* Rewrite the CFG BAR for other components */
-                nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vnic);
-                nfd_flr_init_cfg_queue(PCIE_ISL, vnic,
-                                       NFP_QC_STS_LO_EVENT_TYPE_NEVER);
+#if NFD_MAX_PFS == 1
+            vnic = NFD_FIRST_PF;
+#else
+            vnic = ((flr_pend_status >> NFD_CFG_FLR_NEXT_PF_shf) &
+                    NFD_CFG_FLR_NEXT_PF_msk);
+            if (vnic == 0) {
+                vnic = NFD_FIRST_PF;
             }
+#endif
+            /* Setup the parse_msg info */
+            cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
+            cfg_msg->vnic = vnic;
+            cfg_msg->interested = 1;
+            cfg_msg->msg_valid = 1;
+
+            cfg_ring_enables[0] = 0;
+            cfg_ring_enables[1] = 0;
+
+            /* Rewrite the CFG BAR for other components */
+            nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vnic);
+            nfd_flr_init_cfg_queue(PCIE_ISL, vnic,
+                                   NFP_QC_STS_LO_EVENT_TYPE_NEVER);
+#if NFD_MAX_PFS == 1
+            /* Just one PF vNIC, so we're done */
+            flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
+#else
+            if (vnic == NFD_LAST_PF) {
+                /* This was the last PF vNIC, so clear the state */
+                flr_pend_status &= ~(NFD_CFG_FLR_NEXT_PF_msk <<
+                                     NFD_CFG_FLR_NEXT_PF_shf);
+                flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
+
+            } else {
+                /* We have more vNICs to service, so increment vnic and
+                 * leave NFD_FLR_PF_ind set. */
+                flr_pend_status &= ~(NFD_CFG_FLR_NEXT_PF_msk <<
+                                     NFD_CFG_FLR_NEXT_PF_shf);
+                vnic++;
+                flr_pend_status |= (vnic << NFD_CFG_FLR_NEXT_PF_shf);
+            }
+#endif
+
 #else
             /* We're not using the PF, just ACK. */
             nfd_flr_ack_pf(PCIE_ISL);
+            flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
 #endif
 
         } else if (bit_test(flr_pend_status, NFD_FLR_VF_LO_ind)) {
@@ -886,7 +917,7 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
             vf |= 32;
 
-            if (NFD_VNIC_IS_VF(vf)) {
+            if (vf < NFD_MAX_VFS) {
                 /* Setup the parse_msg info */
                 cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;
                 cfg_msg->vnic = vf;

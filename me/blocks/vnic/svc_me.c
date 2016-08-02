@@ -114,12 +114,13 @@ do {                                                                    \
                                                                         \
             if (NFD_VNIC_IS_PF(cfg_msg##_isl.vnic)) {                   \
                 /* We have a PF FLR */                                  \
-                nfd_flr_init_pf_ctrl_bar(NFD_CFG_BASE_LINK(_isl));      \
+                nfd_flr_init_pf_ctrl_bar(NFD_CFG_BASE_LINK(_isl),       \
+                                         cfg_msg##_isl.vnic);           \
                                                                         \
             } else {                                                    \
                 /* We have a VF FLR */                                  \
                 nfd_flr_init_vf_ctrl_bar(NFD_CFG_BASE_LINK(_isl),       \
-                                         NFD_VF_CFG_BASE_LINK(_isl), \
+                                         NFD_VF_CFG_BASE_LINK(_isl),    \
                                          cfg_msg##_isl.vnic);           \
                                                                         \
             }                                                           \

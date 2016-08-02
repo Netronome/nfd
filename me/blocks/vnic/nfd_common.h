@@ -76,24 +76,33 @@
 #endif
 
 
-/* NFD_MAX_VFS is used to determine PF vNIC number, so must
- * always be consistent with VFs in use.  The ambiguous case
- * where N VFs with 0 queues are requested is illegal. */
-#if ((NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0))
-#error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
-#endif
-
-/* Just for completeness */
-#if (NFD_MAX_PF_QUEUES == 0) && (NFD_MAX_PFS != 0)
-#error "NFD_MAX_PFS must be zero if NFD_MAX_PF_QUEUES equals zero"
-#endif
-
+/*
+ * VFs are assigned vNIC numbers first, followed by the PFs.
+ * This makes the number of the first PF equal to NFD_MAX_VFS,
+ * and NFD_MAX_VFS becomes the critical value in tests for
+ * PF/VF.
+ */
 #if (NFD_MAX_VFS == 0)
     #define NFD_VNIC_IS_PF(_x) 1
 #else
     #define NFD_VNIC_IS_PF(_x) ((_x) >= NFD_MAX_VFS)
 #endif
 #define NFD_VNIC_IS_VF(_x) ((_x) < NFD_MAX_VFS)
+
+#define NFD_FIRST_PF     NFD_MAX_VFS
+#define NFD_LAST_PF      (NFD_MAX_VFS + NFD_MAX_PFS - 1)
+
+
+/* vNICs must have queues, so if the "MAX_QUEUES" parameter is zero,
+ * require the related MAX_VFS/PFS parameter to be zero as well. */
+#if ((NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0))
+#error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
+#endif
+
+#if (NFD_MAX_PF_QUEUES == 0) && (NFD_MAX_PFS != 0)
+#error "NFD_MAX_PFS must be zero if NFD_MAX_PF_QUEUES equals zero"
+#endif
+
 
 #ifdef NFD_CFG_CLASS
 #ifndef NFD_CFG_CLASS_VERSION

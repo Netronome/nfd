@@ -153,10 +153,11 @@ nfd_flr_init_cfg_queue(unsigned int pcie_isl, unsigned int vnic,
  * e.g. NFD_CFG_BASE_LINK.
  */
 void
-nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
+nfd_flr_init_pf_ctrl_bar(__emem char *isl_base, unsigned int vnic)
 {
-#if (NFD_MAX_PF_QUEUES != 0)
-    unsigned int q_base = NFD_MAX_VF_QUEUES * NFD_MAX_VFS;
+#if (NFD_MAX_PFS != 0)
+    unsigned int q_base = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS) +
+        (vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES;
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_PF_CAP,
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
                                    NFD_CFG_MAX_MTU,
@@ -164,22 +165,17 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
-    __gpr unsigned int vnic;
-    __gpr unsigned int end_vnic;
 
-    end_vnic = NFD_MAX_VFS + NFD_MAX_PFS - 1;
-    for (vnic = NFD_MAX_VFS; vnic <= end_vnic; vnic += 1) {
-        mem_write64(&cfg,
-                    NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_VERSION,
-                    sizeof cfg);
+    mem_write64(&cfg,
+                NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_VERSION,
+                sizeof cfg);
 
-        mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vnic) +
-                   NFP_NET_CFG_LSC, sizeof exn_lsc);
+    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vnic) +
+               NFP_NET_CFG_LSC, sizeof exn_lsc);
 
-        mem_write8(&rx_off,
-                   NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_RX_OFFSET,
-                   sizeof rx_off);
-    }
+    mem_write8(&rx_off,
+               NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_RX_OFFSET,
+               sizeof rx_off);
 #endif
 }
 
