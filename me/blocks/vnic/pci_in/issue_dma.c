@@ -393,7 +393,16 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         return;
     }
 
-    queue += cfg_msg->vnic * NFD_MAX_VF_QUEUES;
+    #if NFD_MAX_PFS < 2
+        queue += cfg_msg->vnic * NFD_MAX_VF_QUEUES;
+    #else
+    if (NFD_VNIC_IS_PF(cfg_msg->vnic))
+        queue += ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
+                   ((cfg_msg->vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
+    else
+        queue += cfg_msg->vnic * NFD_MAX_VF_QUEUES;
+    #endif
+
     bmsk_queue = NFD_NATQ2BMQ(queue);
 
     if (queue_data[bmsk_queue].locked) {
@@ -409,7 +418,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].lso_hdr_len = 0;
         queue_data[bmsk_queue].lso_seq_cnt = 0;
         queue_data[bmsk_queue].rid = 0;
-        if (cfg_msg->vnic != NFD_MAX_VFS) {
+        if (NFD_VNIC_IS_VF(cfg_msg->vnic)) {
             queue_data[bmsk_queue].rid = cfg_msg->vnic + NFD_CFG_VF_OFFSET;
         }
         queue_data[bmsk_queue].cont = 0;

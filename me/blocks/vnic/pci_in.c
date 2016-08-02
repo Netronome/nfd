@@ -154,6 +154,8 @@ __nfd_in_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
     unsigned int pkt_count;
     unsigned long long byte_count;
     __xwrite unsigned long long xfer_update[2];
+    int vnic;
+    int vqn;
 
     ctassert(__is_ct_const(sync));
     ctassert(sync == sig_done || sync == ctx_swap);
@@ -164,9 +166,10 @@ __nfd_in_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
     if (pkt_count != 0) {
         xfer_update[0] = swapw64(pkt_count);
         xfer_update[1] = swapw64(byte_count);
-        /* Support a single PCIE island and one PF */
-        __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(0/*PCIE_ISL*/, 0/*vnic*/) +
-                    NFP_NET_CFG_TXR_STATS(bmsk_queue)),
+        /* Support a single PCIE island */
+        NFD_EXTRACT_NATQ(vnic, vqn, bmsk_queue);
+        __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(0/*PCIE_ISL*/, vnic) +
+                    NFP_NET_CFG_TXR_STATS(vqn)),
                     sizeof xfer_update, sizeof xfer_update, sync, sig);
     }
 }

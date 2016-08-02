@@ -261,12 +261,30 @@
     .reg changed
     .reg currently_up
     .reg base_addr
+    .reg tmp
 
+#if NFD_MAX_PFS < 2
     #if (NFD_MAX_VF_QUEUES > 0)
         alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_VF_QUEUES))]
     #else
         move(qid, in_q)
     #endif
+#else
+    #if NFD_MAX_VFS == 0
+        alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_PF_QUEUES))]
+    #else
+    .if (NFD_VNIC_IS_PF(in_vnic))
+        alu[qid, --, b, NFD_MAX_VFS, <<(log2(NFD_MAX_VF_QUEUES))]
+        alu[tmp, in_vnic, -, NFD_MAX_VFS]
+        alu[tmp, --, B, tmp, <<(log2(NFD_MAX_PF_QUEUES))]
+        alu[qid, qid, +, tmp]
+        alu[qid, in_q, +, qid]
+    .else
+        alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_VF_QUEUES))]
+    .endif
+    #endif // NFD_MAX_VFS == 0
+#endif // NFD_MAX_PFS < 1
+
 
     // Load the queue state for that queue
     alu[lma, --, B, qid, <<LM_QSTATE_SIZE_lg2]
@@ -336,7 +354,7 @@
     _get_bar_addr(bar_addr_hi, bar_addr_lo, in_vnic)
     mem[read32, $bar[0], bar_addr_hi, <<8, bar_addr_lo, 6], ctx_swap[read_sig]
 
-    .if (in_vnic < NFD_MAX_VFS)
+    .if (NFD_VNIC_IS_VF(in_vnic))
         move(maxqs, NFD_MAX_VF_QUEUES)
         alu[rid, in_vnic, +, NFD_CFG_VF_OFFSET]
     .else

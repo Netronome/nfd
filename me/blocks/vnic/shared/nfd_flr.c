@@ -164,17 +164,22 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base)
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
+    __gpr unsigned int vnic;
+    __gpr unsigned int end_vnic;
 
-    mem_write64(&cfg,
-                NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_VERSION,
-                sizeof cfg);
+    end_vnic = NFD_MAX_VFS + NFD_MAX_PFS - 1;
+    for (vnic = NFD_MAX_VFS; vnic <= end_vnic; vnic += 1) {
+        mem_write64(&cfg,
+                    NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_VERSION,
+                    sizeof cfg);
 
-    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_LSC,
-               sizeof exn_lsc);
+        mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vnic) +
+                   NFP_NET_CFG_LSC, sizeof exn_lsc);
 
-    mem_write8(&rx_off,
-               NFD_CFG_BAR(isl_base, NFD_MAX_VFS) + NFP_NET_CFG_RX_OFFSET,
-               sizeof rx_off);
+        mem_write8(&rx_off,
+                   NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_RX_OFFSET,
+                   sizeof rx_off);
+    }
 #endif
 }
 

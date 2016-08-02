@@ -349,7 +349,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].fl_s = 0;
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
         queue_data[bmsk_queue].requester_id = 0;
-        if (cfg_msg->vnic != NFD_MAX_VFS) {
+        if (NFD_VNIC_IS_VF(cfg_msg->vnic)) {
             queue_data[bmsk_queue].requester_id = (cfg_msg->vnic +
                                                    NFD_CFG_VF_OFFSET);
         }

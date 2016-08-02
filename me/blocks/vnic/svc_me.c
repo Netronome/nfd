@@ -112,7 +112,7 @@ do {                                                                    \
             nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vnic,            \
                                    PCIE_QC_EVENT_NOT_EMPTY);            \
                                                                         \
-            if (cfg_msg##_isl.vnic == NFD_MAX_VFS) {                    \
+            if (NFD_VNIC_IS_PF(cfg_msg##_isl.vnic)) {                   \
                 /* We have a PF FLR */                                  \
                 nfd_flr_init_pf_ctrl_bar(NFD_CFG_BASE_LINK(_isl));      \
                                                                         \

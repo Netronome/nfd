@@ -117,7 +117,7 @@ NFD_CFG_RINGS_INIT(2);
 NFD_CFG_RINGS_INIT(3);
 #endif
 
-#if NFD_MAX_PF_QUEUES != 0
+#if NFD_MAX_PFS != 0
 #define NFD_CFG_PF_DECLARE_IND(_isl)                                    \
     NFD_CFG_BASE_DECLARE(_isl)                                          \
     _NFP_CHIPRES_ASM(.declare_resource nfd_cfg_base##_isl##_res global  \
@@ -125,7 +125,10 @@ NFD_CFG_RINGS_INIT(3);
                      nfd_cfg_base##_isl)                                \
     _NFP_CHIPRES_ASM(.alloc_resource _pf##_isl##_net_bar0               \
                      nfd_cfg_base##_isl##_res+(NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ) \
-                     global NFP_NET_CFG_BAR_SZ)
+                     global (NFD_MAX_PFS * NFP_NET_CFG_BAR_SZ))         \
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_cfg_pf##_isl##_num_ports emem global 8 8)  \
+    _NFP_CHIPRES_ASM(.init nfd_cfg_pf##_isl##_num_ports NFD_MAX_PFS)
+
 #else
 #define NFD_CFG_PF_DECLARE_IND(_isl)
 #endif
@@ -391,15 +394,25 @@ _nfd_cfg_queue_setup()
     nfd_cfg_queue.event_type = PCIE_QC_EVENT_NOT_EMPTY;
     nfd_cfg_queue.ptr        = 0;
 
-#if NFD_MAX_VF_QUEUES != 0
+#if NFD_MAX_PFS < 2
     /* Init the VF config queues and possibly end with PF queue.
      * Each NFD queue uses a block of 4 QC queues. */
     init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
                    4 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS + NFD_MAX_PFS);
 #else
-    /* Just the PF to init */
-    qc_init_queue(PCIE_ISL, NFD_CFG_QUEUE, &nfd_cfg_queue);
+    #if NFD_MAX_VFS == 0
+        init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
+                       4 * NFD_MAX_PF_QUEUES, NFD_MAX_PFS);
+    #else
+        init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
+                       4 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS);
+        init_qc_queues(PCIE_ISL, &nfd_cfg_queue,
+                       NFD_CFG_QUEUE + (4 * NFD_MAX_VF_QUEUES * NFD_MAX_VFS),
+                       4 * NFD_MAX_PF_QUEUES, NFD_MAX_PFS);
+
+    #endif
 #endif
+
 }
 
 /*
@@ -436,10 +449,11 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
 
 
 static void
-_nfd_cfg_init_pf_ctrl_bar()
+_nfd_cfg_init_pf_ctrl_bar(unsigned int vnic)
 {
-#if (NFD_MAX_PF_QUEUES != 0)
-    unsigned int q_base = NFD_MAX_VF_QUEUES * NFD_MAX_VFS;
+#if (NFD_MAX_PFS != 0)
+    unsigned int q_base = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS) +
+        (vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES;
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_PF_CAP,
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
                                    NFD_CFG_MAX_MTU,
@@ -448,18 +462,13 @@ _nfd_cfg_init_pf_ctrl_bar()
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
 
-    mem_write64(&cfg,
-                (NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
-                 NFP_NET_CFG_VERSION),
+    mem_write64(&cfg, (NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION),
                 sizeof cfg);
 
-    mem_write8(&exn_lsc,
-               NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_LSC,
+    mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
 
-    mem_write8(&rx_off,
-               NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) +
-                    NFP_NET_CFG_RX_OFFSET,
+    mem_write8(&rx_off, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_RX_OFFSET,
                sizeof rx_off);
 #endif
 }
@@ -493,9 +502,9 @@ nfd_cfg_setup()
     }
 #endif
 
-#if NFD_MAX_PF_QUEUES != 0
-    _nfd_cfg_init_pf_ctrl_bar();
-#endif
+    for (vnic = NFD_MAX_VFS; vnic < (NFD_MAX_VFS + NFD_MAX_PFS); vnic++) {
+        _nfd_cfg_init_pf_ctrl_bar(vnic);
+    }
 }
 
 
@@ -797,27 +806,32 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
 __intrinsic int
 nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 {
+    __gpr unsigned int vnic;
+    __gpr unsigned int end_vnic;
+
     if (bit_test(flr_pend_status, NFD_FLR_PEND_BUSY_shf)) {
         if (bit_test(flr_pend_status, NFD_FLR_PF_ind)) {
             /* The PF gets priority */
 
             flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
 
-#if NFD_MAX_PF_QUEUES != 0
-            /* Setup the parse_msg info */
-            cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
-            cfg_msg->vnic = NFD_MAX_VFS;
-            cfg_msg->interested = 1;
-            cfg_msg->msg_valid = 1;
+#if NFD_MAX_PFS != 0
+            end_vnic = NFD_MAX_VFS + NFD_MAX_PFS - 1;
+            for (vnic = NFD_MAX_VFS; vnic <= end_vnic; vnic += 1) {
+                /* Setup the parse_msg info */
+                cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
+                cfg_msg->vnic = vnic;
+                cfg_msg->interested = 1;
+                cfg_msg->msg_valid = 1;
 
-            cfg_ring_enables[0] = 0;
-            cfg_ring_enables[1] = 0;
+                cfg_ring_enables[0] = 0;
+                cfg_ring_enables[1] = 0;
 
-            /* Rewrite the CFG BAR for other components */
-            nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), NFD_MAX_VFS);
-            nfd_flr_init_cfg_queue(PCIE_ISL, NFD_MAX_VFS,
-                                   NFP_QC_STS_LO_EVENT_TYPE_NEVER);
-
+                /* Rewrite the CFG BAR for other components */
+                nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vnic);
+                nfd_flr_init_cfg_queue(PCIE_ISL, vnic,
+                                       NFP_QC_STS_LO_EVENT_TYPE_NEVER);
+            }
 #else
             /* We're not using the PF, just ACK. */
             nfd_flr_ack_pf(PCIE_ISL);
@@ -872,7 +886,7 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
             vf |= 32;
 
-            if (vf < NFD_MAX_VFS) {
+            if (NFD_VNIC_IS_VF(vf)) {
                 /* Setup the parse_msg info */
                 cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;
                 cfg_msg->vnic = vf;
@@ -949,7 +963,7 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
     }
 
     /* Set the queue to process to the final queue */
-    if (cfg_msg->vnic == NFD_MAX_VFS) {
+    if (NFD_VNIC_IS_PF(cfg_msg->vnic)) {
         cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
     } else {
         cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;

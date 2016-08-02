@@ -115,9 +115,13 @@ enum pcie_cpp2pcie_bar {
 #error "NFD_MAX_VFS is not defined but is required"
 #endif
 
+#ifndef NFD_MAX_PFS
+#error "NFD_MAX_PFS is not defined but is required"
+#endif
+
 
 /* Require that at least some queues are used by NFD. */
-#if ((NFD_MAX_VF_QUEUES * NFD_MAX_VFS) + NFD_MAX_PF_QUEUES) == 0
+#if ((NFD_MAX_VF_QUEUES * NFD_MAX_VFS) + (NFD_MAX_PF_QUEUES * NFD_MAX_PFS)) == 0
 #error "PF and VF options imply that no queues are in use"
 #endif
 
@@ -129,6 +133,10 @@ enum pcie_cpp2pcie_bar {
 #error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
 #endif
 
+/* Just for completeness */
+#if (NFD_MAX_PF_QUEUES == 0) && (NFD_MAX_PFS != 0)
+#error "NFD_MAX_PFS must be zero if NFD_MAX_PF_QUEUES equals zero"
+#endif
 
 /* Ensure that the user provides NFD_CFG_VF_CAP if they
  * want to use VFs. */

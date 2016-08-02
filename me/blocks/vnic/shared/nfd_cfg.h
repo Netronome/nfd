@@ -76,12 +76,8 @@
 #define NFD_CFG_NUM_RINGS       8
 
 
-/* It is convenient to have a value like NFD_MAX_VFS for the PF,
- * so we set one up based on whether PF queues are defined or not. */
-#if (NFD_MAX_PF_QUEUES != 0)
-#define NFD_MAX_PFS 1
-#else
-#define NFD_MAX_PFS 0
+#ifndef NFD_MAX_PFS
+#error "NFD_MAX_PFS is not defined but is required"
 #endif
 
 

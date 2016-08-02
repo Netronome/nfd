@@ -23,10 +23,8 @@
 #include "nfd_user_cfg.h"
 #include <nfp_net_ctrl.h>
 
-#if NFD_MAX_PF_QUEUES != 0
-#define NFD_MAX_PFS 1
-#else
-#define NFD_MAX_PFS 0
+#ifndef NFD_MAX_PFS
+#error "NFD_MAX_PFS is not defined but is required"
 #endif
 
 #define_eval NFD_TOTAL_VNICS (NFD_MAX_VFS + NFD_MAX_PFS)
@@ -37,12 +35,14 @@
 #macro nfd_define_pf_bars(_isl)
 .alloc_mem nfd_cfg_base/**/_isl NFD_PCIE/**/_isl/**/_EMEM global \
     NFD_CFG_BAR_SZ 0x200000
-#if NFD_MAX_PF_QUEUES != 0
+#if NFD_MAX_PFS != 0
 .declare_resource nfd_cfg_base/**/_isl/**/_res global NFD_CFG_BAR_SZ \
     nfd_cfg_base/**/_isl
 .alloc_resource _pf/**/_isl/**/_net_bar0 \
     nfd_cfg_base/**/_isl/**/_res+NFD_CFG_BAR0_OFF global \
-    NFP_NET_CFG_BAR_SZ
+    (NFD_MAX_PFS * NFP_NET_CFG_BAR_SZ)
+.alloc_mem nfd_cfg_pf/**/_isl/**/_num_ports emem global 8 8
+.init nfd_cfg_pf/**/_isl/**/_num_ports NFD_MAX_PFS
 #endif
 #endm
 

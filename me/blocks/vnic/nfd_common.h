@@ -71,6 +71,10 @@
 #error "NFD_MAX_VFS is not defined but is required"
 #endif
 
+#ifndef NFD_MAX_PFS
+#error "NFD_MAX_PFS is not defined but is required"
+#endif
+
 
 /* NFD_MAX_VFS is used to determine PF vNIC number, so must
  * always be consistent with VFs in use.  The ambiguous case
@@ -79,6 +83,17 @@
 #error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
 #endif
 
+/* Just for completeness */
+#if (NFD_MAX_PF_QUEUES == 0) && (NFD_MAX_PFS != 0)
+#error "NFD_MAX_PFS must be zero if NFD_MAX_PF_QUEUES equals zero"
+#endif
+
+#if (NFD_MAX_VFS == 0)
+    #define NFD_VNIC_IS_PF(_x) 1
+#else
+    #define NFD_VNIC_IS_PF(_x) ((_x) >= NFD_MAX_VFS)
+#endif
+#define NFD_VNIC_IS_VF(_x) ((_x) < NFD_MAX_VFS)
 
 #ifdef NFD_CFG_CLASS
 #ifndef NFD_CFG_CLASS_VERSION
@@ -141,13 +156,27 @@
 
 /* Config queues are a special case where the vNIC
  * can be computed easily. The queue is known by definition. */
+
+#if NFD_MAX_PFS < 2
 #if NFD_MAX_VF_QUEUES != 0
 #define NFD_CFGQ2VNIC(_cfg)                     \
     ((_cfg) / NFD_MAX_VF_QUEUES)
 #else
 /* We must have the PF */
 #define NFD_CFGQ2VNIC(_cfg) NFD_MAX_VFS
-#endif
+#endif /* NFD_MAX_VF_QUEUES != 0 */
+#else
+#if NFD_MAX_VFS == 0
+#define NFD_CFGQ2VNIC(_cfg)                     \
+    ((_cfg) / NFD_MAX_PF_QUEUES)
+#else
+#define NFD_CFGQ2VNIC(_cfg)                                             \
+    (((_cfg) < (NFD_MAX_VFS * NFD_MAX_VF_QUEUES)) ?                     \
+     ((_cfg) / NFD_MAX_VF_QUEUES) :                                     \
+     ((((_cfg) - (NFD_MAX_VF_QUEUES * NFD_MAX_VFS)) / NFD_MAX_PF_QUEUES) \
+      + NFD_MAX_VFS))
+#endif /* NFD_MAX_VFS == 0 */
+#endif /* NFD_MAX_PFS < 2 */
 
 /* If a natural queue is known to be related to a VF,
  * the mapping can be computed cheaply. */
@@ -157,20 +186,31 @@
 #define NFD_NATQ2VFQ(_nat)                      \
     ((_nat) % NFD_MAX_VF_QUEUES)
 
-
-/* If a natural queue is known to be related to a PF,
- * the mapping can be computed cheaply. */
+#if NFD_MAX_PFS < 2
 #define NFD_NATQ2PF(_nat)                       \
     (NFD_MAX_VFS)
-
 #define NFD_NATQ2PFQ(_nat)                          \
     ((_nat) - (NFD_MAX_VF_QUEUES * NFD_MAX_VFS))
-
+#else
+#define NFD_NATQ2PF(_nat)                       \
+  ((((_nat) - (NFD_MAX_VF_QUEUES * NFD_MAX_VFS)) / NFD_MAX_PF_QUEUES)\
+   + NFD_MAX_VFS)
+#define NFD_NATQ2PFQ(_nat)                          \
+    (((_nat) - (NFD_MAX_VF_QUEUES * NFD_MAX_VFS)) % NFD_MAX_PF_QUEUES)
+#endif
 
 /* If we know the vNIC, we can compute the queue cheaply. */
-#define NFD_NATQ2VQN(_nat, _vnic)               \
-    ((_nat) - (_vnic * NFD_MAX_VF_QUEUES))
-
+#if NFD_MAX_PFS < 2
+#define NFD_NATQ2VQN(_nat, _vnic)                       \
+    ((_nat) - ((_vnic) * NFD_MAX_VF_QUEUES))
+#else
+#define NFD_NATQ2VQN(_nat, _vnic)                               \
+    ((NFD_VNIC_IS_VF(_vnic)) ?                                  \
+    ((_nat) - ((_vnic) * NFD_MAX_VF_QUEUES)) :                  \
+      ((_nat) - ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +            \
+                 (((_vnic) - NFD_MAX_VFS) *                     \
+                  NFD_MAX_PF_QUEUES))))
+#endif /* if NFD_MAX_PFS < 2 */
 
 #ifndef __NFP_LANG_ASM
 
@@ -178,7 +218,7 @@
  * the above PF and VF macros as appropriate, if the configuration
  * allows compile time selection. */
 #if (((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0)) &&     \
-     (NFD_MAX_PF_QUEUES != 0))
+     ((NFD_MAX_PFS != 0) && (NFD_MAX_PF_QUEUES != 0)))
     /* With no special knowledge about the natural queue, */
     /* we need to test whether it is a PF queue or a VF */
     /* queue, and handle each case differently. */
@@ -201,7 +241,7 @@ do {                                              \
         _vnic = NFD_NATQ2PF(_nat);                \
 } while(0)
 
-#elif (NFD_MAX_PF_QUEUES != 0)
+#elif ((NFD_MAX_PFS != 0) && (NFD_MAX_PF_QUEUES != 0))
     /* We have PF queues only */
 #define NFD_EXTRACT_NATQ(_vnic, _vqn, _nat)       \
 do {                                              \
@@ -242,14 +282,24 @@ do {                                              \
 #define NFD_EXTRACT_QID(_vnic, _vqn, _qid)              \
     NFD_EXTRACT_NATQ(_vnic, _vqn, NFD_BMQ2NATQ(_qid))
 
-
-/* Building queue numbers does not have corner cases */
-#define NFD_BUILD_NATQ(_vnic, _vqn) \
+#if NFD_MAX_PFS < 2
+#define NFD_BUILD_NATQ(_vnic, _vqn)            \
     ((_vnic) * NFD_MAX_VF_QUEUES + (_vqn))
+#else /* NFD_MAX_PFS < 2 */
+#if NFD_MAX_VFS > 0
+#define NFD_BUILD_NATQ(_vnic, _vqn)                             \
+    ((NFD_VNIC_IS_VF(_vnic)) ?                                  \
+     ((_vnic) * NFD_MAX_VF_QUEUES + (_vqn)) :                   \
+     ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +                       \
+      (((_vnic) - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES) + (_vqn)))
+#else /* NFD_MAX_VFS > 0 */
+#define NFD_BUILD_NATQ(_vnic, _vqn)             \
+    ((_vnic) * NFD_MAX_PF_QUEUES + (_vqn))
+#endif /* NFD_MAX_VFS > 0 */
+#endif /* NFD_MAX_PFS < 2 */
 
 #define NFD_BUILD_QID(_vnic, _vqn) \
     NFD_NATQ2BMQ(NFD_BUILD_NATQ(_vnic, _vqn))
-
 
 /*
  * Convert between the queue controller queues and natural queues.

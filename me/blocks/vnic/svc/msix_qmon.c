@@ -73,7 +73,8 @@
  */
 
 
-#define MAX_QUEUE_NUM (NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PF_QUEUES - 1)
+#define MAX_QUEUE_NUM (NFD_MAX_VFS * NFD_MAX_VF_QUEUES + \
+                       NFD_MAX_PFS * NFD_MAX_PF_QUEUES - 1)
 #define MAX_NUM_PCI_ISLS 4
 
 
@@ -240,8 +241,16 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
         ring = ffs64(rings);
         rings &= rings - 1;
 
-        /* Convert ring number to a queue number */
-        qnum = ring + vnic * NFD_MAX_VF_QUEUES;
+       /* Convert ring number to a queue number */
+        #if NFD_MAX_PFS < 2
+            qnum = ring + vnic * NFD_MAX_VF_QUEUES;
+        #else
+        if (NFD_VNIC_IS_PF(vnic))
+            qnum = ring + ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
+                           ((vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
+        else
+            qnum = ring + vnic * NFD_MAX_VF_QUEUES;
+        #endif /* NFD_MAX_PFS < 2 */
 
         /* Get MSI-X entry number and stash it into local memory */
         if (rx_rings) {
@@ -265,7 +274,15 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
     }
 
     /* Convert VF ring bitmask into Queue mask */
-    queues = vf_rings << (vnic * NFD_MAX_VF_QUEUES);
+    #if NFD_MAX_PFS < 2
+        queues = vf_rings << (vnic * NFD_MAX_VF_QUEUES);
+    #else
+    if (NFD_VNIC_IS_PF(vnic))
+        queues = vf_rings << ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
+                              ((vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
+    else
+        queues = vf_rings << (vnic * NFD_MAX_VF_QUEUES);
+    #endif
 
     /* Work out which queues have been newly enabled and make sure
      * they don't have pending bits set. */
@@ -280,8 +297,15 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
     }
 
     /* Update the enabled bit mask with queues for this VF. */
-    if (vnic == NFD_MAX_VFS)
+    #if NFD_MAX_PFS < 2
+    if (NFD_VNIC_IS_PF(vnic))
         vf_queue_mask = MSIX_PF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
+    #else
+    if (NFD_VNIC_IS_PF(vnic))
+        vf_queue_mask = MSIX_PF_RINGS_MASK <<
+            ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
+             ((vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
+    #endif
     else
         vf_queue_mask = MSIX_VF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
 
@@ -329,7 +353,15 @@ msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vnic,
         rings &= rings - 1;
 
         /* Convert ring number to a queue number */
-        qnum = ring + vnic * NFD_MAX_VF_QUEUES;
+        #if NFD_MAX_PFS < 2
+            qnum = ring + vnic * NFD_MAX_VF_QUEUES;
+        #else
+        if (NFD_VNIC_IS_PF(vnic))
+            qnum = ring + ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
+                           ((vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
+        else
+            qnum = ring + vnic * NFD_MAX_VF_QUEUES;
+        #endif
 
         /* Get interrupt moderation packet count and timeout and and stash
          * them into local memory */
@@ -395,7 +427,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
         }
 
         /* Make sure the vnic is not configuring rings it has no control over */
-        if (vnic == NFD_MAX_VFS) {
+        if (NFD_VNIC_IS_PF(vnic)) {
             vf_tx_rings_new &= MSIX_PF_RINGS_MASK;
             vf_rx_rings_new &= MSIX_PF_RINGS_MASK;
         } else {
@@ -403,16 +435,26 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
             vf_rx_rings_new &= MSIX_VF_RINGS_MASK;
         }
 
-	/* Avoiding TX interrupts if requested */
+        /* Avoiding TX interrupts if requested */
         if (control & NFP_NET_CFG_CTRL_MSIX_TX_OFF)
             vf_tx_rings_new = 0;
-	
+
 
         /* Set MSI-X automask bits.  We assume that a VF/PF has the same
          * number of RX and TX rings and simple set the auto-mask bits for
          * all queues of the VF/PF depending on the auto-mask bit in the
          * control word. */
-        queues = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
+        #if NFD_MAX_PFS < 2
+            queues = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
+        #else
+        if (NFD_VNIC_IS_PF(vnic))
+            queues = vf_rx_rings_new << ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
+                                         ((vnic - NFD_MAX_VFS) *
+                                          NFD_MAX_PF_QUEUES));
+        else
+            queues = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
+        #endif
+
         if (control & NFP_NET_CFG_CTRL_MSIXAUTO)
             msix_cls_automask[pcie_isl] |= queues;
         else
@@ -807,7 +849,7 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
         mem_write8_le(&mask_w, (__mem void *)cfg_bar, 1);
     }
 
-    if (fn >= NFD_MAX_VFS)
+    if (NFD_VNIC_IS_PF(fn))
         ret = msix_pf_send(pcie_isl + 4, PCIE_CPP2PCIE_QMON, entry, automask);
     else
         ret = msix_vf_send(pcie_isl + 4, PCIE_CPP2PCIE_QMON, fn,

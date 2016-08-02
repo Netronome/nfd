@@ -22,15 +22,9 @@
 
 #include <nfd_user_cfg.h>
 
-/* Should be in nfd_user_cfg.h, but issues in nfd_cfg_pf_bars.h prevents this */
 #ifndef NFD_MAX_PFS
-#if NFD_MAX_PF_QUEUES != 0
-#define NFD_MAX_PFS 1
-#else /* NFD_MAX_PF_QUEUES != 0 */
-#define NFD_MAX_PFS 0
-#endif /* NFD_MAX_PF_QUEUES != 0 */
-#endif /* NFD_MAX_PFS */
-
+#error "NFD_MAX_PFS is not defined but is required"
+#endif
 
 /* Each statistic is a 64-bit count + a 64-bit byte-count */
 #define NFD_STAT_SIZE   16
