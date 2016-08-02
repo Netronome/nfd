@@ -189,7 +189,7 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
 
     /* Check for and handle FLRs */
     if (update_request & NFP_NET_CFG_UPDATE_RESET) {
-        if ((NFD_NUM_VFS != 0) && NFD_VNIC_IS_VF(cfg_msg->vnic)) {
+        if ((NFD_MAX_VFS != 0) && NFD_VNIC_IS_VF(cfg_msg->vnic)) {
             /* We have a VF FLR */
             _nfd_flr_ack_vf(pcie_isl, cfg_msg->vnic);
         } else {
