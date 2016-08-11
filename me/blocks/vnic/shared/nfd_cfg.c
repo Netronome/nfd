@@ -25,6 +25,7 @@
 #include <nfp/mem_ring.h>
 #include <nfp/xpb.h>
 
+#include <vnic/nfd_common.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
 
