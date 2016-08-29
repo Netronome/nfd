@@ -134,7 +134,7 @@
 #define PCIE_DMA_SIGCTX_bf      1, 20, 18
 #define PCIE_DMA_SIGCTX_wrd     1
 #define PCIE_DMA_SIGCTX_shf     18
-#define PCIE_DMA_SIGCTX_msk     0x3
+#define PCIE_DMA_SIGCTX_msk     0x7
 #define PCIE_DMA_SIGNUM_bf      1, 17, 14
 #define PCIE_DMA_SIGNUM_wrd     1
 #define PCIE_DMA_SIGNUM_shf     14
