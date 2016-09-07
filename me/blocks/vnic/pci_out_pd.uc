@@ -500,6 +500,11 @@ ctm_and_mu_dma#:
         wsm_extract(tmp, in_work, SB_WQ_DATALEN)
         .if (tmp > NFD_OUT_MAX_PKT_BYTES)
             .while (1)
+                move(tmp, NFD_OUT_PD_INVALID_LENGTH)
+                local_csr_wr[MAILBOX0, tmp]
+                local_csr_wr[MAILBOX1, in_work[2]]
+                local_csr_wr[MAILBOX2, in_work[3]]
+                local_csr_wr[MAILBOX3, in_work[4]]
                 ctx_arb[bpt]
             .endw
         .endif
@@ -601,6 +606,11 @@ mu_only_dma#:
         // len still holds the full packet length
         .if (len > NFD_OUT_MAX_PKT_BYTES)
             .while (1)
+                move(tmp, NFD_OUT_PD_INVALID_LENGTH)
+                local_csr_wr[MAILBOX0, tmp]
+                local_csr_wr[MAILBOX1, in_work[2]]
+                local_csr_wr[MAILBOX2, in_work[3]]
+                local_csr_wr[MAILBOX3, in_work[4]]
                 ctx_arb[bpt]
             .endw
         .endif
@@ -682,6 +692,11 @@ ctm_only_not_flagged#:
     // We should only reach this point if the user did not flag
     // a packet as "ctm_only" correctly, or the input descriptor
     // was corrupt.  Either way, stop the ME.
+    move(tmp, NFD_OUT_PD_UNMARKED_CTM_ONLY)
+    local_csr_wr[MAILBOX0, tmp]
+    local_csr_wr[MAILBOX1, in_work[2]]
+    local_csr_wr[MAILBOX2, in_work[3]]
+    local_csr_wr[MAILBOX3, in_work[4]]
     ctx_arb[bpt]
     br[ctm_only_not_flagged#]
 
@@ -940,7 +955,12 @@ main#:
     /*
      * Global initialization
      */
-    /* XXX placeholder for any global initialization required */
+    .if (ctx() == 0)
+        local_csr_wr[MAILBOX0, 0]
+        local_csr_wr[MAILBOX1, 0]
+        local_csr_wr[MAILBOX2, 0]
+        local_csr_wr[MAILBOX3, 0]
+    .endif
 
     /*
      * PER CONTEXT INITIALIZATION

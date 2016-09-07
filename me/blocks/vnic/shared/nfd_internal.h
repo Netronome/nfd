@@ -587,6 +587,10 @@ struct nfd_out_send_desc_msg {
 #error "Incompatible defines: Neither NFD_VNIC_PF nor NFD_VNIC_VF set"
 #endif
 
+#endif /* __NFP_LANG_MICROC */
+
+#endif /* !__NFP_LANG_ASM */
+
 /* NFD halt error codes */
 #define NFD_CFG_PCIE_LINK_DOWN          0x800
 #define NFD_CFG_PCIE_MON_ABI_MISMATCH   0x801
@@ -594,9 +598,7 @@ struct nfd_out_send_desc_msg {
 #define NFD_IN_ISSUE_DMA_MU_PTR_INVALID 0x803
 #define NFD_IN_GATHER_INVALID_IDMA      0x804
 #define NFD_IN_ISSUE_DMA_BATCH_INVALID  0x805
-
-#endif /* __NFP_LANG_MICROC */
-
-#endif /* !__NFP_LANG_ASM */
+#define NFD_OUT_PD_INVALID_LENGTH       0x806
+#define NFD_OUT_PD_UNMARKED_CTM_ONLY    0x807
 
 #endif /* !_BLOCKS__SHARED_NFD_INTERNAL_H_ */
