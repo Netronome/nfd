@@ -904,7 +904,7 @@ main#:
     .reg volatile g_bitmap_base
     .reg volatile g_seq_mask
     .reg volatile g_pkt_num_mask
-    .reg volatlie g_pkt_free_hi
+    .reg volatile g_pkt_free_hi
     .reg volatile g_send_cntrs_addr_hi
     .reg volatile g_blm_addr_hi
     .reg volatile g_blm_iref
