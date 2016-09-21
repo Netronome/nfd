@@ -101,9 +101,9 @@
  *    0  |S|    offset   |           reserved            |itf|   q_num   |
  *       +-+-+-+---------+-------------------------------+---+-----------+
  *    1  |I|J|S|                       buf_addr                          |
- *       +-+-+-+---------+---------------+-------------------------------+
- *    2  |     flags     |   l4_offset   |               lso             |
- *       +---------------+---------------+-------------------------------+
+ *       +-+-+-+---------+---------------+-+-+---------------------------+
+ *    2  |     flags     |   l4_offset   |L|S|           mss             |
+ *       +---------------+---------------+-+-+---------------------------+
  *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
@@ -144,8 +144,10 @@
 #define NFD_IN_FLAGS_TX_ENCAP_VXLAN_fld 2, 25, 25
 #define NFD_IN_FLAGS_TX_ENCAP_GRE_fld   2, 24, 24
 #define NFD_IN_L4OFF_fld        2, 23, 16
-#define NFD_IN_LSO_fld          2, 15, 0
-#define NFD_IN_SEQ_fld          2, 15, 0
+#define NFD_IN_LSO_fld          2, 23, 0
+#define NFD_IN_LSO_SEQ_CNT_fld  2, 23, 16
+#define NFD_IN_LSO_END_fld      2, 15, 15
+#define NFD_IN_LSO_MSS_fld      2, 13, 0
 #define NFD_IN_DATALEN_fld      3, 31, 16
 #define NFD_IN_VLAN_fld         3, 15, 0
 #define NFD_IN_META_SIZE        16
