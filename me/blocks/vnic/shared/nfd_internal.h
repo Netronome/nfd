@@ -190,7 +190,7 @@ enum NFD_IN_LSO_CNTR_IDX {
     NFD_IN_LSO_CNTR_LENGTH /*Last element indicates total number of counters*/
 };
 
-const char *nfd_in_lso_cntr_names[] = {
+static const char *nfd_in_lso_cntr_names[] = {
     "NFD_IN_LSO_CNTR_T_ISSUED_ALL_TX_DESC",
     "NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_TX_DESC",
     "NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_JUMBO_TX_DESC",
