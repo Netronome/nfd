@@ -110,6 +110,13 @@
 #endif
 #endif
 
+/* Check if BPF config is complete if enabled */
+#ifdef NFD_BPF_CAPABLE
+#if !defined(NFD_BPF_START_OFF) || !defined(NFD_BPF_DONE_OFF)
+#error "NFD_BPF_CAPABLE defined but NFD_BPF_START_OFF and NFD_BPF_DONE_OFF not set"
+#endif
+#endif
+
 
 
 #define NFD_IN_DESC_SIZE        16
