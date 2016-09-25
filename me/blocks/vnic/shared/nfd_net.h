@@ -43,7 +43,7 @@
  * RX and freelist descriptor format
  */
 /* Flags in the RX descriptor */
-#define PCIE_DESC_RX_RSS            (1 << 15)
+#define PCIE_DESC_RX_SPARE2         (1 << 15)
 #define PCIE_DESC_RX_I_IP4_CSUM     (1 << 14)
 #define PCIE_DESC_RX_I_IP4_CSUM_OK  (1 << 13)
 #define PCIE_DESC_RX_I_TCP_CSUM     (1 << 12)
