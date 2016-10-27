@@ -28,7 +28,7 @@ a     data field #0
   =====================
        packet data
 
-Field type word contains 8 4bit field types (8 x 4 = 32bit).  If one 
+Field type word contains 8 4bit field types (8 x 4 = 32bit).  If one
 wants to prepend a field in FW one has to do:
 
 /* data_start() gives us address to first byte of metadata */
@@ -57,3 +57,7 @@ Note that we allow hash type to be reported inline i.e. we put:
 
 That way host sees NFP_NET_META_HASH and can extract the type from text
 4bits.
+
+4.1:
+
+Report link speed in the BAR.

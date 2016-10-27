@@ -434,7 +434,10 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
 #else
     unsigned int q_base = 0;
 #endif
-    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_VF_CAP,
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION,
+                                   (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
+                                    << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
+                                   NFD_CFG_VF_CAP,
                                    NFD_MAX_VF_QUEUES, NFD_MAX_VF_QUEUES,
                                    NFD_CFG_MAX_MTU,
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
@@ -472,7 +475,10 @@ _nfd_cfg_init_pf_ctrl_bar(unsigned int vnic)
 #if (NFD_MAX_PFS != 0)
     unsigned int q_base = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS) +
         (vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES;
-    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION, 0, NFD_CFG_PF_CAP,
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION,
+                                   (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
+                                    << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
+                                   NFD_CFG_PF_CAP,
                                    NFD_MAX_PF_QUEUES, NFD_MAX_PF_QUEUES,
                                    NFD_CFG_MAX_MTU,
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
