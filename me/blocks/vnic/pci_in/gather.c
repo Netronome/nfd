@@ -369,6 +369,7 @@ gather()
              */
             struct nfd_in_batch_desc batch;
             unsigned int pcie_addr_off;
+            unsigned int pcie_addr_hi_tmp, pcie_addr_lo_tmp;
             __xwrite struct nfp_pcie_dma_cmd descr;
             __xwrite struct nfd_in_batch_desc xbatch;
             SIGNAL batch_sig;
@@ -437,9 +438,18 @@ gather()
              * Filling the descriptor can possibly be optimised either
              * by doing it all by hand, or playing with initialisation time.
              */
-            descr_tmp.pcie_addr_hi = queue_data[queue].ring_base_hi;
-            descr_tmp.pcie_addr_lo = (queue_data[queue].ring_base_lo +
-                                      pcie_addr_off);
+
+            /* Get 40bit PCIe address using an add with carry for the offset */
+            pcie_addr_hi_tmp = queue_data[queue].ring_base_hi;
+            pcie_addr_lo_tmp = queue_data[queue].ring_base_lo;
+            __asm {
+                /* XXX use ASM to perform +carry op explicitly */
+                /* XXX semi-colons below technically start ASM comment */
+                alu[pcie_addr_lo_tmp, pcie_addr_lo_tmp, +, pcie_addr_off];
+                alu[pcie_addr_hi_tmp, pcie_addr_hi_tmp, +carry, 0];
+            }
+            descr_tmp.pcie_addr_hi = pcie_addr_hi_tmp;
+            descr_tmp.pcie_addr_lo = pcie_addr_lo_tmp;
             descr_tmp.rid = queue_data[queue].requester_id;
             /* Can replace with ld_field instruction if 8bit seqn is enough */
             dma_seqn_set_event(&descr_tmp, NFD_IN_GATHER_EVENT_TYPE, 0,

@@ -428,6 +428,7 @@ _fetch_fl(__gpr unsigned int *queue)
 {
     unsigned int qc_queue;
     unsigned int pcie_addr_off;
+    unsigned int pcie_addr_hi_tmp, pcie_addr_lo_tmp;
     unsigned int fl_cache_off;
     __xwrite struct nfp_pcie_dma_cmd descr;
     SIGNAL qc_sig;
@@ -493,9 +494,19 @@ _fetch_fl(__gpr unsigned int *queue)
         pcie_addr_off = pcie_addr_off * sizeof(struct nfd_out_fl_desc);
 
         /* Complete descriptor */
-        descr_tmp.pcie_addr_hi = queue_data[*queue].ring_base_hi;
-        descr_tmp.pcie_addr_lo = (queue_data[*queue].ring_base_lo +
-                                  pcie_addr_off);
+        /* Get 40bit PCIe address using an add with carry for the offset */
+        pcie_addr_hi_tmp = queue_data[*queue].ring_base_hi;
+        pcie_addr_lo_tmp = queue_data[*queue].ring_base_lo;
+        __asm {
+            /* XXX use ASM to perform +carry op explicitly */
+            /* XXX semi-colons below technically start ASM comment */
+            alu[pcie_addr_lo_tmp, pcie_addr_lo_tmp, +, pcie_addr_off];
+            alu[pcie_addr_hi_tmp, pcie_addr_hi_tmp, +carry, 0];
+        }
+        descr_tmp.pcie_addr_hi = pcie_addr_hi_tmp;
+        descr_tmp.pcie_addr_lo = pcie_addr_lo_tmp;
+
+        /* Handle CPP portion of the descriptor */
         descr_tmp.cpp_addr_lo =
             cache_desc_compute_fl_addr(queue, queue_data[*queue].fl_s);
         descr_tmp.rid = queue_data[*queue].requester_id;
@@ -780,6 +791,7 @@ _start_send(__gpr unsigned int *queue)
             int dma_batch_correction;
             unsigned int dma_batch;
             unsigned int pcie_addr_off;
+            unsigned int pcie_addr_hi_tmp, pcie_addr_lo_tmp;
             unsigned int dma_length;
             unsigned int pending_slot;
             struct nfd_out_send_desc_msg send_msg;
@@ -812,9 +824,19 @@ _start_send(__gpr unsigned int *queue)
             /* Complete descriptor */
             dma_length = (dma_batch * sizeof(struct nfd_out_rx_desc)) - 1;
             rx_descr_tmp.length = dma_length;
-            rx_descr_tmp.pcie_addr_hi = queue_data[*queue].ring_base_hi;
-            rx_descr_tmp.pcie_addr_lo = (queue_data[*queue].ring_base_lo +
-                                         pcie_addr_off);
+            /* Get 40bit PCIe address using an add with carry for the offset */
+            pcie_addr_hi_tmp = queue_data[*queue].ring_base_hi;
+            pcie_addr_lo_tmp = queue_data[*queue].ring_base_lo;
+            __asm {
+                /* XXX use ASM to perform +carry op explicitly */
+                /* XXX semi-colons below technically start ASM comment */
+                alu[pcie_addr_lo_tmp, pcie_addr_lo_tmp, +, pcie_addr_off];
+                alu[pcie_addr_hi_tmp, pcie_addr_hi_tmp, +carry, 0];
+            }
+            rx_descr_tmp.pcie_addr_hi = pcie_addr_hi_tmp;
+            rx_descr_tmp.pcie_addr_lo = pcie_addr_lo_tmp;
+
+            /* Handle CPP portion of the descriptor */
             rx_descr_tmp.cpp_addr_lo =
                 cache_desc_compute_fl_addr(queue, rx_s);
             rx_descr_tmp.rid = queue_data[*queue].requester_id;
