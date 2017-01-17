@@ -221,10 +221,10 @@ NFD_CFG_RINGS_DECL(3);
 
 /* XXX we can't use "|" here due to NFCC error, check and possibly JIRA. */
 #define NFD_CFG_BAR(_base, _vnic)               \
-    ((_base) + (_vnic * NFP_NET_CFG_BAR_SZ))
+    ((_base) + ((_vnic) * NFP_NET_CFG_BAR_SZ))
 
 #define NFD_CFG_BAR_ISL(_isl, _vnic)            \
-    NFD_CFG_BAR(NFD_CFG_BASE_LINK(_isl), _vnic)
+    NFD_CFG_BAR(NFD_CFG_BASE_LINK(_isl), (_vnic))
 
 
 /**
