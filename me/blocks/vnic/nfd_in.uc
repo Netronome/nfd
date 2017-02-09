@@ -158,11 +158,15 @@
 #define NFD_IN_RING_SP_fld      0, 23, 12
 #define NFD_IN_RING_LO_fld      0, 11, 0
 
+#define NFD_IN_RING_INFO_ITEM_SZ   4
+
 
 
 #macro nfd_in_recv_init()
 
-    .alloc_mem nfd_in_ring_info lm me (NFD_MAX_ISL * 4) (NFD_MAX_ISL * 4)
+    .alloc_mem nfd_in_ring_info lm me \
+        (NFD_MAX_ISL * NFD_IN_RING_INFO_ITEM_SZ) \
+        (NFD_MAX_ISL * NFD_IN_RING_INFO_ITEM_SZ)
 
     nfd_stats_declare_in()
 
@@ -278,15 +282,22 @@
     .reg addr_hi
     .reg addr_lo
 
-    immed[addr_lo, nfd_in_ring_info]
-    alu[addr_lo, addr_lo, OR, in_pcie_isl, <<2]
+    #if (is_ct_const(in_pcie_isl))
+        immed[addr_lo, (nfd_in_ring_info +
+                        (in_pcie_isl << log2(NFD_IN_RING_INFO_ITEM_SZ)))]
+    #else
+        passert(nfd_in_ring_info,  "MULTIPLE_OF",
+                (NFD_MAX_ISL * NFD_IN_RING_INFO_ITEM_SZ))
+        immed[addr_lo, nfd_in_ring_info]
+        alu[addr_lo, addr_lo, OR, in_pcie_isl,
+            <<(log2(NFD_IN_RING_INFO_ITEM_SZ))]
+    #endif
     local_csr_wr[ACTIVE_LM_ADDR_/**/LM_CTX, addr_lo]
     nop
     nop
     nop
     ld_field_w_clr[addr_hi, 1000, *l$index/**/LM_CTX]
-    ld_field_w_clr[addr_lo, 0011, *l$index/**/LM_CTX]
-    alu[addr_lo, addr_lo, +, in_recvq]
+    alu[addr_lo, in_recvq, +16, *l$index/**/LM_CTX]
 
     #if (streq('SIGTYPE', 'SIG_DONE'))
         mem[qadd_thread, out_nfd_meta[0], addr_hi, <<8, addr_lo, NFD_IN_META_SIZE_LW], sig_done[SIGNAL]

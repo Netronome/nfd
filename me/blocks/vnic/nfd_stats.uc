@@ -70,11 +70,40 @@
     .reg iref
 
     move(addr_hi, (STAT >> 8))
-    alu[addr_lo, --, B, in_pcie, <<(log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE))]
-    alu[addr_lo, addr_lo, OR, in_qid, <<(log2(NFD_STAT_SIZE))]
+
+    #if (is_ct_const(in_pcie) && is_ct_const(in_qid))
+
+        immed[addr_lo,
+              ((in_pcie << log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE)) |
+               (in_qid << log2(NFD_STAT_SIZE)))]
+
+    #elif (is_ct_const(in_pcie))
+
+        alu[addr_lo, --, B, in_qid, <<(log2(NFD_STAT_SIZE))]
+        #if (in_pcie != 0)
+            alu[addr_lo, addr_lo, OR, in_pcie,
+                <<(log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE))]
+        #endif
+
+    #elif (is_ct_const(in_qid))
+
+        alu[addr_lo, --, B, in_pcie,
+            <<(log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE))]
+        #if (in_qid != 0)
+            alu[addr_lo, addr_lo, OR, in_qid, <<(log2(NFD_STAT_SIZE))]
+        #endif
+
+    #else
+
+        alu[addr_lo, --, B, in_pcie,
+            <<(log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE))]
+        alu[addr_lo, addr_lo, OR, in_qid, <<(log2(NFD_STAT_SIZE))]
+
+    #endif
+
     mem[incr64, --, addr_hi, <<8, addr_lo]
 
-    #if (!isnum(in_nbytes) || (in_nbytes != 0))
+    #if (!is_ct_const(in_nbytes) || (in_nbytes != 0))
         alu[addr_lo, addr_lo, +, 8]
         ; override length  = (1 << 7)
         ; override dataref = (2 << 3)
@@ -97,8 +126,37 @@
     .sig read_cnt
 
     move(addr_hi, (STAT >> 8))
-    alu[addr_lo, --, B, in_pcie, <<(log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE))]
-    alu[addr_lo, addr_lo, OR, in_qid, <<(log2(NFD_STAT_SIZE))]
+
+    #if (is_ct_const(in_pcie) && is_ct_const(in_qid))
+
+        immed[addr_lo,
+              ((in_pcie << log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE)) | \
+               (in_qid << log2(NFD_STAT_SIZE)))]
+
+    #elif (is_ct_const(in_pcie))
+
+        alu[addr_lo, --, B, in_qid, <<(log2(NFD_STAT_SIZE))]
+        #if (in_pcie != 0)
+            alu[addr_lo, addr_lo, OR, in_pcie,
+                <<(log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE))]
+        #endif
+
+    #elif (is_ct_const(in_qid))
+
+        alu[addr_lo, --, B, in_pcie,
+            <<(log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE))]
+        #if (in_qid != 0)
+            alu[addr_lo, addr_lo, OR, in_qid, <<(log2(NFD_STAT_SIZE))]
+        #endif
+
+    #else
+
+        alu[addr_lo, --, B, in_pcie,
+            <<(log2(NFD_STAT_MAX_QUEUES * NFD_STAT_SIZE))]
+        alu[addr_lo, addr_lo, OR, in_qid, <<(log2(NFD_STAT_SIZE))]
+
+    #endif
+
     mem[atomic_read, count_dst_xfer, addr_hi, <<8, addr_lo, 2], sig_done[read_cnt]
 
     alu[addr_lo, addr_lo, +, 8]

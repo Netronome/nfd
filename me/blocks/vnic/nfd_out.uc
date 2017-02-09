@@ -144,6 +144,8 @@
 #define NFD_OUT_ATOMICS_SENT        4
 #define NFD_OUT_ATOMICS_DMA_DONE    8
 
+#define NFD_OUT_RING_INFO_ITEM_SZ   4
+
 
 #macro nfd_out_ring_declare()
 
@@ -184,7 +186,9 @@
     nfd_out_ring_declare()
     nfd_stats_declare_out()
 
-    .alloc_mem nfd_out_ring_info lm me (NFD_MAX_ISL * 4) (NFD_MAX_ISL * 4)
+    .alloc_mem nfd_out_ring_info lm me \
+        (NFD_MAX_ISL * NFD_OUT_RING_INFO_ITEM_SZ) \
+        (NFD_MAX_ISL * NFD_OUT_RING_INFO_ITEM_SZ)
 
     #ifdef NFD_PCIE0_EMEM
 
@@ -235,14 +239,14 @@
     .reg addr_lo
 
     // XXX NFD assumes credits live at address 0 in the CTM of the PCIe island
-    #if (isnum(in_pcie))
+    #if (is_ct_const(in_pcie))
         move(addr_hi, (((in_pcie + NFD_PCIE_ISL_BASE) | 0x80) << 24))
     #else
         alu[addr_hi, in_pcie, +, (NFD_PCIE_ISL_BASE | __NFD_DIRECT_ACCESS)]
         alu[addr_hi, --, B, addr_hi, <<24]
     #endif
 
-    #if (isnum(in_qid))
+    #if (is_ct_const(in_qid))
         move(addr_lo, (in_qid << log2(NFD_OUT_ATOMICS_SZ)))
     #else
         alu[addr_lo, --, B, in_qid, <<(log2(NFD_OUT_ATOMICS_SZ))]
@@ -279,20 +283,23 @@
     .reg eoff
 
     /* sanity */
-    move(io_nfd_desc[0], 0)
-    move(io_nfd_desc[1], 0)
-    move(io_nfd_desc[2], 0)
+    // io_nfd_desc[0]..[2] are zeroed with alu "B" ops below
     move(io_nfd_desc[3], 0)
 
     /* word 0 */
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_CTM_ISL_fld),
-             BF_L(NFD_OUT_CTM_ISL_fld), in_ctm_isl)
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_PKTNUM_fld),
-             BF_L(NFD_OUT_PKTNUM_fld), in_ctm_pnum)
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_SPLIT_fld),
-             BF_L(NFD_OUT_SPLIT_fld), in_ctm_split)
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld),
-             BF_L(NFD_OUT_OFFSET_fld), in_offset)
+    passert(BF_W(NFD_OUT_OFFSET_fld), "EQ", 0)
+    alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B, in_offset,
+        <<BF_L(NFD_OUT_OFFSET_fld)]
+
+    #if (!is_ct_const(in_ctm_isl) || (in_ctm_isl != 0))
+        bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_CTM_ISL_fld), in_ctm_isl)
+    #endif
+    #if (!is_ct_const(in_ctm_pnum) || (in_ctm_pnum != 0))
+        bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_PKTNUM_fld), in_ctm_pnum)
+    #endif
+    #if (!is_ct_const(in_ctm_split) || (in_ctm_split != 0))
+        bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_SPLIT_fld), in_ctm_split)
+    #endif
 
     /* Not CTM only if it's MU-buffer only */
     alu[--, --, B, in_ctm_isl]
@@ -303,28 +310,35 @@
     /* set the CTM_ONLY bit in the packet. */
     alu[eoff, in_len, +, in_offset]
     #if (is_ct_const(in_ctm_split))
-        move(tmp, (256 << in_ctm_split))
+        immed[tmp, (256 << in_ctm_split)]
     #else
-        move(tmp, 256)
-        alu[--, in_ctm_split, OR, 0]
+        alu[tmp, in_ctm_split, B, 1, <<8]
         alu[tmp, --, B, tmp, <<indirect]
     #endif
     alu[--, eoff, -, tmp]
     bgt[not_ctm_only#]
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_CTM_ONLY_fld),
-             BF_L(NFD_OUT_CTM_ONLY_fld), 1)
+    bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_CTM_ONLY_fld), 1)
 
 not_ctm_only#:
     /* word 1 */
     /* XXX for now fill in NBI field as 0 */
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_BLS_fld),
-             BF_L(NFD_OUT_BLS_fld), in_bls)
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_MUADDR_fld),
-             BF_L(NFD_OUT_MUADDR_fld), in_muptr)
+    passert(BF_W(NFD_OUT_BLS_fld), "EQ", 1)
+    passert(BF_W(NFD_OUT_MUADDR_fld), "EQ", 1)
+    passert(BF_L(NFD_OUT_MUADDR_fld), "EQ", 0)
+
+    #define_eval __NFD_OUT_MUADDR_inv_msk \
+        ((1 << (31 - BF_M(NFD_OUT_MUADDR_fld))) - 1)
+
+    alu[BF_A(io_nfd_desc, NFD_OUT_MUADDR_fld), in_muptr, and~, \
+        __NFD_OUT_MUADDR_inv_msk, <<(BF_M(NFD_OUT_MUADDR_fld) + 1)]
+
+    #undef __NFD_OUT_MUADDR_inv_msk
+
+    bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_BLS_fld), in_bls)
 
     /* word2 */
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_DD_fld),
-             BF_L(NFD_OUT_DD_fld), 1)
+    passert(BF_W(NFD_OUT_DD_fld), "EQ", 2)
+    alu[BF_A(io_nfd_desc, NFD_OUT_DD_fld), --, B, 1, <<BF_L(NFD_OUT_DD_fld)]
 
 /*
  * FIXME
@@ -334,12 +348,10 @@ not_ctm_only#:
  * Eventually update to properly parse those flag bits.
  */
 #if 0
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_METALEN_fld),
-             BF_L(NFD_OUT_METALEN_fld), in_meta_len)
+    bits_set(BF_AL(io_nfd_desc, NFD_OUT_METALEN_fld), in_meta_len)
 #endif
 
-    bits_set(BF_A(io_nfd_desc, NFD_OUT_LEN_fld),
-             BF_L(NFD_OUT_LEN_fld), in_len)
+    bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_LEN_fld), in_len)
 .end
 #endm
 
@@ -359,21 +371,30 @@ not_ctm_only#:
     .reg addr_hi
     .reg total_len
 
-    immed[addr_lo, nfd_out_ring_info]
-    alu[addr_lo, addr_lo, OR, in_pcie, <<2]
+    #if (is_ct_const(in_pcie))
+        immed[addr_lo, (nfd_out_ring_info +
+                        (in_pcie << log2(NFD_OUT_RING_INFO_ITEM_SZ)))]
+    #else
+        passert(nfd_out_ring_info,  "MULTIPLE_OF",
+                (NFD_MAX_ISL * NFD_OUT_RING_INFO_ITEM_SZ))
+        immed[addr_lo, nfd_out_ring_info]
+        alu[addr_lo, addr_lo, OR, in_pcie, <<(log2(NFD_OUT_RING_INFO_ITEM_SZ))]
+    #endif
     local_csr_wr[ACTIVE_LM_ADDR_/**/LM_CTX, addr_lo]
 
-    bits_set(BF_A(io_desc, NFD_OUT_QID_fld),
-             BF_L(NFD_OUT_QID_fld), in_qid)
+    #if (!is_ct_const(in_qid) || (in_qid != 0))
+        bits_set(BF_A(io_desc, NFD_OUT_QID_fld),
+                 BF_L(NFD_OUT_QID_fld), in_qid)
+    #endif
     bitfield_extract(total_len, BF_AML(io_desc, NFD_OUT_LEN_fld))
-
-    alu[addr_hi, *l$index/**/LM_CTX, AND, 0xFF, <<24]
-    ld_field_w_clr[addr_lo, 0011, *l$index/**/LM_CTX]
 
     move(io_xnfd[0], io_desc[0])
     move(io_xnfd[1], io_desc[1])
     move(io_xnfd[2], io_desc[2])
     move(io_xnfd[3], io_desc[3])
+
+    alu[addr_hi, *l$index/**/LM_CTX, AND, 0xFF, <<24]
+    ld_field_w_clr[addr_lo, 0011, *l$index/**/LM_CTX]
 
     #if (streq('SIGTYPE', 'SIG_DONE'))
         mem[qadd_work, io_xnfd[0], addr_hi, <<8, addr_lo, 4], sig_done[SIG]
