@@ -340,16 +340,9 @@ not_ctm_only#:
     passert(BF_W(NFD_OUT_DD_fld), "EQ", 2)
     alu[BF_A(io_nfd_desc, NFD_OUT_DD_fld), --, B, 1, <<BF_L(NFD_OUT_DD_fld)]
 
-/*
- * FIXME
- * This no longer means what it used to mean.
- * It now needs to reflect the bits for RSS and input port.
- * instead of a starting amount to back up on the host.
- * Eventually update to properly parse those flag bits.
- */
-#if 0
-    bits_set(BF_AL(io_nfd_desc, NFD_OUT_METALEN_fld), in_meta_len)
-#endif
+    #if (!is_ct_const(in_meta_len) || (in_meta_len != 0))
+        bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_METALEN_fld), in_meta_len)
+    #endif
 
     bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_LEN_fld), in_len)
 .end
