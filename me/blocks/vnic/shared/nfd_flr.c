@@ -46,6 +46,13 @@
 #define NFD_OUT_RX_OFFSET NFP_NET_RX_OFFSET
 #endif /* NFD_OUT_RX_OFFSET */
 
+#ifndef NFD_RSS_HASH_FUNC
+#if ((NFD_CFG_PF_CAP | NFP_CFG_VF_CAP) & NFP_NET_CFG_CTRL_RSS)
+#warning "NFD_RSS_HASH_FUNC not defined: defaulting to Toeplitz"
+#endif /* ((NFD_CFG_PF_CAP | NFP_CFG_VF_CAP) & NFP_NET_CFG_CTRL_RSS) */
+#define NFD_RSS_HASH_FUNC NFP_NET_CFG_RSS_TOEPLITZ
+#endif /* NFD_RSS_HASH_FUNC */
+
 /*
  * NFD FLR handling consists of 3 main components: a part that notices new
  * FLRs by receiving events and examining HW CSRs, a part that issues
@@ -167,7 +174,8 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base, unsigned int vnic)
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
-    __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
+    __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
+                                    NFD_RSS_HASH_FUNC};
 #ifdef NFD_BPF_CAPABLE
     __xwrite unsigned int bpf_cfg[] = { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
                                         NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
@@ -181,9 +189,9 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base, unsigned int vnic)
     mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vnic) +
                NFP_NET_CFG_LSC, sizeof exn_lsc);
 
-    mem_write8(&rx_off,
+    mem_write8(&cfg2,
                NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_RX_OFFSET,
-               sizeof rx_off);
+               sizeof cfg2);
 #ifdef NFD_BPF_CAPABLE
     mem_write8(&bpf_cfg,
                NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_BPF_ABI,
@@ -218,7 +226,8 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsign
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
-    __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
+    __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
+                                    NFD_RSS_HASH_FUNC};
     __xread unsigned int vf_cfg_rd[2];
     __xwrite unsigned int vf_cfg_wr[2];
 #ifdef NFD_BPF_CAPABLE
@@ -234,8 +243,8 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsign
     mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
 
-    mem_write8(&rx_off, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_RX_OFFSET,
-               sizeof rx_off);
+    mem_write8(&cfg2, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_RX_OFFSET,
+               sizeof cfg2);
 
     mem_read8(&vf_cfg_rd, NFD_VF_CFG_ADDR(vf_cfg_base, vf),
               NFD_VF_CFG_MAC_SZ);

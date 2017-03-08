@@ -61,3 +61,8 @@ That way host sees NFP_NET_META_HASH and can extract the type from text
 4.1:
 
 Report link speed in the BAR.
+
+4.2:
+
+Add NFP_NET_CFG_RSS_CAP with NFP_NET_CFG_RSS_CAP_HFUNC defined to
+enable reporting hash type (CRC32 vs Toeplitz).

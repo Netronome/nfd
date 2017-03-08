@@ -50,6 +50,13 @@
 #define NFD_OUT_RX_OFFSET NFP_NET_RX_OFFSET
 #endif /* NFD_OUT_RX_OFFSET */
 
+#ifndef NFD_RSS_HASH_FUNC
+#if ((NFD_CFG_PF_CAP | NFP_CFG_VF_CAP) & NFP_NET_CFG_CTRL_RSS)
+#warning "NFD_RSS_HASH_FUNC not defined: defaulting to Toeplitz"
+#endif /* ((NFD_CFG_PF_CAP | NFP_CFG_VF_CAP) & NFP_NET_CFG_CTRL_RSS) */
+#define NFD_RSS_HASH_FUNC NFP_NET_CFG_RSS_TOEPLITZ
+#endif /* NFD_RSS_HASH_FUNC */
+
 #define NFD_CFG_DECLARE(_sig, _next_sig)  \
     __visible SIGNAL _sig;                \
     __remote SIGNAL _next_sig;
@@ -443,7 +450,8 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
-    __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
+    __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
+                                    NFD_RSS_HASH_FUNC};
 #ifdef NFD_BPF_CAPABLE
     __xwrite unsigned int bpf_cfg[] = { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
 					NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
@@ -456,9 +464,9 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
     mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
 
-    mem_write8(&rx_off,
+    mem_write8(&cfg2,
                NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_RX_OFFSET,
-               sizeof rx_off);
+               sizeof cfg2);
 
 #ifdef NFD_BPF_CAPABLE
     mem_write8(&bpf_cfg,
@@ -484,7 +492,8 @@ _nfd_cfg_init_pf_ctrl_bar(unsigned int vnic)
                                    NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
                                    NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
     __xwrite unsigned int exn_lsc = 0xffffffff;
-    __xwrite unsigned int rx_off = NFD_OUT_RX_OFFSET;
+    __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
+                                    NFD_RSS_HASH_FUNC};
 #ifdef NFD_BPF_CAPABLE
     __xwrite unsigned int bpf_cfg[] = { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
 					NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
@@ -497,8 +506,8 @@ _nfd_cfg_init_pf_ctrl_bar(unsigned int vnic)
     mem_write8(&exn_lsc, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
 
-    mem_write8(&rx_off, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_RX_OFFSET,
-               sizeof rx_off);
+    mem_write8(&cfg2, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_RX_OFFSET,
+               sizeof cfg2);
 
 #ifdef NFD_BPF_CAPABLE
     mem_write8(&bpf_cfg,
