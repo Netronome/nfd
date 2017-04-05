@@ -453,9 +453,10 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
     __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
                                     NFD_RSS_HASH_FUNC};
 #ifdef NFD_BPF_CAPABLE
-    __xwrite unsigned int bpf_cfg[] = { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
-					NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
-					30 << 8 /* CTM buf size / 64 */ };
+    __xwrite unsigned int bpf_cfg[] =
+        { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
+          NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
+          30 << 8 /* CTM buf size / 64 */ };
 #endif
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
@@ -470,8 +471,8 @@ _nfd_cfg_init_vf_ctrl_bar(unsigned int vnic)
 
 #ifdef NFD_BPF_CAPABLE
     mem_write8(&bpf_cfg,
-	       NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_BPF_ABI,
-	       sizeof bpf_cfg);
+        NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_BPF_ABI,
+        sizeof bpf_cfg);
 #endif
 #endif
 }
@@ -495,9 +496,10 @@ _nfd_cfg_init_pf_ctrl_bar(unsigned int vnic)
     __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
                                     NFD_RSS_HASH_FUNC};
 #ifdef NFD_BPF_CAPABLE
-    __xwrite unsigned int bpf_cfg[] = { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
-					NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
-					30 << 8 /* CTM buf size / 64 */ };
+    __xwrite unsigned int bpf_cfg[] =
+        { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
+          NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
+          30 << 8 /* CTM buf size / 64 */ };
 #endif
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vnic) + NFP_NET_CFG_VERSION,
@@ -511,8 +513,8 @@ _nfd_cfg_init_pf_ctrl_bar(unsigned int vnic)
 
 #ifdef NFD_BPF_CAPABLE
     mem_write8(&bpf_cfg,
-	       NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_BPF_ABI,
-	       sizeof bpf_cfg);
+               NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_BPF_ABI,
+               sizeof bpf_cfg);
 #endif
 #endif
 }
