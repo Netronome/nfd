@@ -130,12 +130,12 @@ set_queue(__gpr unsigned int *queue, __shared __gpr struct qc_bitmask *bmsk)
 }
 
 __intrinsic void
-init_qc_queues(unsigned char pcie_isl, struct qc_queue_config *cfg,
-               unsigned char start_queue, unsigned char stride,
-               unsigned char num_queues)
+init_qc_queues(unsigned int pcie_isl, struct qc_queue_config *cfg,
+               unsigned int start_queue, unsigned int stride,
+               unsigned int num_queues)
 {
     __gpr unsigned int queue;
-    unsigned char end_queue;
+    unsigned int end_queue;
 
     /* ctassert(__is_ct_const(start_queue)); */
     ctassert(__is_ct_const(stride));

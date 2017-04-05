@@ -157,11 +157,11 @@ __intrinsic void set_queue(__gpr unsigned int *queue,
  *
  * Configuring 64 queues takes approximately 4000 cycles.
  */
-__intrinsic void init_qc_queues(unsigned char pcie_isl,
+__intrinsic void init_qc_queues(unsigned int pcie_isl,
                                 struct qc_queue_config *cfg,
-                                unsigned char start_queue,
-                                unsigned char stride,
-                                unsigned char num_queues);
+                                unsigned int start_queue,
+                                unsigned int stride,
+                                unsigned int num_queues);
 
 /**
  * Configure a set of CLS event filters to monitor queue controller queues

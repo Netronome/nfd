@@ -408,23 +408,23 @@ _nfd_cfg_queue_setup()
     nfd_cfg_queue.event_type = PCIE_QC_EVENT_NOT_EMPTY;
     nfd_cfg_queue.ptr        = 0;
 
-#if NFD_MAX_PFS < 2
+
+#if NFD_MAX_VFS == 0
+    init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
+                   4 * NFD_MAX_PF_QUEUES, NFD_MAX_PFS);
+
+#elif (NFD_MAX_PFS < 2)
     /* Init the VF config queues and possibly end with PF queue.
      * Each NFD queue uses a block of 4 QC queues. */
     init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
                    4 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS + NFD_MAX_PFS);
-#else
-    #if NFD_MAX_VFS == 0
-        init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
-                       4 * NFD_MAX_PF_QUEUES, NFD_MAX_PFS);
-    #else
-        init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
-                       4 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS);
-        init_qc_queues(PCIE_ISL, &nfd_cfg_queue,
-                       NFD_CFG_QUEUE + (4 * NFD_MAX_VF_QUEUES * NFD_MAX_VFS),
-                       4 * NFD_MAX_PF_QUEUES, NFD_MAX_PFS);
 
-    #endif
+#else
+    init_qc_queues(PCIE_ISL, &nfd_cfg_queue, NFD_CFG_QUEUE,
+                   4 * NFD_MAX_VF_QUEUES, NFD_MAX_VFS);
+    init_qc_queues(PCIE_ISL, &nfd_cfg_queue,
+                   NFD_CFG_QUEUE + (4 * NFD_MAX_VF_QUEUES * NFD_MAX_VFS),
+                   4 * NFD_MAX_PF_QUEUES, NFD_MAX_PFS);
 #endif
 
 }
