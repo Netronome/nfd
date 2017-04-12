@@ -393,17 +393,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         return;
     }
 
-    #if NFD_MAX_PFS < 2
-        queue += cfg_msg->vnic * NFD_MAX_VF_QUEUES;
-    #else
-    if (NFD_VNIC_IS_PF(cfg_msg->vnic))
-        queue += ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
-                   ((cfg_msg->vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
-    else
-        queue += cfg_msg->vnic * NFD_MAX_VF_QUEUES;
-    #endif
-
-    bmsk_queue = NFD_NATQ2BMQ(queue);
+    bmsk_queue = NFD_VID2QID(cfg_msg->vid, queue);
 
     if (queue_data[bmsk_queue].locked) {
         /* The queue is locked by the worker contexts so
@@ -418,8 +408,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].lso_offhdr = 0;
         queue_data[bmsk_queue].lso_seq_cnt = 0;
         queue_data[bmsk_queue].rid = 0;
-        if (NFD_VNIC_IS_VF(cfg_msg->vnic)) {
-            queue_data[bmsk_queue].rid = cfg_msg->vnic + NFD_CFG_VF_OFFSET;
+        if (NFD_VID_IS_VF(cfg_msg->vid)) {
+            queue_data[bmsk_queue].rid = cfg_msg->vid + NFD_CFG_VF_OFFSET;
         }
         queue_data[bmsk_queue].cont = 0;
         queue_data[bmsk_queue].up = 1;

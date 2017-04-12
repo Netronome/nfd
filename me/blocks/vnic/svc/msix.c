@@ -172,7 +172,7 @@ out:
  * Send MSI-X interrupt for specified virtual function and optionally mask
  * @param pcie_nr     PCIe island number (0 to 3)
  * @param bar_nr      CPP2PCIe bar to use
- * @param vf_nr       Virtual function number (0 to 63)
+ * @param vid         Virtual function number (0 to 63)
  * @param entry_nr    MSI-X table entry number
  * @param mask_en     Boolean, should interrupt be masked after sending.
  * @return            0 on success, else the interrupt was masked.
@@ -198,7 +198,7 @@ out:
  * The same potential race as for the PF exists in this code too.
  */
 __intrinsic int
-msix_vf_send(unsigned int pcie_nr, unsigned int bar_nr, unsigned int vf_nr,
+msix_vf_send(unsigned int pcie_nr, unsigned int bar_nr, unsigned int vid,
              unsigned int entry_nr, unsigned int mask_en)
 {
     unsigned int addr_hi;
@@ -218,7 +218,7 @@ msix_vf_send(unsigned int pcie_nr, unsigned int bar_nr, unsigned int vf_nr,
     int ret = 1;
 
     msix_table_addr =
-        (__emem char *)NFD_CFG_BAR(msix_cfg_bars[pcie_nr], vf_nr);
+        (__emem char *)NFD_CFG_BAR(msix_cfg_bars[pcie_nr], vid);
     msix_table_addr += NFD_VF_MSIX_TABLE_OFF;
 
     /* Read the full table entry */
@@ -234,7 +234,8 @@ msix_vf_send(unsigned int pcie_nr, unsigned int bar_nr, unsigned int vf_nr,
         goto out;
 
     /* Check if we need to re-configure the CPP2PCI BAR */
-    bar_addr = pcie_c2p_barcfg_val(addr_hi, addr_lo, (vf_nr + 64));
+    /* XXX vid is equal to VF num currently */
+    bar_addr = pcie_c2p_barcfg_val(addr_hi, addr_lo, (vid + 64));
     if (bar_addr != msix_cur_cpp2pci_addr) {
         pcie_c2p_barcfg_set_expl(pcie_nr, bar_nr, bar_addr);
         msix_cur_cpp2pci_addr = bar_addr;

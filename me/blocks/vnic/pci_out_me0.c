@@ -39,9 +39,6 @@ main(void)
 {
     /* Perform per ME initialisation  */
     if (ctx() == 0) {
-        ctassert((NFD_MAX_VFS * NFD_MAX_VF_QUEUES +
-                  NFD_MAX_PFS * NFD_MAX_PF_QUEUES) <= 64);
-
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_out, &cfg_msg);

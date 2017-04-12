@@ -45,6 +45,7 @@
 NFD_CFG_DECLARE(nfd_cfg_sig_pci_in, nfd_cfg_sig_pci_in0);
 NFD_INIT_DONE_DECLARE;
 
+NFD_CFG_CTRL_DECLARE(PCIE_ISL);
 NFD_CFG_PF_DECLARE(PCIE_ISL);
 
 struct nfd_cfg_msg cfg_msg;
@@ -132,17 +133,17 @@ main(void)
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
-                int curr_vnic;
+                int curr_vid;
 
-                curr_vnic = nfd_cfg_next_flr((void *) &cfg_msg);
+                curr_vid = nfd_cfg_next_flr((void *) &cfg_msg);
 
-                if (curr_vnic < 0) {
+                if (curr_vid < 0) {
                     /* No FLRs to process, look for a host message. */
-                    curr_vnic = nfd_cfg_next_vnic();
+                    curr_vid = nfd_cfg_next_vnic();
 
-                    if (curr_vnic >= 0) {
+                    if (curr_vid >= 0) {
                         cfg_msg.__raw = 0;
-                        cfg_msg.vnic = curr_vnic;
+                        cfg_msg.vid = curr_vid;
                         cfg_msg.msg_valid = 1;
 
                         nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_IN0);

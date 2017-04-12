@@ -91,9 +91,9 @@ nfd_out_send_init()
 
 
 __intrinsic unsigned int
-nfd_out_map_queue(unsigned int vnic, unsigned int queue)
+nfd_out_map_queue(unsigned int type, unsigned int vnic, unsigned int queue)
 {
-    return NFD_BUILD_QID(vnic, queue);
+    return NFD_BUILD_QID(type, vnic, queue);
 }
 
 
@@ -161,7 +161,7 @@ __nfd_out_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
     unsigned int pkt_count;
     unsigned long long byte_count;
     __xwrite unsigned long long xfer_update[2];
-    int vnic;
+    int vid;
     int vqn;
 
     ctassert(__is_ct_const(sync));
@@ -174,8 +174,8 @@ __nfd_out_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
         xfer_update[0] = swapw64(pkt_count);
         xfer_update[1] = swapw64(byte_count);
         /* Support a single PCIE island */
-        NFD_EXTRACT_NATQ(vnic, vqn, bmsk_queue);
-        __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(0/*PCIE_ISL*/, vnic) +
+        NFD_QID2VID(vid, vqn, bmsk_queue);
+        __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(0/*PCIE_ISL*/, vid) +
                     NFP_NET_CFG_RXR_STATS(vqn)),
                     sizeof xfer_update, sizeof xfer_update, sync, sig);
     }

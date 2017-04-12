@@ -223,7 +223,7 @@
 #endm
 
 
-#macro _set_queue_state(in_vnic, in_q, in_up, in_rid)
+#macro _set_queue_state(in_vid, in_q, in_up, in_rid)
 .begin
 
     .reg qid
@@ -233,28 +233,7 @@
     .reg base_addr
     .reg tmp
 
-#if NFD_MAX_PFS < 2
-    #if (NFD_MAX_VF_QUEUES > 0)
-        alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_VF_QUEUES))]
-    #else
-        move(qid, in_q)
-    #endif
-#else
-    #if NFD_MAX_VFS == 0
-        alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_PF_QUEUES))]
-    #else
-    .if (NFD_VNIC_IS_PF(in_vnic))
-        alu[qid, --, b, NFD_MAX_VFS, <<(log2(NFD_MAX_VF_QUEUES))]
-        alu[tmp, in_vnic, -, NFD_MAX_VFS]
-        alu[tmp, --, B, tmp, <<(log2(NFD_MAX_PF_QUEUES))]
-        alu[qid, qid, +, tmp]
-        alu[qid, in_q, +, qid]
-    .else
-        alu[qid, in_q, OR, in_vnic, <<(log2(NFD_MAX_VF_QUEUES))]
-    .endif
-    #endif // NFD_MAX_VFS == 0
-#endif // NFD_MAX_PFS < 1
-
+    nfd_vid2qid(qid, in_vid, in_q)
 
     // Load the queue state for that queue
     alu[lma, --, B, qid, <<LM_QSTATE_SIZE_lg2]
@@ -291,7 +270,7 @@
 #endm
 
 
-#macro _check_vnic_state(in_vnic)
+#macro _check_vnic_state(in_vid)
 .begin
 
     .reg bar_addr_hi
@@ -306,17 +285,45 @@
 
     .sig read_sig
 
-    nfd_cfg_get_bar_addr(bar_addr_hi, bar_addr_lo, in_vnic, PCIE_ISL)
+    nfd_cfg_get_bar_addr(bar_addr_hi, bar_addr_lo, in_vid, PCIE_ISL)
     mem[read32, $bar[0], bar_addr_hi, <<8, bar_addr_lo, 6], ctx_swap[read_sig]
 
-    .if (NFD_VNIC_IS_VF(in_vnic))
-        move(maxqs, NFD_MAX_VF_QUEUES)
-        alu[rid, in_vnic, +, NFD_CFG_VF_OFFSET]
-    .else
+    #if ((NFD_MAX_VFS != 0) && (NFD_MAX_PFS != 0) && defined(NFD_USE_CTRL))
+        .if (NFD_VID_IS_PF(in_vid))
+            move(maxqs, NFD_MAX_PF_QUEUES)
+            immed[rid, 0]
+        .elif (NFD_VID_IS_VF(in_vid))
+            move(maxqs, NFD_MAX_VF_QUEUES)
+            alu[rid, in_vid, +, NFD_CFG_VF_OFFSET]
+        .else
+            move(maxqs, NFD_MAX_CTRL_QUEUES)
+            immed[rid, 0]
+        .endif
+    #elif ((NFD_MAX_PFS != 0) && defined(NFD_USE_CTRL))
+        .if (NFD_VID_IS_PF(in_vid))
+            move(maxqs, NFD_MAX_PF_QUEUES)
+            immed[rid, 0]
+        .else
+            move(maxqs, NFD_MAX_CTRL_QUEUES)
+            immed[rid, 0]
+        .endif
+    #elif ((NFD_MAX_VFS != 0) && (NFD_MAX_PFS != 0))
+        .if (NFD_VID_IS_PF(in_vid))
+            move(maxqs, NFD_MAX_PF_QUEUES)
+            immed[rid, 0]
+        .else
+            move(maxqs, NFD_MAX_VF_QUEUES)
+            alu[rid, in_vid, +, NFD_CFG_VF_OFFSET]
+        .endif
+    #elif (NFD_MAX_PFS != 0)
         move(maxqs, NFD_MAX_PF_QUEUES)
         immed[rid, 0]
-    .endif
-
+    #elif (NFD_MAX_VFS != 0)
+        move(maxqs, NFD_MAX_VF_QUEUES)
+        alu[rid, in_vid, +, NFD_CFG_VF_OFFSET]
+    #else
+        #error "Unsupported vNIC parameters"
+    #endif
 
     .if ($bar[NFP_NET_CFG_CTRL] & NFP_NET_CFG_CTRL_ENABLE == 0)
 
@@ -324,7 +331,7 @@
         move(q, 0)
         .while (q < maxqs)
 
-            _set_queue_state(in_vnic, q, up, rid)
+            _set_queue_state(in_vid, q, up, rid)
             alu[q, q, +, 1]
 
         .endw
@@ -346,7 +353,7 @@
 
             .endif
 
-            _set_queue_state(in_vnic, q, up, rid)
+            _set_queue_state(in_vid, q, up, rid)
             alu[q, q, +, 1]
 
         .endw
@@ -408,7 +415,7 @@
     .reg ring_addr_hi
     .reg ring_in_addr_lo
     .reg ring_out_addr_lo
-    .reg vnic
+    .reg vid
 
     .reg $cmsg[1]
     .xfer_order $cmsg
@@ -434,9 +441,9 @@
         .endif
 
         // Extract the queue ID that is going up or down
-        wsm_extract(vnic, $cmsg, NFD_CFG_MSG_VNIC)
+        wsm_extract(vid, $cmsg, NFD_CFG_MSG_VID)
 
-        _check_vnic_state(vnic)
+        _check_vnic_state(vid)
 
         // Propagate the message down the line
         move($cmsg[0], $cmsg[0])

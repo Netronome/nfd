@@ -333,7 +333,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         return;
     }
 
-    queue_s = NFD_BUILD_NATQ(cfg_msg->vnic, queue_s);
+    queue_s = NFD_VID2NATQ(cfg_msg->vid, queue_s);
     bmsk_queue = NFD_NATQ2BMQ(queue_s);
 
     rxq.watermark    = NFP_QC_STS_HI_WATERMARK_32; /* XXX Tune */
@@ -349,8 +349,8 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].fl_s = 0;
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
         queue_data[bmsk_queue].requester_id = 0;
-        if (NFD_VNIC_IS_VF(cfg_msg->vnic)) {
-            queue_data[bmsk_queue].requester_id = (cfg_msg->vnic +
+        if (NFD_VID_IS_VF(cfg_msg->vid)) {
+            queue_data[bmsk_queue].requester_id = (cfg_msg->vid +
                                                    NFD_CFG_VF_OFFSET);
         }
         queue_data[bmsk_queue].spare0 = 0;

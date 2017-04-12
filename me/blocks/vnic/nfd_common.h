@@ -20,6 +20,7 @@
 #define __NFD_COMMON_H
 
 #include <nfd_user_cfg.h>
+#include <vnic/shared/nfd_ctrl.h>
 
 
 /* NFD version number define guards */
@@ -35,8 +36,10 @@
  * ABI change.  Increment minor version number for each compatible ABI change
  * (e.g. a new feature flag).  Reset minor version number to zero for each
  * major version number change. */
-#if (defined(NFD_NET_APP_ID_FORCE_CHK))
-/* Firmwares that advertise an app_id may choose to advertise ABI 5 */
+#if (defined(NFD_NET_APP_ID_FORCE_CHK) || defined(NFD_USE_CTRL))
+/* Firmwares using CTRL vNICs need an app_id and must use ABI 5
+ * Firmwares that advertise an app_id but don't use CTRL vNICs
+ * may choose whether to advertise ABI 5 */
 #define NFD_CFG_MAJOR               5
 #else
 #define NFD_CFG_MAJOR               4
@@ -81,23 +84,6 @@
 #endif
 
 
-/*
- * VFs are assigned vNIC numbers first, followed by the PFs.
- * This makes the number of the first PF equal to NFD_MAX_VFS,
- * and NFD_MAX_VFS becomes the critical value in tests for
- * PF/VF.
- */
-#if (NFD_MAX_VFS == 0)
-    #define NFD_VNIC_IS_PF(_x) 1
-#else
-    #define NFD_VNIC_IS_PF(_x) ((_x) >= NFD_MAX_VFS)
-#endif
-#define NFD_VNIC_IS_VF(_x) ((_x) < NFD_MAX_VFS)
-
-#define NFD_FIRST_PF     NFD_MAX_VFS
-#define NFD_LAST_PF      (NFD_MAX_VFS + NFD_MAX_PFS - 1)
-
-
 /* vNICs must have queues, so if the "MAX_QUEUES" parameter is zero,
  * require the related MAX_VFS/PFS parameter to be zero as well. */
 #if ((NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0))
@@ -108,6 +94,15 @@
 #error "NFD_MAX_PFS must be zero if NFD_MAX_PF_QUEUES equals zero"
 #endif
 
+/* The CTRL vNIC can only be used if PF vNICs are also in use */
+#if ((NFD_MAX_PFS == 0) && defined(NFD_USE_CTRL))
+#error "PF vNICs are required if the CTRL vNIC is used (NFD_USE_CTRL is set)"
+#endif
+
+/* The CTRL vNIC can only be used for FWs advertising an app_id */
+#if (defined(NFD_USE_CTRL) && !defined(NFD_NET_APP_ID))
+#error "An APP ID must be advertised if the CTRL vNIC is used"
+#endif
 
 #ifdef NFD_CFG_CLASS
 #ifndef NFD_CFG_CLASS_VERSION
@@ -122,6 +117,81 @@
 #endif
 #endif
 
+
+#define NFD_VNIC_TYPE_VF    0
+#define NFD_VNIC_TYPE_PF    1
+#define NFD_VNIC_TYPE_CTRL  2
+
+#define NFD_TOTAL_VFQS      (NFD_MAX_VFS * NFD_MAX_VF_QUEUES)
+#define NFD_TOTAL_CTRLQS    (NFD_MAX_CTRL * NFD_MAX_CTRL_QUEUES)
+#define NFD_TOTAL_PFQS      (NFD_MAX_PFS * NFD_MAX_PF_QUEUES)
+
+#if (NFD_TOTAL_VFQS + NFD_TOTAL_CTRLQS + NFD_TOTAL_PFQS > 64)
+#error "Total number of NFD queues per island cannot exceed 64"
+#endif
+
+
+#ifdef NFD_USE_CTRL
+/* XXX The control vNIC is placed after the VF vNICs and before the PF vNICs */
+#define NFD_CTRL_VNIC       NFD_MAX_VFS
+#define NFD_CTRL_QUEUE      NFD_TOTAL_VFQS
+#endif
+
+#define NFD_FIRST_PF        (NFD_MAX_VFS + NFD_MAX_CTRL)
+#if (NFD_MAX_PFS > 0)
+#define NFD_LAST_PF         (NFD_FIRST_PF + NFD_MAX_PFS -1)
+#else
+#define NFD_LAST_PF         NFD_FIRST_PF
+#endif
+#define NFD_FIRST_PF_QUEUE  (NFD_TOTAL_VFQS + NFD_TOTAL_CTRLQS)
+
+
+/*
+ * VFs are assigned VIDs and queues first, followed by the CTRL vNIC
+ * if used and finally the PF vNICs.
+ */
+#if (NFD_MAX_VFS > 0)
+    #if (NFD_MAX_CTRL + NFD_MAX_PFS)
+        #define NFD_VID_IS_VF(_x) ((_x) < NFD_MAX_VFS)
+        #define NFD_Q_IS_VF(_x) ((_x) < NFD_TOTAL_VFQS)
+    #else
+        #define NFD_VID_IS_VF(_x) 1
+        #define NFD_Q_IS_VF(_x) 1
+    #endif
+#else
+    #define NFD_VID_IS_VF(_x) 0
+    #define NFD_Q_IS_VF(_x) 0
+#endif
+
+#if (NFD_MAX_PFS > 0)
+    #if (NFD_MAX_VFS + NFD_MAX_CTRL)
+        #define NFD_VID_IS_PF(_x) ((_x) >= NFD_FIRST_PF)
+        #define NFD_Q_IS_PF(_x) ((_x) >= NFD_FIRST_PF_QUEUE)
+    #else
+        #define NFD_VID_IS_PF(_x) 1
+        #define NFD_Q_IS_PF(_x) 1
+    #endif
+#else
+    #define NFD_VID_IS_PF(_x) 0
+    #define NFD_Q_IS_PF(_x) 0
+#endif
+
+#if (NFD_MAX_CTRL > 0)
+    #if (NFD_MAX_CTRL_QUEUES != 1 || NFD_MAX_CTRL != 1)
+        #error "Unsupported CTRL vNIC values"
+    #endif
+
+    #if (NFD_MAX_VFS + NFD_MAX_PFS)
+        #define NFD_VID_IS_CTRL(_x) ((_x) == NFD_CTRL_VNIC)
+        #define NFD_Q_IS_CTRL(_x) ((_x) == NFD_CTRL_QUEUE)
+    #else
+        #define NFD_VID_IS_CTRL(_x) 1
+        #define NFD_Q_IS_CTRL(_x) 1
+    #endif
+#else
+    #define NFD_VID_IS_CTRL(_x) 0
+    #define NFD_Q_IS_CTRL(_x) 0
+#endif
 
 
 #define NFD_IN_DESC_SIZE        16
@@ -146,181 +216,217 @@
  * from the firmware, so this representation is never used outside
  * the PCIe island.
  *
- * == Bitmask queue number (BMQ) ==
+ * == Bitmask queue number (BMQ / QID) ==
  * NFD stores bitmasks of which queues need to be processed.  All data used
  * by PCI.IN and PCI.OUT is stored in the bitmask format.  A layer of
  * abstraction is used between the natural queue number and its internal
  * bitmask queue numbering, to allow NFD to convert from QC queue numbers
- * to an offset in a bitmask as efficiently as possible.
+ * to an offset in a bitmask as efficiently as possible.  The bitmask queue
+ * number is also referred to as the QID.
  *
- * == vNIC:queue pair numbering ==
- * Ultimately, NFD exposes up to N vNICs with up to Q queues to the user.
+ * == type:vNIC:queue pair numbering ==
+ * Ultimately, NFD exposes N of three different types of vNICs with up to Q
+ * queues to the user, where N and Q differ between types.
  * These vNIC queues need to be mapped into the NATQ space.  Currently,
- * the VF queues are enumerated first, from VF 0 to VF N-1, and the PF
- * afterwards.  Thus NATQ = vNIC * NFD_MAX_VF_QUEUES + queue.
- * We need to handle the case where there are no VFs or where there is no
- * PF as well.
+ * the VF queues are enumerated first, from VF 0 to VF N-1, then the CTRL,
+ * and finally the PFs.
+ *
+ * == VID:queue pair numbering ==
+ * All vNICs are given a unique ID independent of their type, the VID.  This
+ * VID is used for example to determine the vNIC's CFG BAR within the memory
+ * symbol.
  */
 
 
 /*
  * Conversions between NATQ and BMQ representations
  */
-#define NFD_NATQ2BMQ(_qid) _qid
+#define NFD_NATQ2BMQ(_qid) (_qid)
 
-#define NFD_BMQ2NATQ(_qid) _qid
+#define NFD_BMQ2NATQ(_qid) (_qid)
 
 
 /*
- * Conversions between vNIC:queue to NATQ
+ * Conversions between type:vNIC:queue to NATQ
  */
 
-/* Config queues are a special case where the vNIC
- * can be computed easily. The queue is known by definition. */
-
-#if NFD_MAX_PFS < 2
-#if NFD_MAX_VF_QUEUES != 0
-#define NFD_CFGQ2VNIC(_cfg)                     \
-    ((_cfg) / NFD_MAX_VF_QUEUES)
-#else
-/* We must have the PF */
-#define NFD_CFGQ2VNIC(_cfg) NFD_MAX_VFS
-#endif /* NFD_MAX_VF_QUEUES != 0 */
-#else
-#if NFD_MAX_VFS == 0
-#define NFD_CFGQ2VNIC(_cfg)                     \
-    ((_cfg) / NFD_MAX_PF_QUEUES)
-#else
-#define NFD_CFGQ2VNIC(_cfg)                                             \
-    (((_cfg) < (NFD_MAX_VFS * NFD_MAX_VF_QUEUES)) ?                     \
-     ((_cfg) / NFD_MAX_VF_QUEUES) :                                     \
-     ((((_cfg) - (NFD_MAX_VF_QUEUES * NFD_MAX_VFS)) / NFD_MAX_PF_QUEUES) \
-      + NFD_MAX_VFS))
-#endif /* NFD_MAX_VFS == 0 */
-#endif /* NFD_MAX_PFS < 2 */
-
-/* If a natural queue is known to be related to a VF,
- * the mapping can be computed cheaply. */
+#if (NFD_MAX_VF_QUEUES != 0)
 #define NFD_NATQ2VF(_nat)                       \
     ((_nat) / NFD_MAX_VF_QUEUES)
-
 #define NFD_NATQ2VFQ(_nat)                      \
     ((_nat) % NFD_MAX_VF_QUEUES)
-
-#if NFD_MAX_PFS < 2
-#define NFD_NATQ2PF(_nat)                       \
-    (NFD_MAX_VFS)
-#define NFD_NATQ2PFQ(_nat)                          \
-    ((_nat) - (NFD_MAX_VF_QUEUES * NFD_MAX_VFS))
+#define NFD_VF2NATQ(_vf, _q)                    \
+    ((_vf) * NFD_MAX_VF_QUEUES + (_q))
 #else
-#define NFD_NATQ2PF(_nat)                       \
-  ((((_nat) - (NFD_MAX_VF_QUEUES * NFD_MAX_VFS)) / NFD_MAX_PF_QUEUES)\
-   + NFD_MAX_VFS)
-#define NFD_NATQ2PFQ(_nat)                          \
-    (((_nat) - (NFD_MAX_VF_QUEUES * NFD_MAX_VFS)) % NFD_MAX_PF_QUEUES)
+#define NFD_NATQ2VF(_nat) 0
+#define NFD_NATQ2VFQ(_nat) 0
+#define NFD_VF2NATQ(_vf, _q) 0
 #endif
 
-/* If we know the vNIC, we can compute the queue cheaply. */
-#if NFD_MAX_PFS < 2
-#define NFD_NATQ2VQN(_nat, _vnic)                       \
-    ((_nat) - ((_vnic) * NFD_MAX_VF_QUEUES))
+#if (NFD_MAX_PF_QUEUES != 0)
+#define NFD_NATQ2PF(_nat)                               \
+    (((_nat) - NFD_FIRST_PF_QUEUE) / NFD_MAX_PF_QUEUES)
+#define NFD_NATQ2PFQ(_nat)                              \
+    (((_nat) - NFD_FIRST_PF_QUEUE) % NFD_MAX_PF_QUEUES)
+#define NFD_PF2NATQ(_pf, _q)                            \
+    ((_pf) * NFD_MAX_PF_QUEUES + (_q) + NFD_FIRST_PF_QUEUE)
 #else
-#define NFD_NATQ2VQN(_nat, _vnic)                               \
-    ((NFD_VNIC_IS_VF(_vnic)) ?                                  \
-    ((_nat) - ((_vnic) * NFD_MAX_VF_QUEUES)) :                  \
-      ((_nat) - ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +            \
-                 (((_vnic) - NFD_MAX_VFS) *                     \
-                  NFD_MAX_PF_QUEUES))))
-#endif /* if NFD_MAX_PFS < 2 */
+#define NFD_NATQ2PF(_nat) 0
+#define NFD_NATQ2PFQ(_nat) 0
+#define NFD_PF2NATQ(_pf, _q) 0
+#endif
+
+#ifdef NFD_USE_CTRL
+    #if (NFD_MAX_CTRL_QUEUES != 1 || NFD_MAX_CTRL != 1)
+        #error "Unsupported CTRL vNIC values"
+    #endif
+
+    #define NFD_NATQ2CTRL(_nat) 0
+    #define NFD_NATQ2CTRLQ(_nat) 0
+    #define NFD_CTRL2NATQ(_ctrl, _q) NFD_CTRL_QUEUE
+#else
+    #define NFD_NATQ2CTRL(_nat) 0
+    #define NFD_NATQ2CTRLQ(_nat) 0
+    #define NFD_CTRL2NATQ(_ctrl, _q) 0
+#endif
+
 
 #ifndef __NFP_LANG_ASM
 
 /* Provide NFD_EXTRACT_NATQ and NFD_NATQ2VNIC that select from
  * the above PF and VF macros as appropriate, if the configuration
  * allows compile time selection. */
-#if (((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0)) &&     \
-     ((NFD_MAX_PFS != 0) && (NFD_MAX_PF_QUEUES != 0)))
-    /* With no special knowledge about the natural queue, */
-    /* we need to test whether it is a PF queue or a VF */
-    /* queue, and handle each case differently. */
-#define NFD_EXTRACT_NATQ(_vnic, _vqn, _nat)                  \
+#define NFD_EXTRACT_NATQ(_type, _vnic, _vqn, _nat)           \
 do {                                                         \
-    if ((_nat) < (NFD_MAX_VF_QUEUES * NFD_MAX_VFS)) {        \
-         (_vnic) = NFD_NATQ2VF(_nat);                        \
-         (_vqn) = NFD_NATQ2VFQ(_nat);                        \
+    if (NFD_Q_IS_PF(_nat)) {                                 \
+        (_type) = NFD_VNIC_TYPE_PF;                          \
+        (_vnic) = NFD_NATQ2PF(_nat);                         \
+        (_vqn) = NFD_NATQ2PFQ(_nat);                         \
+    } else if (NFD_Q_IS_VF(_nat)) {                          \
+        (_type) = NFD_VNIC_TYPE_VF;                          \
+        (_vnic) = NFD_NATQ2VF(_nat);                         \
+        (_vqn) = NFD_NATQ2VFQ(_nat);                         \
     } else {                                                 \
-         (_vnic) = NFD_NATQ2PF(_nat);                        \
-         (_vqn) = NFD_NATQ2PFQ(_nat);                        \
+        (_type) = NFD_VNIC_TYPE_CTRL;                        \
+        (_vnic) = NFD_NATQ2CTRL(_nat);                       \
+        (_vqn) = NFD_NATQ2CTRLQ(_nat);                       \
     }                                                        \
 } while(0)
-
-#define NFD_NATQ2VNIC(_vnic, _nat)                \
-do {                                              \
-    if (_nat < (NFD_MAX_VF_QUEUES * NFD_MAX_VFS)) \
-        _vnic = NFD_NATQ2VF(_nat);                \
-    else                                          \
-        _vnic = NFD_NATQ2PF(_nat);                \
-} while(0)
-
-#elif ((NFD_MAX_PFS != 0) && (NFD_MAX_PF_QUEUES != 0))
-    /* We have PF queues only */
-#define NFD_EXTRACT_NATQ(_vnic, _vqn, _nat)       \
-do {                                              \
-    (_vnic) = NFD_NATQ2PF(_nat);                  \
-    (_vqn) = NFD_NATQ2PFQ(_nat);                  \
-} while(0)
-
-#define NFD_NATQ2VNIC(_vnic, _nat)                \
-do {                                              \
-        _vnic = NFD_NATQ2PF(_nat);                \
-} while(0)
-
-#elif ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
-    /* We have VF queues only */
-#define NFD_EXTRACT_NATQ(_vnic, _vqn, _nat)       \
-do {                                              \
-    (_vnic) = NFD_NATQ2VF(_nat);                  \
-    (_vqn) = NFD_NATQ2VFQ(_nat);                  \
-} while(0)                                        \
-
-#define NFD_NATQ2VNIC(_vnic, _nat)                \
-do {                                              \
-        _vnic = NFD_NATQ2VF(_nat);                \
-} while(0)
-
-#else
-#error "PF and VF options imply that no queues are in use!"
-#endif /* NFD_EXTRACT_NATQ defines */
 
 #endif /* __NFP_LANG_ASM */
 
 
+#define NFD_BUILD_NATQ(_type, _vnic, _vqn)                      \
+    (((_type) == NFD_VNIC_TYPE_PF) ? NFD_PF2NATQ(_vnic, _vqn) : \
+     ((_type) == NFD_VNIC_TYPE_VF) ? NFD_VF2NATQ(_vnic, _vqn) : \
+     NFD_CTRL2NATQ(_vnic, _vqn))
+
+
 /*
- * Convert between NATQ and vNIC:queue represenations,
+ * Conversions between type:vNIC and vid
+ */
+
+#define NFD_VID2PF(_vid) ((_vid) - NFD_FIRST_PF)
+#define NFD_PF2VID(_pf) ((_pf) + NFD_FIRST_PF)
+
+#define NFD_VID2VF(_vid) (_vid)
+#define NFD_VF2VID(_vf) (_vf)
+
+#ifdef NFD_USE_CTRL
+#define NFD_VID2CTRL(_vid) 0
+#define NFD_CTRL2VID(_ctrl) NFD_CTRL_VNIC
+#else
+#define NFD_VID2CTRL(_vid) 0
+#define NFD_CTRL2VID(_ctrl) 0
+#endif
+
+
+#ifndef __NFP_LANG_ASM
+
+#define NFD_VID2VNIC(_type, _vnic, _vid)            \
+do {                                                \
+    if (NFD_VID_IS_PF(_vid)) {                      \
+        (_type) = NFD_VNIC_TYPE_PF;                 \
+        (_vnic) = NFD_VID2PF(_vid);                 \
+    } else if (NFD_VID_IS_VF(_vid)) {               \
+        (_type) = NFD_VNIC_TYPE_VF;                 \
+        (_vnic) = NFD_VID2VF(_vid);                 \
+    } else {                                        \
+        (_type) = NFD_VNIC_TYPE_CTRL;               \
+        (_vnic) = NFD_VID2CTRL(_vid);               \
+    }                                               \
+} while (0)
+
+#endif /* __NFP_LANG_ASM */
+
+#define NFD_VNIC2VID(_type, _vnic)                                  \
+    (((_type) == NFD_VNIC_TYPE_PF) ? NFD_PF2VID(_vnic) :            \
+     ((_type) == NFD_VNIC_TYPE_VF) ? NFD_VF2VID(_vnic) :            \
+     NFD_CTRL2VID(_vnic))
+
+
+/*
+ * Conversions between vid:queue to NATQ
+ */
+
+/* Config queues are a special case where the VID
+ * can be computed easily. The queue is known by definition. */
+#define NFD_CFGQ2VID(_cfg)                                              \
+    (NFD_Q_IS_PF(_cfg) ? NFD_PF2VID(NFD_NATQ2PF(_cfg)) :                \
+     (NFD_Q_IS_VF(_cfg)) ? NFD_VF2VID(NFD_NATQ2VF(_cfg)) :              \
+     NFD_CTRL2VID(NFD_NATQ2CTRL(_cfg)))
+
+
+#ifndef __NFP_LANG_ASM
+
+#define NFD_NATQ2VID(_vid, _vqn, _nat)                   \
+do {                                                     \
+    if (NFD_Q_IS_PF(_nat)) {                             \
+        (_vid) = NFD_PF2VID(NFD_NATQ2PF(_nat));          \
+        (_vqn) = NFD_NATQ2PFQ(_nat);                     \
+    } else if (NFD_Q_IS_VF(_nat)) {                      \
+        (_vid) = NFD_VF2VID(NFD_NATQ2VF(_nat));          \
+        (_vqn) = NFD_NATQ2VFQ(_nat);                     \
+    } else {                                             \
+        (_vid) = NFD_CTRL2VID(NFD_NATQ2CTRL(_nat));      \
+        (_vqn) = NFD_NATQ2CTRLQ(_nat);                   \
+    }                                                    \
+} while(0)
+
+#endif /* __NFP_LANG_ASM */
+
+#define NFD_VID2NATQ(_vid, _vqn)                                        \
+   (NFD_VID_IS_PF(_vid) ? NFD_PF2NATQ(NFD_VID2PF(_vid), _vqn) :         \
+    NFD_VID_IS_VF(_vid) ? NFD_VF2NATQ(NFD_VID2VF(_vid), _vqn) :         \
+    NFD_CTRL2NATQ(NFD_VID2CTRL(_vid), _vqn))
+
+
+/*
+ * Convert between QID and type:vNIC:queue represenations,
+ * using the natural queue number as an intermediate stage.
+ */
+#ifndef __NFP_LANG_ASM
+#define NFD_EXTRACT_QID(_type, _vnic, _vqn, _qid)        \
+    NFD_EXTRACT_NATQ(_type, _vnic, _vqn, NFD_BMQ2NATQ(_qid))
+#endif /* __NFP_LANG_ASM */
+
+#define NFD_BUILD_QID(_type, _vnic, _vqn)        \
+    NFD_NATQ2BMQ(NFD_BUILD_NATQ(_type, _vnic, _vqn))
+
+
+/*
+ * Convert between QID and vid:queue represenations,
  * using the natural queue number as an intermediate stage.
  */
 
-#define NFD_EXTRACT_QID(_vnic, _vqn, _qid)              \
-    NFD_EXTRACT_NATQ(_vnic, _vqn, NFD_BMQ2NATQ(_qid))
+#ifndef __NFP_LANG_ASM
+#define NFD_QID2VID(_vid, _vqn, _qid)               \
+    NFD_NATQ2VID(_vid, _vqn, NFD_BMQ2NATQ(_qid))
+#endif /* __NFP_LANG_ASM */
 
-#if NFD_MAX_PFS < 2
-#define NFD_BUILD_NATQ(_vnic, _vqn)            \
-    ((_vnic) * NFD_MAX_VF_QUEUES + (_vqn))
-#else /* NFD_MAX_PFS < 2 */
-#if NFD_MAX_VFS > 0
-#define NFD_BUILD_NATQ(_vnic, _vqn)                             \
-    ((NFD_VNIC_IS_VF(_vnic)) ?                                  \
-     ((_vnic) * NFD_MAX_VF_QUEUES + (_vqn)) :                   \
-     ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +                       \
-      (((_vnic) - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES) + (_vqn)))
-#else /* NFD_MAX_VFS > 0 */
-#define NFD_BUILD_NATQ(_vnic, _vqn)             \
-    ((_vnic) * NFD_MAX_PF_QUEUES + (_vqn))
-#endif /* NFD_MAX_VFS > 0 */
-#endif /* NFD_MAX_PFS < 2 */
+#define NFD_VID2QID(_vid, _vqn)                 \
+    NFD_NATQ2BMQ(NFD_VID2NATQ(_vid, _vqn))
 
-#define NFD_BUILD_QID(_vnic, _vqn) \
-    NFD_NATQ2BMQ(NFD_BUILD_NATQ(_vnic, _vqn))
 
 /*
  * Convert between the queue controller queues and natural queues.
@@ -331,11 +437,11 @@ do {                                              \
  * The defines to specify the types are as follows: NFD_OUT_FL_QUEUE,
  * NFD_IN_TX_QUEUE, and NFD_CFG_QUEUE.
  */
-#define NFD_NATQ2QC(_nat_q, _type)             \
-    ((_nat_q << 2) | _type)
+#define NFD_NATQ2QC(_nat_q, _qc_type)           \
+    (((_nat_q) << 2) | (_qc_type))
 
-#define NFD_QC2NATQ(_qc_q)                     \
-    (_qc_q >> 2)
+#define NFD_QC2NATQ(_qc_q)                      \
+    ((_qc_q) >> 2)
 
 
 #endif /* __NFD_COMMON_H */

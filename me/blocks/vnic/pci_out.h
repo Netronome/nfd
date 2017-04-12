@@ -112,6 +112,7 @@ struct nfd_out_input {
 
 #include <nfp_chipres.h>
 #include "shared/nfd_api_common.h"
+#include <nfd_common.h>
 
 /** \cond DOXYGEN_SHOULD_SKIP_THIS */
 
@@ -156,14 +157,16 @@ __intrinsic void nfd_out_send_init(void);
 
 /**
  * Map a vNIC, queue number pair to an NFD queue number.
- * @param vnic      vNIC as seen by the host
+ * @param type      vNIC type as seen by the host
+ * @param vnic      vNIC within type as seen by the host
  * @param queue     Queue number within the vNIC
  * @return          The corresponding NFD queue number
  *
  * This method returns an NFD queue number (the numbering system used
  * internally in PCI.OUT and PCI.IN) from a vNIC, queue number pair.
  */
-__intrinsic unsigned int nfd_out_map_queue(unsigned int vnic,
+__intrinsic unsigned int nfd_out_map_queue(unsigned int type,
+                                           unsigned int vnic,
                                            unsigned int queue);
 
 

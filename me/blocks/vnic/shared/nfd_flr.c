@@ -83,8 +83,8 @@
  * @param addr      start address of the vNIC CFG BAR
  *
  * This function performs the bulk write of data that won't be reset
- * by other functions (e.g. nfd_flr_init__pf_ctrl_bar() and
- * nfd_flr_init_vf_ctrl_bar()).  "addr" should be obtained via the
+ * by other functions (e.g. nfd_flr_init_pf_cfg_bar() and
+ * nfd_flr_init_vf_cfg_bar()).  "addr" should be obtained via the
  * appropriate API, e.g. NFD_CFG_BAR_ISL.
  */
 __intrinsic void
@@ -121,7 +121,7 @@ nfd_flr_clr_bar(__emem char *addr)
 
 /** Reset the vNIC CFG QC queue to its initial state
  * @param pcie_isl      PCIe island to reset
- * @param vnic          vNIC to reset
+ * @param vid           vid of vNIC to reset
  * @param event_type    event type to configure
  *
  * Reset the CFG QC to a clean state, in case the previous
@@ -132,7 +132,7 @@ nfd_flr_clr_bar(__emem char *addr)
  * configuration message events.
  */
 __intrinsic void
-nfd_flr_init_cfg_queue(unsigned int pcie_isl, unsigned int vnic,
+nfd_flr_init_cfg_queue(unsigned int pcie_isl, unsigned int vid,
                        unsigned int event_type)
 {
     struct qc_queue_config nfd_cfg_queue;
@@ -148,23 +148,23 @@ nfd_flr_init_cfg_queue(unsigned int pcie_isl, unsigned int vnic,
     nfd_cfg_queue.event_type = event_type;
     nfd_cfg_queue.ptr        = 0;
 
-    qc_init_queue(pcie_isl, NFD_NATQ2QC(NFD_BUILD_NATQ(vnic, 0), NFD_CFG_QUEUE),
+    qc_init_queue(pcie_isl, NFD_NATQ2QC(NFD_VID2NATQ(vid, 0), NFD_CFG_QUEUE),
                   &nfd_cfg_queue);
 }
 
 
 /** Init the non-zero parts of the PF control BAR
  * @param isl_base      start address of the CFG BARs for the PCIe island
+ * @param vid           vid number on the PCIe island
  *
  * "isl_base" should be obtained via the appropriate API,
  * e.g. NFD_CFG_BASE_LINK.
  */
 void
-nfd_flr_init_pf_ctrl_bar(__emem char *isl_base, unsigned int vnic)
+nfd_flr_init_pf_cfg_bar(__emem char *isl_base, unsigned int vid)
 {
 #if (NFD_MAX_PFS != 0)
-    unsigned int q_base = (NFD_MAX_VF_QUEUES * NFD_MAX_VFS) +
-        (vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES;
+    unsigned int q_base = NFD_VID2NATQ(vid, 0);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION,
                                    (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
                                     << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
@@ -183,37 +183,76 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base, unsigned int vnic)
 #endif
 
     mem_write64(&cfg,
-                NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_VERSION,
+                NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 
-    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vnic) +
+    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vid) +
                NFP_NET_CFG_LSC, sizeof exn_lsc);
 
     mem_write8(&cfg2,
-               NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_RX_OFFSET,
+               NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_RX_OFFSET,
                sizeof cfg2);
 #ifdef NFD_BPF_CAPABLE
     mem_write8(&bpf_cfg,
-               NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_BPF_ABI,
+               NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_BPF_ABI,
                sizeof bpf_cfg);
 #endif
 #endif
 }
 
 
-/** Init the non-zero parts of the VF control BAR
+/** Init the non-zero parts of the CTRL control BAR
  * @param isl_base      start address of the CFG BARs for the PCIe island
- * @param vf            VF number on the PCIe island
+ * @param vid           vid number on the PCIe island
  *
  * "isl_base" should be obtained via the appropriate API,
  * e.g. NFD_CFG_BASE_LINK.
  */
 void
-nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsigned int vf)
+nfd_flr_init_ctrl_cfg_bar(__emem char *isl_base, unsigned int vid)
+{
+#ifdef NFD_USE_CTRL
+    unsigned int q_base = NFD_VID2NATQ(vid, 0);
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION,
+                                   (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
+                                    << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
+                                   NFD_CFG_CTRL_CAP,
+                                   NFD_MAX_CTRL_QUEUES, NFD_MAX_CTRL_QUEUES,
+                                   NFD_CFG_MAX_MTU,
+                                   NFD_NATQ2QC(q_base, NFD_IN_TX_QUEUE),
+                                   NFD_NATQ2QC(q_base, NFD_OUT_FL_QUEUE)};
+    __xwrite unsigned int exn_lsc = 0xffffffff;
+    __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
+                                    NFD_RSS_HASH_FUNC};
+
+    mem_write64(&cfg,
+                NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_VERSION,
+                sizeof cfg);
+
+    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vid) +
+               NFP_NET_CFG_LSC, sizeof exn_lsc);
+
+    mem_write8(&cfg2,
+               NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_RX_OFFSET,
+               sizeof cfg2);
+#endif
+}
+
+
+
+/** Init the non-zero parts of the VF control BAR
+ * @param isl_base      start address of the CFG BARs for the PCIe island
+ * @param vid           vid number on the PCIe island
+ *
+ * "isl_base" should be obtained via the appropriate API,
+ * e.g. NFD_CFG_BASE_LINK.
+ */
+void
+nfd_flr_init_vf_cfg_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsigned int vid)
 {
 #if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
 #ifdef NFD_NO_ISOLATION
-    unsigned int q_base = NFD_MAX_VF_QUEUES * vnic;
+    unsigned int q_base = NFD_VID2NATQ(vid, 0);
 #else
     unsigned int q_base = 0;
 #endif
@@ -231,19 +270,20 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsign
     __xread unsigned int vf_cfg_rd[2];
     __xwrite unsigned int vf_cfg_wr[2];
 
-    mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_VERSION,
+    mem_write64(&cfg, NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 
-    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_LSC,
+    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_LSC,
                sizeof exn_lsc);
 
-    mem_write8(&cfg2, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_RX_OFFSET,
+    mem_write8(&cfg2, NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_RX_OFFSET,
                sizeof cfg2);
 
-    mem_read8(&vf_cfg_rd, NFD_VF_CFG_ADDR(vf_cfg_base, vf),
+    /* XXX should vid technically be vf below? */
+    mem_read8(&vf_cfg_rd, NFD_VF_CFG_ADDR(vf_cfg_base, vid),
               NFD_VF_CFG_MAC_SZ);
     reg_cp(vf_cfg_wr, vf_cfg_rd, sizeof vf_cfg_rd);
-    mem_write8(&vf_cfg_wr, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_MACADDR,
+    mem_write8(&vf_cfg_wr, NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_MACADDR,
               NFD_VF_CFG_MAC_SZ);
 
 #endif

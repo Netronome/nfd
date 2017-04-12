@@ -59,7 +59,7 @@ __intrinsic void
 nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
                       unsigned int rnum)
 {
-    /* XXX should this method read the vnic config BAR? */
+    /* XXX should this method read the vid config BAR? */
     if (signal_test(cfg_sig)) {
         int ret;
         __xread struct nfd_cfg_msg cfg_msg_rd;
@@ -169,7 +169,7 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
     unsigned int nfd_isl_master;
 
     /* Compute the address of the update field */
-    addr += cfg_msg->vnic * NFP_NET_CFG_BAR_SZ;
+    addr += cfg_msg->vid * NFP_NET_CFG_BAR_SZ;
     addr += NFP_NET_CFG_UPDATE;
 
     if (cfg_msg->error) {
@@ -190,12 +190,12 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
 
     /* Check for and handle FLRs */
     if (update_request & NFP_NET_CFG_UPDATE_RESET) {
-        if ((NFD_MAX_VFS != 0) && NFD_VNIC_IS_VF(cfg_msg->vnic)) {
+        if ((NFD_MAX_VFS != 0) && NFD_VID_IS_VF(cfg_msg->vid)) {
             /* We have a VF FLR */
-            _nfd_flr_ack_vf(pcie_isl, cfg_msg->vnic);
+            _nfd_flr_ack_vf(pcie_isl, cfg_msg->vid);
         } else {
             /* We have a PF FLR, but is it the last PF vNIC? */
-            if (cfg_msg->vnic == NFD_LAST_PF) {
+            if (cfg_msg->vid == NFD_LAST_PF) {
                 /* Only ack the FLR on the message for the last PF vNIC */
                 _nfd_flr_ack_pf(pcie_isl);
             }
@@ -232,7 +232,7 @@ nfd_cfg_svc_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
     cfg_msg_tmp.__raw = 0;
     cfg_msg_tmp.msg_valid = 1;
     cfg_msg_tmp.error = cfg_msg->error;
-    cfg_msg_tmp.vnic = cfg_msg->vnic;
+    cfg_msg_tmp.vid = cfg_msg->vid;
     cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
     /* Journal is guaranteed to not overflow by design (it is larger than

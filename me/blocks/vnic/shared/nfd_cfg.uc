@@ -28,7 +28,7 @@
 #error "NFD_MAX_PFS is not defined but is required"
 #endif
 
-#define_eval NFD_TOTAL_VNICS (NFD_MAX_VFS + NFD_MAX_PFS)
+#define_eval NFD_TOTAL_VNICS (NFD_MAX_VFS + NFD_MAX_PFS + NFD_MAX_CTRL)
 #define_eval NFD_CFG_BAR_SZ (NFD_TOTAL_VNICS * NFP_NET_CFG_BAR_SZ)
 #define_eval NFD_CFG_BAR0_OFF (NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ)
 
@@ -60,7 +60,7 @@ nfd_cfg_define_bars(3)
 #undef NFD_CFG_BAR0_OFF
 
 
-#macro nfd_cfg_get_bar_addr(out_hi, out_lo, in_vnic, ISL)
+#macro nfd_cfg_get_bar_addr(out_hi, out_lo, in_vid, ISL)
 .begin
     .reg tmp_lo
     .reg off
@@ -71,7 +71,7 @@ nfd_cfg_define_bars(3)
 
     move(out_hi, ((nfd_cfg_base/**/ISL >> 8) & 0xFF000000))
     move(tmp_lo, (nfd_cfg_base/**/ISL & 0xFFFFFFFF))
-    alu[off, --, B, in_vnic, <<(log2(NFP_NET_CFG_BAR_SZ))]
+    alu[off, --, B, in_vid, <<(log2(NFP_NET_CFG_BAR_SZ))]
     alu[out_lo, tmp_lo, +, off]
 
 .end

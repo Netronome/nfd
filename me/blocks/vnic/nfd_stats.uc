@@ -22,9 +22,12 @@
 
 #include <nfd_user_cfg.h>
 
+#include <vnic/nfd_common.h>
+
 #ifndef NFD_MAX_PFS
 #error "NFD_MAX_PFS is not defined but is required"
 #endif
+
 
 /* Each statistic is a 64-bit count + a 64-bit byte-count */
 #define NFD_STAT_SIZE   16
@@ -34,7 +37,7 @@
 
 #macro _nfd_stat_declare_help(NAME)
 
-    #if ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES + NFD_MAX_PFS * NFD_MAX_PF_QUEUES) > NFD_STAT_MAX_QUEUES)
+    #if ((NFD_TOTAL_VFQS + NFD_TOTAL_CTRLQS + NFD_TOTAL_PFQS) > NFD_STAT_MAX_QUEUES)
         #error "Total number of NFD queues per island cannot exceed NFD_STAT_MAX_QUEUES"
     #endif
 

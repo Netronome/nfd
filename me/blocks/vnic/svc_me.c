@@ -93,31 +93,36 @@ do {                                                                    \
     if (cfg_msg##_isl.msg_valid) {                                      \
         ncfg++;                                                         \
         mem_read64(cfg_bar_data##_isl,                                  \
-                   NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),           \
+                   NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),            \
                    sizeof cfg_bar_data##_isl);                          \
                                                                         \
-        msix_qmon_reconfig(_isl, cfg_msg##_isl.vnic,                    \
-                           NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic),   \
+        msix_qmon_reconfig(_isl, cfg_msg##_isl.vid,                     \
+                           NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),    \
                            cfg_bar_data##_isl);                         \
                                                                         \
         /* Handle FLRs */                                               \
         if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_RESET) {         \
                                                                         \
             /* NB: This function writes ~8K of data */                  \
-            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vnic)); \
-            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vnic,            \
+            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid));  \
+            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vid,             \
                                    PCIE_QC_EVENT_NOT_EMPTY);            \
                                                                         \
-            if (NFD_VNIC_IS_PF(cfg_msg##_isl.vnic)) {                   \
+            if (NFD_VID_IS_PF(cfg_msg##_isl.vid)) {                     \
                 /* We have a PF FLR */                                  \
-                nfd_flr_init_pf_ctrl_bar(NFD_CFG_BASE_LINK(_isl),       \
-                                         cfg_msg##_isl.vnic);           \
+                nfd_flr_init_pf_cfg_bar(NFD_CFG_BASE_LINK(_isl),        \
+                                        cfg_msg##_isl.vid);             \
+                                                                        \
+            } else if (NFD_VID_IS_VF(cfg_msg##_isl.vid)) {              \
+                /* We have a VF FLR */                                  \
+                nfd_flr_init_vf_cfg_bar(NFD_CFG_BASE_LINK(_isl),        \
+                                        NFD_VF_CFG_BASE_LINK(_isl),     \
+                                        cfg_msg##_isl.vid);             \
                                                                         \
             } else {                                                    \
-                /* We have a VF FLR */                                  \
-                nfd_flr_init_vf_ctrl_bar(NFD_CFG_BASE_LINK(_isl),       \
-                                         NFD_VF_CFG_BASE_LINK(_isl),    \
-                                         cfg_msg##_isl.vnic);           \
+                /* We have a PF/CTRL FLR */                             \
+                nfd_flr_init_ctrl_cfg_bar(NFD_CFG_BASE_LINK(_isl),      \
+                                          cfg_msg##_isl.vid);           \
                                                                         \
             }                                                           \
         }                                                               \

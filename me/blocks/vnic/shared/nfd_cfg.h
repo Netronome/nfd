@@ -26,6 +26,7 @@
 #include <nfd_user_cfg.h>
 
 #include <vnic/shared/nfd.h>
+#include <vnic/shared/nfd_ctrl.h>
 
 
 /* /\* XXX Magic number currently */
@@ -95,10 +96,10 @@
 #define NFD_CFG_MSG_QUEUE_wrd           0
 #define NFD_CFG_MSG_QUEUE_shf           8
 #define NFD_CFG_MSG_QUEUE_msk           0xFF
-#define NFD_CFG_MSG_VNIC_bf             0, 7, 0
-#define NFD_CFG_MSG_VNIC_wrd            0
-#define NFD_CFG_MSG_VNIC_shf            0
-#define NFD_CFG_MSG_VNIC_msk            0xFF
+#define NFD_CFG_MSG_VID_bf              0, 7, 0
+#define NFD_CFG_MSG_VID_wrd             0
+#define NFD_CFG_MSG_VID_shf             0
+#define NFD_CFG_MSG_VID_msk             0xFF
 
 
 /*
@@ -236,8 +237,10 @@ NFD_CFG_RINGS_DECL(3);
 #if 1
 #define NFD_CFG_BASE_DECLARE(_isl)                                      \
     _NFP_CHIPRES_ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global \
-                     ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ) SZ_2M)
+                     ((NFD_MAX_VFS + NFD_MAX_PFS + NFD_MAX_CTRL) * \
+                      NFP_NET_CFG_BAR_SZ) SZ_2M)
 #else
+/* TODO This logic seems broken, remove it entirely */
 #define NFD_CFG_BASE_DECLARE(_isl)                                      \
     _NFP_CHIPRES_ASM(.alloc_mem NFD_CFG_BASE(_isl) NFD_EMEM(_isl) global \
                      ((NFD_MAX_VFS + NFD_MAX_PFS) * NFP_NET_CFG_BAR_SZ) \
@@ -253,11 +256,11 @@ NFD_CFG_RINGS_DECL(3);
 
 
 /* XXX we can't use "|" here due to NFCC error, check and possibly JIRA. */
-#define NFD_CFG_BAR(_base, _vnic)               \
-    ((_base) + ((_vnic) * NFP_NET_CFG_BAR_SZ))
+#define NFD_CFG_BAR(_base, _vid)                \
+    ((_base) + ((_vid) * NFP_NET_CFG_BAR_SZ))
 
-#define NFD_CFG_BAR_ISL(_isl, _vnic)            \
-    NFD_CFG_BAR(NFD_CFG_BASE_LINK(_isl), (_vnic))
+#define NFD_CFG_BAR_ISL(_isl, _vid )            \
+    NFD_CFG_BAR(NFD_CFG_BASE_LINK(_isl), (_vid))
 
 
 /**
@@ -267,10 +270,10 @@ NFD_CFG_RINGS_DECL(3);
  * @param up_bit        the current queue is up
  * @param spare         spare bits
  * @param queue         queue number to process
- * @param vnic          vnic to process
+ * @param vid           vNIC ID to process
  *
  * This structure is passed between NFD components and used internally
- * to carry configuration messages.  'vnic', 'msg_valid', and 'error' are
+ * to carry configuration messages.  'vid', 'msg_valid', and 'error' are
  * passed between components (other fields must be zeroed).  'msg_valid' is
  * used to determine whether to process a configuration message, and must be
  * set when passing the structure to the next stage.  Unsetting this bit signals
@@ -286,7 +289,7 @@ struct nfd_cfg_msg {
             unsigned int up_bit:1;
             unsigned int spare:12;
             unsigned int queue:8;
-            unsigned int vnic:8;
+            unsigned int vid:8;
         };
         unsigned int __raw;
     };

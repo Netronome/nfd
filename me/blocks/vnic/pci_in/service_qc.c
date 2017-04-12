@@ -122,7 +122,7 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         return;
     }
 
-    queue = NFD_BUILD_NATQ(cfg_msg->vnic, queue);
+    queue = NFD_VID2NATQ(cfg_msg->vid, queue);
     bmsk_queue = NFD_NATQ2BMQ(queue);
 
     txq.watermark    = NFP_QC_STS_HI_WATERMARK_4;
@@ -138,8 +138,8 @@ service_qc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].tx_s = 0;
         queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
         queue_data[bmsk_queue].requester_id = 0;
-        if (NFD_VNIC_IS_VF(cfg_msg->vnic)) {
-            queue_data[bmsk_queue].requester_id = (cfg_msg->vnic +
+        if (NFD_VID_IS_VF(cfg_msg->vid)) {
+            queue_data[bmsk_queue].requester_id = (cfg_msg->vid +
                                                    NFD_CFG_VF_OFFSET);
         }
         queue_data[bmsk_queue].spare0 = 0;

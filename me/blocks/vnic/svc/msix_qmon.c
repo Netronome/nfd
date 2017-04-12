@@ -85,6 +85,7 @@
                                      (1ull << (num_rings)) - 1)
 #define MSIX_PF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_PF_QUEUES)
 #define MSIX_VF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_VF_QUEUES)
+#define MSIX_CTRL_RINGS_MASK        MSIX_RINGS_MASK(NFD_MAX_CTRL_QUEUES)
 
 
 /*
@@ -206,7 +207,7 @@ msix_qmon_init(unsigned int pcie_isl)
  * Reconfigure RX and TX rings (executed by context 0)
  *
  * @pcie_isl        PCIe Island this function is handling
- * @vnic            vNIC inside the island this function is handling
+ * @vid             vNIC inside the island this function is handling
  * @cfg_bar         Points to the control bar for the vnic
  * @rx_rings        Boolean, if set, handle RX rings, else RX rings
  * @vf_rings        Bitmask of enabled tings for the VF/vNIC.
@@ -220,7 +221,7 @@ msix_qmon_init(unsigned int pcie_isl)
  * Note: Some of the code generates contains CLS reads/writes.
  */
 __intrinsic static void
-msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
+msix_reconfig_rings(unsigned int pcie_isl, unsigned int vid,
                     __mem char *cfg_bar, int rx_rings, uint64_t vf_rings)
 {
     unsigned int qnum;
@@ -244,15 +245,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
         rings &= rings - 1;
 
        /* Convert ring number to a queue number */
-        #if NFD_MAX_PFS < 2
-            qnum = ring + vnic * NFD_MAX_VF_QUEUES;
-        #else
-        if (NFD_VNIC_IS_PF(vnic))
-            qnum = ring + ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
-                           ((vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
-        else
-            qnum = ring + vnic * NFD_MAX_VF_QUEUES;
-        #endif /* NFD_MAX_PFS < 2 */
+        qnum = NFD_VID2NATQ(vid, ring);
 
         /* Get MSI-X entry number and stash it into local memory */
         if (rx_rings) {
@@ -276,15 +269,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
     }
 
     /* Convert VF ring bitmask into Queue mask */
-    #if NFD_MAX_PFS < 2
-        queues = vf_rings << (vnic * NFD_MAX_VF_QUEUES);
-    #else
-    if (NFD_VNIC_IS_PF(vnic))
-        queues = vf_rings << ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
-                              ((vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
-    else
-        queues = vf_rings << (vnic * NFD_MAX_VF_QUEUES);
-    #endif
+    queues = vf_rings << NFD_VID2NATQ(vid, 0);
 
     /* Work out which queues have been newly enabled and make sure
      * they don't have pending bits set. */
@@ -299,17 +284,12 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
     }
 
     /* Update the enabled bit mask with queues for this VF. */
-    #if NFD_MAX_PFS < 2
-    if (NFD_VNIC_IS_PF(vnic))
-        vf_queue_mask = MSIX_PF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
-    #else
-    if (NFD_VNIC_IS_PF(vnic))
-        vf_queue_mask = MSIX_PF_RINGS_MASK <<
-            ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
-             ((vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
-    #endif
+    if (NFD_VID_IS_PF(vid))
+        vf_queue_mask = MSIX_PF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
+    else if (NFD_VID_IS_CTRL(vid))
+        vf_queue_mask = MSIX_CTRL_RINGS_MASK << NFD_VID2NATQ(vid, 0);
     else
-        vf_queue_mask = MSIX_VF_RINGS_MASK << (vnic * NFD_MAX_VF_QUEUES);
+        vf_queue_mask = MSIX_VF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
 
     if (rx_rings) {
         msix_cls_rx_enabled[pcie_isl] &= ~vf_queue_mask;
@@ -324,7 +304,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
  * Reconfigure RX and TX rings (executed by context 0)
  *
  * @pcie_isl        PCIe Island this function is handling
- * @vnic            vNIC inside the island this function is handling
+ * @vid             vNIC inside the island this function is handling
  * @cfg_bar         Points to the control bar for the vnic
  * @rx_rings        Boolean, if set, handle RX rings, else RX rings
  * @vf_rings        Bitmask of enabled tings for the VF/vNIC.
@@ -338,7 +318,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vnic,
  * Note: Some of the code generates contains CLS reads/writes.
  */
 __intrinsic static void
-msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vnic,
+msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vid,
                       __mem char *cfg_bar, int rx_rings, uint64_t vf_rings)
 {
     unsigned int qnum;
@@ -355,15 +335,7 @@ msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vnic,
         rings &= rings - 1;
 
         /* Convert ring number to a queue number */
-        #if NFD_MAX_PFS < 2
-            qnum = ring + vnic * NFD_MAX_VF_QUEUES;
-        #else
-        if (NFD_VNIC_IS_PF(vnic))
-            qnum = ring + ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
-                           ((vnic - NFD_MAX_VFS) * NFD_MAX_PF_QUEUES));
-        else
-            qnum = ring + vnic * NFD_MAX_VF_QUEUES;
-        #endif
+        qnum = NFD_VID2NATQ(vid, ring);
 
         /* Get interrupt moderation packet count and timeout and and stash
          * them into local memory */
@@ -385,7 +357,7 @@ msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vnic,
  * Handle reconfiguration changes of RX queues (executed by context 0)
  *
  * @pcie_isl        PCIe Island this function is handling
- * @vnic            vNIC inside the island this function is handling
+ * @vid             vid of vNIC inside the island this function is handling
  * @cfg_bar         points to the control bar for the vnic
  * @cfg_bar_data[]  contains the first 6 words of the control bar.
  *
@@ -397,7 +369,7 @@ msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vnic,
  * Note: Some of the code contains implicit CLS reads/writes.
  */
 __intrinsic void
-msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
+msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
                    __mem char *cfg_bar, __xread unsigned int cfg_bar_data[6])
 {
     unsigned int control, update;
@@ -435,9 +407,12 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
         }
 
         /* Make sure the vnic is not configuring rings it has no control over */
-        if (NFD_VNIC_IS_PF(vnic)) {
+        if (NFD_VID_IS_PF(vid)) {
             vf_tx_rings_new &= MSIX_PF_RINGS_MASK;
             vf_rx_rings_new &= MSIX_PF_RINGS_MASK;
+        } else if (NFD_VID_IS_CTRL(vid)) {
+            vf_tx_rings_new &= MSIX_CTRL_RINGS_MASK;
+            vf_rx_rings_new &= MSIX_CTRL_RINGS_MASK;
         } else {
             vf_tx_rings_new &= MSIX_VF_RINGS_MASK;
             vf_rx_rings_new &= MSIX_VF_RINGS_MASK;
@@ -452,16 +427,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
          * number of RX and TX rings and simple set the auto-mask bits for
          * all queues of the VF/PF depending on the auto-mask bit in the
          * control word. */
-        #if NFD_MAX_PFS < 2
-            queues = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
-        #else
-        if (NFD_VNIC_IS_PF(vnic))
-            queues = vf_rx_rings_new << ((NFD_MAX_VFS * NFD_MAX_VF_QUEUES) +
-                                         ((vnic - NFD_MAX_VFS) *
-                                          NFD_MAX_PF_QUEUES));
-        else
-            queues = vf_rx_rings_new << (vnic * NFD_MAX_VF_QUEUES);
-        #endif
+        queues = vf_rx_rings_new << NFD_VID2NATQ(vid, 0);
 
         if (control & NFP_NET_CFG_CTRL_MSIXAUTO)
             msix_cls_automask[pcie_isl] |= queues;
@@ -469,8 +435,8 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
             msix_cls_automask[pcie_isl] &= ~queues;
 
         /* Reconfigure the RX/TX ring state */
-        msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 1, vf_rx_rings_new);
-        msix_reconfig_rings(pcie_isl, vnic, cfg_bar, 0, vf_tx_rings_new);
+        msix_reconfig_rings(pcie_isl, vid, cfg_bar, 1, vf_rx_rings_new);
+        msix_reconfig_rings(pcie_isl, vid, cfg_bar, 0, vf_tx_rings_new);
     }
 
     if (update & NFP_NET_CFG_UPDATE_IRQMOD) {
@@ -484,8 +450,8 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vnic,
         vf_rx_rings_new = ((vf_rx_rings_new << 32) |
                            cfg_bar_data[NFP_NET_CFG_RXRS_ENABLE >> 2]);
 
-        msix_reconfig_irq_mod(pcie_isl, vnic, cfg_bar, 1, vf_rx_rings_new);
-        msix_reconfig_irq_mod(pcie_isl, vnic, cfg_bar, 0, vf_tx_rings_new);
+        msix_reconfig_irq_mod(pcie_isl, vid, cfg_bar, 1, vf_rx_rings_new);
+        msix_reconfig_irq_mod(pcie_isl, vid, cfg_bar, 0, vf_tx_rings_new);
 
         /* if update did not include MSIX, ensure local reconfig does
          * use see any stale newly enabled RX/TX ring state */
@@ -825,7 +791,7 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
 {
     unsigned int automask;
     unsigned int entry;
-    int fn;
+    int vid, vqn;
     uint64_t cfg_bar;
     __xread uint32_t mask_r;
     __xwrite uint32_t mask_w;
@@ -847,12 +813,12 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
     /* Should we automask this queue? */
     automask = msix_automask & (1ull << qnum);
 
-    /* Get the function (aka vnic) */
-    NFD_NATQ2VNIC(fn, qnum);
+    /* Get the vNIC vid and queue number */
+    NFD_NATQ2VID(vid, vqn, qnum);
 
     /* If we don't use auto-masking, check (and update) the ICR */
     if (!automask) {
-        cfg_bar = NFD_CFG_BAR(msix_cfg_bars[pcie_isl], fn);
+        cfg_bar = NFD_CFG_BAR(msix_cfg_bars[pcie_isl], vid);
         cfg_bar += NFP_NET_CFG_ICR(entry);
         mem_read32_le(&mask_r, (__mem void *)cfg_bar, sizeof(mask_r));
         if (mask_r & 0x000000ff) {
@@ -863,11 +829,11 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
         mem_write8_le(&mask_w, (__mem void *)cfg_bar, 1);
     }
 
-    if (NFD_VNIC_IS_PF(fn))
-        ret = msix_pf_send(pcie_isl, PCIE_CPP2PCIE_QMON, entry, automask);
-    else
-        ret = msix_vf_send(pcie_isl, PCIE_CPP2PCIE_QMON, fn,
+    if (NFD_VID_IS_VF(vid))
+        ret = msix_vf_send(pcie_isl, PCIE_CPP2PCIE_QMON, vid,
                            entry, automask);
+    else
+        ret = msix_pf_send(pcie_isl, PCIE_CPP2PCIE_QMON, entry, automask);
 
     /* IRQ issued, cleanup interrupt moderation state */
     if (!ret)

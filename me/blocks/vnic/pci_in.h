@@ -24,6 +24,7 @@
 
 #include <nfd_user_cfg.h>
 
+#include <nfd_common.h>
 #include "shared/nfd_net.h"
 #include "shared/nfd_api_common.h"
 
@@ -372,12 +373,13 @@ __intrinsic void nfd_in_fill_meta(void *pkt_info,
 
 /**
  * Map an NFD bitmask queue to a vnic, queue number pair.
- * @param vnic      vNIC as seen by the host
+ * @param type      vNIC type as seen by the host
+ * @param vnic      vNIC within type as seen by the host
  * @param queue     Queue number within the vNIC
  * @param nfd_queue Queue number within NFD numbering system
  */
-__intrinsic void nfd_in_map_queue(unsigned int *vnic, unsigned int *queue,
-                                  unsigned int nfd_queue);
+__intrinsic void nfd_in_map_queue(unsigned int *type, unsigned int *vnic,
+                                  unsigned int *queue, unsigned int nfd_queue);
 
 /**
  * Get the length of the packet excluding metadata.
