@@ -658,7 +658,7 @@ msix_get_rx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
     queue = NFD_NATQ2BMQ(queue);
 
     addr_hi = (0x84 | (pcie_isl + 4)) << 24;
-    addr_lo = queue * NFD_OUT_ATOMICS_SZ + NFD_OUT_ATOMICS_SENT;
+    addr_lo = queue * NFD_OUT_ATOMICS_SZ + NFD_OUT_ATOMICS_DMA_DONE;
 
     __asm mem[atomic_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rsig];
 
