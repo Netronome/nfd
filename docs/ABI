@@ -66,3 +66,22 @@ Report link speed in the BAR.
 
 Add NFP_NET_CFG_RSS_CAP with NFP_NET_CFG_RSS_CAP_HFUNC defined to
 enable reporting hash type (CRC32 vs Toeplitz).
+
+4.3:
+
+Add NFP_NET_CFG_CTRL_LSO2, a capabilities and control flag to indicate
+that the firmware application is able to use host-supplied L3 and L4 offsets to
+speed up LSO packet fixup.  The firmware application is required to sanity
+check the values supplied by the host before trusting them.  This option is
+incompatible with NFP_NET_CFG_CTRL_TXVLAN because they use the same TX
+descriptor bits.
+
+Add NFP_NET_CFG_CTRL_RSS2, a capabilities and control flag to indicate
+that the firmware uses the standard metadata format for RSS hash prepends.
+This capability should be advertised instead of NFP_NET_CFG_CTRL_RSS
+where the standard metadata format is supported.
+
+Add NFP_NET_CFG_CTRL_CSUM_COMPLETE, a capabilities and control flag to
+indicate that the firmware is able to calculate the Internet checksum over
+the entire L2 payload of a packet.  The checksum is prepended to the packet
+using the standard metadata format.
