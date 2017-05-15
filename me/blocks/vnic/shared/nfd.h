@@ -154,6 +154,18 @@ enum pcie_cpp2pcie_bar {
 #endif
 #endif
 
+/* NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN use the same bits in the
+ * TX descriptor, so they can't be advertised for the same vNIC type. */
+#if (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_LSO2) && \
+    (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_TXVLAN)
+#error "NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN are incompatible"
+#endif
+
+#if (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_LSO2) && \
+    (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_TXVLAN)
+#error "NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN are incompatible"
+#endif
+
 
 /* Check that the user points NFD to usable EMUs for each EMU specified */
 #ifdef NFD_IN_WQ_SHARED

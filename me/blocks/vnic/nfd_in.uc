@@ -150,6 +150,8 @@
 #define NFD_IN_LSO_MSS_fld      2, 13, 0
 #define NFD_IN_DATALEN_fld      3, 31, 16
 #define NFD_IN_VLAN_fld         3, 15, 0
+#define NFD_IN_LSO2_L3_OFFS_fld 3, 7, 0
+#define NFD_IN_LSO2_L4_OFFS_fld 3, 15, 8
 #define NFD_IN_META_SIZE        16
 #define NFD_IN_META_SIZE_LW     4
 
