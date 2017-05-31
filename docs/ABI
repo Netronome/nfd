@@ -85,3 +85,13 @@ Add NFP_NET_CFG_CTRL_CSUM_COMPLETE, a capabilities and control flag to
 indicate that the firmware is able to calculate the Internet checksum over
 the entire L2 payload of a packet.  The checksum is prepended to the packet
 using the standard metadata format.
+
+4.4:
+
+Add NFP_NET_CFG_CTRL_LIVE_ADDR, a capabilities and control flag to
+indicate that the firmware is able to update the MAC address at any
+time, not just as part of the NFP_NET_CFG_CTRL_ENABLE /
+NFP_NET_CFG_UPDATE_GEN updates.
+
+NFP_NET_CFG_UPDATE_MACADDR indicates an update to the
+MAC address while up.
