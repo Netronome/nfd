@@ -135,7 +135,7 @@
     #if (isnum(in_pf) && isnum(in_pfq))
         move(out_q, (_NFD_TOTAL_VFQS + in_pfq))
     #else
-        alu[out_q, _NFD_TOTAL_VQFS, +, in_pfq]
+        alu[out_q, _NFD_TOTAL_VFQS, +, in_pfq]
     #endif
 .end
 #endm
