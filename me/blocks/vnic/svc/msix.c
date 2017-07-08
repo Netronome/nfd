@@ -56,27 +56,6 @@ MSIX_DECLARE;
 __gpr static unsigned int msix_cur_cpp2pci_addr = 0;
 
 
-/*
- * Calculate the CPP2PCIe bar value (should be somewhere else)
- */
-__intrinsic static unsigned int
-_pcie_c2p_barcfg_addr(unsigned int addr_hi,
-                      unsigned int addr_lo, unsigned int req_id)
-{
-    unsigned int tmp;
-
-    __asm dbl_shf[tmp, addr_hi, addr_lo, >>27];
-    tmp = tmp & NFP_PCIE_BARCFG_C2P_ADDR_msk;
-
-    /* Configure RID if req_id is non-zero or not constant */
-    if ((!__is_ct_const(req_id)) || (req_id != 0)) {
-        tmp |= NFP_PCIE_BARCFG_C2P_ARI_ENABLE;
-        tmp |= NFP_PCIE_BARCFG_C2P_ARI(req_id);
-    }
-
-    return tmp;
-}
-
 /**
  * Send MSI-X interrupt for a PF and optionally mask the interrupt
  *
@@ -157,9 +136,9 @@ msix_pf_send(unsigned int pcie_nr, unsigned int bar_nr,
         goto out;
 
     /* Check if we need to re-configure the CPP2PCI BAR */
-    bar_addr = _pcie_c2p_barcfg_addr(addr_hi, addr_lo, 0);
+    bar_addr = pcie_c2p_barcfg_val(addr_hi, addr_lo, 0);
     if (bar_addr != msix_cur_cpp2pci_addr) {
-        pcie_c2p_barcfg_set(pcie_nr, bar_nr, addr_hi, addr_lo, 0);
+        pcie_c2p_barcfg_set_expl(pcie_nr, bar_nr, bar_addr);
         msix_cur_cpp2pci_addr = bar_addr;
     }
 
@@ -255,10 +234,9 @@ msix_vf_send(unsigned int pcie_nr, unsigned int bar_nr, unsigned int vf_nr,
         goto out;
 
     /* Check if we need to re-configure the CPP2PCI BAR */
-    bar_addr = _pcie_c2p_barcfg_addr(addr_hi, addr_lo, (vf_nr + 64));
+    bar_addr = pcie_c2p_barcfg_val(addr_hi, addr_lo, (vf_nr + 64));
     if (bar_addr != msix_cur_cpp2pci_addr) {
-        pcie_c2p_barcfg_set(pcie_nr, bar_nr,
-                            addr_hi, addr_lo, (vf_nr + 64));
+        pcie_c2p_barcfg_set_expl(pcie_nr, bar_nr, bar_addr);
         msix_cur_cpp2pci_addr = bar_addr;
     }
 
