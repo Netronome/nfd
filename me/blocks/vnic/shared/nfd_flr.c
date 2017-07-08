@@ -194,7 +194,7 @@ nfd_flr_init_pf_ctrl_bar(__emem char *isl_base, unsigned int vnic)
                sizeof cfg2);
 #ifdef NFD_BPF_CAPABLE
     mem_write8(&bpf_cfg,
-               NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_BPF_ABI,
+               NFD_CFG_BAR(isl_base, vnic) + NFP_NET_CFG_BPF_ABI,
                sizeof bpf_cfg);
 #endif
 #endif
@@ -230,12 +230,6 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsign
                                     NFD_RSS_HASH_FUNC};
     __xread unsigned int vf_cfg_rd[2];
     __xwrite unsigned int vf_cfg_wr[2];
-#ifdef NFD_BPF_CAPABLE
-    __xwrite unsigned int bpf_cfg[] = { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
-                                        NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
-                                        30 << 8 /* CTM buf size / 64 */ };
-#endif
-
 
     mem_write64(&cfg, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
@@ -252,11 +246,6 @@ nfd_flr_init_vf_ctrl_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsign
     mem_write8(&vf_cfg_wr, NFD_CFG_BAR(isl_base, vf) + NFP_NET_CFG_MACADDR,
               NFD_VF_CFG_MAC_SZ);
 
-#ifdef NFD_BPF_CAPABLE
-    mem_write8(&bpf_cfg,
-               NFD_CFG_BAR_ISL(PCIE_ISL, NFD_MAX_VFS) + NFP_NET_CFG_BPF_ABI,
-               sizeof bpf_cfg);
-#endif
 #endif
 }
 
