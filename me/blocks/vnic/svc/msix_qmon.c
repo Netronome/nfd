@@ -34,16 +34,17 @@
 
 #include <nfp6000/nfp_me.h>
 
-#include <vnic/shared/nfd_cfg.h>
+#include <vnic/nfd_common.h>
 #include <vnic/pci_out.h>
+#include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
+#include <vnic/svc/msix.h>
+#include <vnic/svc/msix.c>
 #include <vnic/utils/qcntl.h>
+
 
 #include <nfp_net_ctrl.h>
 
-#include "nfd_common.h"
-
-#include "msix.c"
 
 /*
  * TODO:
@@ -71,7 +72,6 @@
  * core MSI-X logic is only dealing with "queues" and configuration
  * logic translates from "rings" to queues.
  */
-
 
 #define MAX_QUEUE_NUM (NFD_MAX_VFS * NFD_MAX_VF_QUEUES + \
                        NFD_MAX_PFS * NFD_MAX_PF_QUEUES - 1)
@@ -171,6 +171,8 @@ __shared __cls uint32_t msix_tx_irqc_cfg[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
  * - sets usec delay to 0
  */
 #define MSIX_IRQC_DEFAULT_CFG (1 << 16)
+
+MSIX_DECLARE;
 
 /*
  * Initialise the state (executed by context 0)
@@ -850,7 +852,7 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
 
     /* If we don't use auto-masking, check (and update) the ICR */
     if (!automask) {
-        cfg_bar = NFD_CFG_BAR(svc_cfg_bars[pcie_isl], fn);
+        cfg_bar = NFD_CFG_BAR(msix_cfg_bars[pcie_isl], fn);
         cfg_bar += NFP_NET_CFG_ICR(entry);
         mem_read32_le(&mask_r, (__mem void *)cfg_bar, sizeof(mask_r));
         if (mask_r & 0x000000ff) {
@@ -862,9 +864,9 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
     }
 
     if (NFD_VNIC_IS_PF(fn))
-        ret = msix_pf_send(pcie_isl + 4, PCIE_CPP2PCIE_QMON, entry, automask);
+        ret = msix_pf_send(pcie_isl, PCIE_CPP2PCIE_QMON, entry, automask);
     else
-        ret = msix_vf_send(pcie_isl + 4, PCIE_CPP2PCIE_QMON, fn,
+        ret = msix_vf_send(pcie_isl, PCIE_CPP2PCIE_QMON, fn,
                            entry, automask);
 
     /* IRQ issued, cleanup interrupt moderation state */

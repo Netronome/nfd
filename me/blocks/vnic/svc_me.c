@@ -25,19 +25,15 @@
 
 #include <nfp6000/nfp_me.h>
 
-#include "shared/nfd_cfg.h"
+#include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_flr.c>
 #include <vnic/shared/nfd_vf_cfg_iface.h>
+#include <vnic/svc/msix.h>
 
-
-/* A global array with base addresses for the configuration
- * bars. Marked as volatile so the compiler doesn't optimise them
- * out... */
-__shared __lmem volatile uint64_t svc_cfg_bars[NFD_MAX_ISL];
 
 /* Signal used for reconfiguration synchronisation */
 #define SVC_RECONFIG_SIG_NUM    15
-#include "svc/msix_qmon.c"
+#include <vnic/svc/msix_qmon.c>
 
 
 /*
@@ -146,25 +142,25 @@ main(void)
 
         /* Initialisation */
 #ifdef NFD_PCIE0_EMEM
-        svc_cfg_bars[0] = (uint64_t)NFD_CFG_BASE_LINK(0);
+        MSIX_INIT_ISL(0);
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me0, &cfg_msg0);
         msix_qmon_init(0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
-        svc_cfg_bars[1] = (uint64_t)NFD_CFG_BASE_LINK(1);
+        MSIX_INIT_ISL(1);
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me1, &cfg_msg1);
         msix_qmon_init(1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
-        svc_cfg_bars[2] = (uint64_t)NFD_CFG_BASE_LINK(2);
+        MSIX_INIT_ISL(2);
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me2, &cfg_msg2);
         msix_qmon_init(2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
-        svc_cfg_bars[3] = (uint64_t)NFD_CFG_BASE_LINK(3);
+        MSIX_INIT_ISL(3);
         nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me3, &cfg_msg3);
         msix_qmon_init(3);
 #endif
