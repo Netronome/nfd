@@ -49,6 +49,11 @@ NFD_CFG_PF_DECLARE(PCIE_ISL);
 
 struct nfd_cfg_msg cfg_msg;
 
+
+/* Setup _pf%d_net_app_id */
+NFD_NET_APP_ID_DECLARE(PCIE_ISL);
+
+
 int
 main(void)
 {

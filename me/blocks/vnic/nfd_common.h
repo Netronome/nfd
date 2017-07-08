@@ -35,7 +35,12 @@
  * ABI change.  Increment minor version number for each compatible ABI change
  * (e.g. a new feature flag).  Reset minor version number to zero for each
  * major version number change. */
+#if (defined(NFD_NET_APP_ID_FORCE_CHK))
+/* Firmwares that advertise an app_id may choose to advertise ABI 5 */
+#define NFD_CFG_MAJOR               5
+#else
 #define NFD_CFG_MAJOR               4
+#endif
 #define NFD_CFG_MINOR               4
 #define NFD_CFG_CLASS_DEFAULT       0
 

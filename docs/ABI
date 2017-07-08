@@ -95,3 +95,8 @@ NFP_NET_CFG_UPDATE_GEN updates.
 
 NFP_NET_CFG_UPDATE_MACADDR indicates an update to the
 MAC address while up.
+
+5.0:
+
+Advertise _pf##_isl##_net_app_id rtsym to notify host of advanced firmware
+capabilities.  Minor ABI versions are as for 4.x ABIs.

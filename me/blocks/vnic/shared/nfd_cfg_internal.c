@@ -144,6 +144,18 @@ NFD_CFG_RINGS_INIT(3);
 #define NFD_CFG_PF_DECLARE(_isl) NFD_CFG_PF_DECLARE_IND(_isl)
 
 
+#ifdef NFD_NET_APP_ID
+#define NFD_NET_APP_ID_DECLARE_IND(_isl) \
+    _NFP_CHIPRES_ASM(.alloc_mem _pf##_isl##_net_app_id ctm global 8 8) \
+    _NFP_CHIPRES_ASM(.init _pf##_isl##_net_app_id+0 (NFD_NET_APP_ID))
+#else
+#define NFD_NET_APP_ID_DECLARE_IND(_isl)
+#endif
+
+#define NFD_NET_APP_ID_DECLARE(_isl) NFD_NET_APP_ID_DECLARE_IND(_isl)
+
+
+
 /* /\* XXX temp defines that loosely match the BSP pcie_monitor_api.h *\/ */
 /* #define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c */
 /* #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk    0x3f */
