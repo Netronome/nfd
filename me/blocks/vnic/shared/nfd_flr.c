@@ -148,7 +148,7 @@ nfd_flr_init_cfg_queue(unsigned int pcie_isl, unsigned int vnic,
     nfd_cfg_queue.event_type = event_type;
     nfd_cfg_queue.ptr        = 0;
 
-    qc_init_queue(pcie_isl, NFD_CFG_QUEUE + (4 * NFD_MAX_VF_QUEUES * vnic),
+    qc_init_queue(pcie_isl, NFD_NATQ2QC(NFD_BUILD_NATQ(vnic, 0), NFD_CFG_QUEUE),
                   &nfd_cfg_queue);
 }
 
