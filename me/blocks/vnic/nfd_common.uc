@@ -23,8 +23,8 @@
 #include <stdmac.uc>
 #include <nfd_user_cfg.h>
 
-#include "nfd_common.h"
-#include "shared/nfd_cfg_pf_bars.uc"
+#include <vnic/nfd_common.h>
+#include <vnic/shared/nfd_cfg.uc>
 
 #define NFD_MAX_ISL             4
 

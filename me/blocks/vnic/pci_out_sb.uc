@@ -26,7 +26,7 @@
 #include "wsm.uc"
 #include "nfd_common.h"
 #include "shared/nfd_internal.h"
-#include "shared/nfd_cfg_pf_bars.uc"
+#include "shared/nfd_cfg.uc"
 #include "nfd_out.uc"   /* for definitions only */
 #include "pci_out_sb.h"
 #include "pci_out_sb_iface.uc"
@@ -198,36 +198,6 @@
 .alloc_mem nfd_out_sb_debug_state/**/PCIE_ISL emem0 global \
     (LM_QSTATE_SIZE * NFD_OUT_MAX_QUEUES + 16)
 
-// Config message field declarations
-#define NFD_CFG_MSG_VALID_bf            0, 31, 31
-#define NFD_CFG_MSG_VALID_wrd           0
-#define NFD_CFG_MSG_VALID_shf           31
-#define NFD_CFG_MSG_VALID_msk           0x1
-#define NFD_CFG_MSG_VALID_bit           31
-#define NFD_CFG_MSG_ERR_bf              0, 30, 30
-#define NFD_CFG_MSG_ERR_wrd             0
-#define NFD_CFG_MSG_ERR_shf             30
-#define NFD_CFG_MSG_ERR_msk             0x1
-#define NFD_CFG_MSG_ERR_bit             30
-#define NFD_CFG_MSG_INTERESTED_bf       0, 29, 29
-#define NFD_CFG_MSG_INTERESTED_wrd      0
-#define NFD_CFG_MSG_INTERESTED_shf      29
-#define NFD_CFG_MSG_INTERESTED_msk      0x1
-#define NFD_CFG_MSG_INTERESTED_bit      29
-#define NFD_CFG_MSG_UP_bf               0, 28, 28
-#define NFD_CFG_MSG_UP_wrd              0
-#define NFD_CFG_MSG_UP_shf              28
-#define NFD_CFG_MSG_UP_msk              0x1
-#define NFD_CFG_MSG_UP_bit              28
-#define NFD_CFG_MSG_QUEUE_bf            0, 15, 8
-#define NFD_CFG_MSG_QUEUE_wrd           0
-#define NFD_CFG_MSG_QUEUE_shf           8
-#define NFD_CFG_MSG_QUEUE_msk           0xFF
-#define NFD_CFG_MSG_VNIC_bf             0, 7, 0
-#define NFD_CFG_MSG_VNIC_wrd            0
-#define NFD_CFG_MSG_VNIC_shf            0
-#define NFD_CFG_MSG_VNIC_msk            0xFF
-
 
 #macro _reset_ticket_bitmap(in_qid)
 .begin
@@ -321,21 +291,6 @@
 #endm
 
 
-#macro _get_bar_addr(out_hi, out_lo, in_vnic)
-.begin
-
-    .reg tmp_lo
-    .reg off
-
-    move(out_hi, ((nfd_cfg_base/**/PCIE_ISL >> 8) & 0xFF000000))
-    move(tmp_lo, (nfd_cfg_base/**/PCIE_ISL & 0xFFFFFFFF))
-    alu[off, --, B, in_vnic, <<(log2(NFP_NET_CFG_BAR_SZ))]
-    alu[out_lo, tmp_lo, +, off]
-
-.end
-#endm
-
-
 #macro _check_vnic_state(in_vnic)
 .begin
 
@@ -351,7 +306,7 @@
 
     .sig read_sig
 
-    _get_bar_addr(bar_addr_hi, bar_addr_lo, in_vnic)
+    nfd_cfg_get_bar_addr(bar_addr_hi, bar_addr_lo, in_vnic, PCIE_ISL)
     mem[read32, $bar[0], bar_addr_hi, <<8, bar_addr_lo, 6], ctx_swap[read_sig]
 
     .if (NFD_VNIC_IS_VF(in_vnic))

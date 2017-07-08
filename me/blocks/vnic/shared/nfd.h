@@ -20,12 +20,105 @@
 #define _BLOCKS__VNIC_SHARED_NFD_H_
 
 #include <nfp_chipres.h>
-#include <nfp/mem_atomic.h>     /* TEMP */
-
 #include <nfd_user_cfg.h>
 
 /* Set defines */
 #define NFD_MAX_ISL     4   /* Maximum number of PCIe islands NFD may support */
+
+
+/* User define consistency checks */
+#ifndef NFD_MAX_VF_QUEUES
+#error "NFD_MAX_VF_QUEUES is not defined but is required"
+#endif
+
+#ifndef NFD_MAX_PF_QUEUES
+#error "NFD_MAX_PF_QUEUES is not defined but is required"
+#endif
+
+#ifndef NFD_MAX_VFS
+#error "NFD_MAX_VFS is not defined but is required"
+#endif
+
+#ifndef NFD_MAX_PFS
+#error "NFD_MAX_PFS is not defined but is required"
+#endif
+
+
+/* Require that at least some queues are used by NFD. */
+#if ((NFD_MAX_VF_QUEUES * NFD_MAX_VFS) + (NFD_MAX_PF_QUEUES * NFD_MAX_PFS)) == 0
+#error "PF and VF options imply that no queues are in use"
+#endif
+
+
+/* NFD_MAX_VFS is used to determine PF vNIC number, so must
+ * always be consistent with VFs in use.  The ambiguous case
+ * where N VFs with 0 queues are requested is illegal. */
+#if (NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0)
+#error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
+#endif
+
+/* Just for completeness */
+#if (NFD_MAX_PF_QUEUES == 0) && (NFD_MAX_PFS != 0)
+#error "NFD_MAX_PFS must be zero if NFD_MAX_PF_QUEUES equals zero"
+#endif
+
+/* Ensure that the user provides NFD_CFG_VF_CAP if they
+ * want to use VFs. */
+#if NFD_MAX_VF_QUEUES != 0
+#ifndef NFD_CFG_VF_CAP
+#error NFD_CFG_VF_CAP must be defined
+#endif
+#endif
+
+/* Ensure that the user provides NFD_CFG_PF_CAP if they
+ * want to use PFs. */
+#if NFD_MAX_PF_QUEUES != 0
+#ifndef NFD_CFG_PF_CAP
+#error NFD_CFG_PF_CAP must be defined
+#endif
+#endif
+
+
+/* NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN use the same bits in the
+ * TX descriptor, so they can't be advertised for the same vNIC type. */
+#if (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_LSO2) && \
+    (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_TXVLAN)
+#error "NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN are incompatible"
+#endif
+
+#if (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_LSO2) && \
+    (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_TXVLAN)
+#error "NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN are incompatible"
+#endif
+
+
+/* For NFP6000 chips < revision B0 a software workaround is used
+ * to ensure that the final bytes of a packet that is not a 4B
+ * multiple in size are byte swapped correctly.  This workaround
+ * is incompatible with gather support.  If the capabilities
+ * advertise gather, throw an error. */
+#if __REVISION_MIN < __REVISION_B0
+#if (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_GATHER) || \
+    (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_GATHER)
+#error "NFP_NET_CFG_CTRL_GATHER not supported for A0 chips"
+#endif
+#endif
+
+/* Debug defines */
+#ifdef NFD_VNIC_DBG_CHKS
+
+/* A mask used to test whether a value may be a legal MU buffer.
+ * This provides very coarse checking for illegal MU buffers in NFD. */
+#ifndef NFD_MU_PTR_DBG_MSK
+#define NFD_MU_PTR_DBG_MSK 0x1f000000
+#endif
+
+#endif
+
+
+#if defined(__NFP_LANG_MICROC)
+
+#include <nfp/mem_atomic.h>     /* TEMP */
 
 /*
  * CPP2PCIe BAR allocation
@@ -42,7 +135,7 @@ enum pcie_cpp2pcie_bar {
     PCIE_CPP2PCIE_FREE7
 };
 
-/* Helper macros */
+/* microC helper macros */
 
 /* Expand a constant PCIe number (0..3) to an EMEM island (emem0..emem2),
  * using the customer defined mapping provided by the NFD_PCIEX_EMEM defines.
@@ -102,70 +195,6 @@ enum pcie_cpp2pcie_bar {
 #define NFD_EMEM_CHK_IND(_emem) #_emem
 #define NFD_EMEM_CHK(_emem) NFD_EMEM_CHK_IND(_emem)
 
-/* User define consistency checks */
-#ifndef NFD_MAX_VF_QUEUES
-#error "NFD_MAX_VF_QUEUES is not defined but is required"
-#endif
-
-#ifndef NFD_MAX_PF_QUEUES
-#error "NFD_MAX_PF_QUEUES is not defined but is required"
-#endif
-
-#ifndef NFD_MAX_VFS
-#error "NFD_MAX_VFS is not defined but is required"
-#endif
-
-#ifndef NFD_MAX_PFS
-#error "NFD_MAX_PFS is not defined but is required"
-#endif
-
-
-/* Require that at least some queues are used by NFD. */
-#if ((NFD_MAX_VF_QUEUES * NFD_MAX_VFS) + (NFD_MAX_PF_QUEUES * NFD_MAX_PFS)) == 0
-#error "PF and VF options imply that no queues are in use"
-#endif
-
-
-/* NFD_MAX_VFS is used to determine PF vNIC number, so must
- * always be consistent with VFs in use.  The ambiguous case
- * where N VFs with 0 queues are requested is illegal. */
-#if (NFD_MAX_VF_QUEUES == 0) && (NFD_MAX_VFS != 0)
-#error "NFD_MAX_VFS must be zero if NFD_MAX_VF_QUEUES equals zero"
-#endif
-
-/* Just for completeness */
-#if (NFD_MAX_PF_QUEUES == 0) && (NFD_MAX_PFS != 0)
-#error "NFD_MAX_PFS must be zero if NFD_MAX_PF_QUEUES equals zero"
-#endif
-
-/* Ensure that the user provides NFD_CFG_VF_CAP if they
- * want to use VFs. */
-#if NFD_MAX_VF_QUEUES != 0
-#ifndef NFD_CFG_VF_CAP
-#error NFD_CFG_VF_CAP must be defined
-#endif
-#endif
-
-/* Ensure that the user provides NFD_CFG_PF_CAP if they
- * want to use PFs. */
-#if NFD_MAX_PF_QUEUES != 0
-#ifndef NFD_CFG_PF_CAP
-#error NFD_CFG_PF_CAP must be defined
-#endif
-#endif
-
-/* NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN use the same bits in the
- * TX descriptor, so they can't be advertised for the same vNIC type. */
-#if (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_LSO2) && \
-    (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_TXVLAN)
-#error "NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN are incompatible"
-#endif
-
-#if (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_LSO2) && \
-    (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_TXVLAN)
-#error "NFP_NET_CFG_CTRL_LSO2 and NFP_NET_CFG_CTRL_TXVLAN are incompatible"
-#endif
-
 
 /* Check that the user points NFD to usable EMUs for each EMU specified */
 #ifdef NFD_IN_WQ_SHARED
@@ -215,30 +244,6 @@ enum pcie_cpp2pcie_bar {
 #endif
 
 
-/* For NFP6000 chips < revision B0 a software workaround is used
- * to ensure that the final bytes of a packet that is not a 4B
- * multiple in size are byte swapped correctly.  This workaround
- * is incompatible with gather support.  If the capabilities
- * advertise gather, throw an error. */
-#if __REVISION_MIN < __REVISION_B0
-#if (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_GATHER) || \
-    (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_GATHER)
-#error "NFP_NET_CFG_CTRL_GATHER not supported for A0 chips"
-#endif
-#endif
-
-/* Debug defines */
-#ifdef NFD_VNIC_DBG_CHKS
-
-/* A mask used to test whether a value may be a legal MU buffer.
- * This provides very coarse checking for illegal MU buffers in NFD. */
-#ifndef NFD_MU_PTR_DBG_MSK
-#define NFD_MU_PTR_DBG_MSK 0x1f000000
-#endif
-
-#endif
-
-
 /* Shared structures */
 /**
  * Compact storage of NFD ring addresses and ring numbers
@@ -254,5 +259,6 @@ struct nfd_ring_info {
     };
 };
 
+#endif /* __NFP_LANG_MICROC */
 
 #endif /* !_BLOCKS__VNIC_SHARED_NFD_H_ */

@@ -13,15 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * @file          blocks/vnic/shared/nfd_cfg_pf_bars.uc
- * @brief         Microcode access to CFG BAR defines
+ * @file          blocks/vnic/shared/nfd_cfg.uc
+ * @brief         Microcode access to CFG BAR
  */
 
-#ifndef _BLOCKS__SHARED_NFD_CFG_PF_BARS_UC_
-#define _BLOCKS__SHARED_NFD_CFG_PF_BARS_UC_
+#ifndef _BLOCKS__SHARED_NFD_CFG_UC_
+#define _BLOCKS__SHARED_NFD_CFG_UC_
 
 #include "nfd_user_cfg.h"
 #include <nfp_net_ctrl.h>
+#include <vnic/shared/nfd_cfg.h>
 
 #ifndef NFD_MAX_PFS
 #error "NFD_MAX_PFS is not defined but is required"
@@ -32,39 +33,49 @@
 #define_eval NFD_CFG_BAR0_OFF (NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ)
 
 
-#macro nfd_define_pf_bars(_isl)
+#macro nfd_cfg_define_bars(_isl)
 .alloc_mem nfd_cfg_base/**/_isl NFD_PCIE/**/_isl/**/_EMEM global \
     NFD_CFG_BAR_SZ 0x200000
-#if NFD_MAX_PFS != 0
-.declare_resource nfd_cfg_base/**/_isl/**/_res global NFD_CFG_BAR_SZ \
-    nfd_cfg_base/**/_isl
-.alloc_resource _pf/**/_isl/**/_net_bar0 \
-    nfd_cfg_base/**/_isl/**/_res+NFD_CFG_BAR0_OFF global \
-    (NFD_MAX_PFS * NFP_NET_CFG_BAR_SZ)
-.alloc_mem nfd_cfg_pf/**/_isl/**/_num_ports emem global 8 8
-.init nfd_cfg_pf/**/_isl/**/_num_ports NFD_MAX_PFS
-#endif
 #endm
 
 
 #ifdef NFD_PCIE0_EMEM
-nfd_define_pf_bars(0)
+nfd_cfg_define_bars(0)
 #endif
 
 #ifdef NFD_PCIE1_EMEM
-nfd_define_pf_bars(1)
+nfd_cfg_define_bars(1)
 #endif
 
 #ifdef NFD_PCIE2_EMEM
-nfd_define_pf_bars(2)
+nfd_cfg_define_bars(2)
 #endif
 
 #ifdef NFD_PCIE3_EMEM
-nfd_define_pf_bars(3)
+nfd_cfg_define_bars(3)
 #endif
 
 #undef NFD_TOTAL_VNICS
 #undef NFD_CFG_BAR_SZ
 #undef NFD_CFG_BAR0_OFF
 
-#endif /* !_BLOCKS__SHARED_NFD_CFG_PF_BARS_UC_ */
+
+#macro nfd_cfg_get_bar_addr(out_hi, out_lo, in_vnic, ISL)
+.begin
+    .reg tmp_lo
+    .reg off
+
+    #if (!is_ct_const(ISL))
+        #error "nfd_cfg_get_bar_addr: ISL must be CT const"
+    #endif
+
+    move(out_hi, ((nfd_cfg_base/**/ISL >> 8) & 0xFF000000))
+    move(tmp_lo, (nfd_cfg_base/**/ISL & 0xFFFFFFFF))
+    alu[off, --, B, in_vnic, <<(log2(NFP_NET_CFG_BAR_SZ))]
+    alu[out_lo, tmp_lo, +, off]
+
+.end
+#endm
+
+
+#endif /* !_BLOCKS__SHARED_NFD_CFG_UC_ */

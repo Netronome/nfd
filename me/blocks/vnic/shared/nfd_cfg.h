@@ -21,17 +21,11 @@
 
 #include <nfp_chipres.h>
 
-#include <nfp/mem_ring.h>
 #include <nfp_net_ctrl.h>
 
 #include <nfd_user_cfg.h>
 
-#include "nfd.h"
-
-
-#ifndef _link_sym
-#define _link_sym(x) __link_sym(#x)
-#endif
+#include <vnic/shared/nfd.h>
 
 
 /* /\* XXX Magic number currently */
@@ -76,6 +70,84 @@
 #define NFD_CFG_NUM_RINGS       8
 
 
+/* Config message field declarations */
+#define NFD_CFG_MSG_VALID_bf            0, 31, 31
+#define NFD_CFG_MSG_VALID_wrd           0
+#define NFD_CFG_MSG_VALID_shf           31
+#define NFD_CFG_MSG_VALID_msk           0x1
+#define NFD_CFG_MSG_VALID_bit           31
+#define NFD_CFG_MSG_ERR_bf              0, 30, 30
+#define NFD_CFG_MSG_ERR_wrd             0
+#define NFD_CFG_MSG_ERR_shf             30
+#define NFD_CFG_MSG_ERR_msk             0x1
+#define NFD_CFG_MSG_ERR_bit             30
+#define NFD_CFG_MSG_INTERESTED_bf       0, 29, 29
+#define NFD_CFG_MSG_INTERESTED_wrd      0
+#define NFD_CFG_MSG_INTERESTED_shf      29
+#define NFD_CFG_MSG_INTERESTED_msk      0x1
+#define NFD_CFG_MSG_INTERESTED_bit      29
+#define NFD_CFG_MSG_UP_bf               0, 28, 28
+#define NFD_CFG_MSG_UP_wrd              0
+#define NFD_CFG_MSG_UP_shf              28
+#define NFD_CFG_MSG_UP_msk              0x1
+#define NFD_CFG_MSG_UP_bit              28
+#define NFD_CFG_MSG_QUEUE_bf            0, 15, 8
+#define NFD_CFG_MSG_QUEUE_wrd           0
+#define NFD_CFG_MSG_QUEUE_shf           8
+#define NFD_CFG_MSG_QUEUE_msk           0xFF
+#define NFD_CFG_MSG_VNIC_bf             0, 7, 0
+#define NFD_CFG_MSG_VNIC_wrd            0
+#define NFD_CFG_MSG_VNIC_shf            0
+#define NFD_CFG_MSG_VNIC_msk            0xFF
+
+
+/*
+ * Defines that set the structure of "nfd_flr_seen".  These are also
+ * reused for FLR state in nfd_cfg_internal.c.
+ */
+#define NFD_FLR_VF_LO_ind   0
+#define NFD_FLR_VF_HI_ind   1
+#define NFD_FLR_PF_ind      2
+#define NFD_FLR_PF_shf      0
+
+#define NFD_FLR_PEND_BUSY_shf 31
+
+/*
+ * Defines used to signal PCI.IN ME0 on completion of FLR processing
+ */
+#define NFD_CFG_FLR_AP_SIG_NO       7
+#define NFD_CFG_FLR_AP_CTX_NO       1
+#define NFD_CFG_ISL_MASTER_BASE     0x45
+
+/*
+ * Defines to use to access FLR hardware CSRs
+ */
+#define NFP_PCIEX_ISL_BASE                                   0x04000000
+#define NFP_PCIEX_ISL_shf                                    24
+/* XXX temp defines that loosely match the BSP pcie_monitor_api.h */
+#define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c
+#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk    0x3f
+#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf    16
+#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_shf            15
+#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE_shf               14
+#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf        13
+#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0           0x00100080
+#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1           0x00100084
+#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc
+#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk         0x3f
+#define NFP_PCIEX_PCIE_INT_MGR_STATUS                        0x00130000
+#define NFP_PCIEX_PCIE_INT_MGR_STATUS_FLR_msk                0x300
+#define NFP_PCIEX_COMPCFG_CFG0                               0x00100000
+#define NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf                 11
+
+
+#if defined(__NFP_LANG_MICROC)
+
+#ifndef _link_sym
+#define _link_sym(x) __link_sym(#x)
+#endif
+
+/* Configuration mechanism memory and ring defines */
 #define NFD_CFG_RINGS_RES_IND(_emem)                                    \
     _NFP_CHIPRES_ASM(.alloc_resource nfd_cfg_ring_nums _emem##_queues   \
                      global NFD_CFG_TOTAL_RINGS NFD_CFG_TOTAL_RINGS)
@@ -145,45 +217,6 @@ NFD_CFG_RINGS_DECL(3);
     ((__mem char *) _link_sym(nfd_flr_seen) + ((_isl) * 16))
 #define NFD_FLR_LINK(_isl) NFD_FLR_LINK_IND(_isl)
 
-
-/*
- * Defines that set the structure of "nfd_flr_seen".  These are also
- * reused for FLR state in nfd_cfg_internal.c.
- */
-#define NFD_FLR_VF_LO_ind   0
-#define NFD_FLR_VF_HI_ind   1
-#define NFD_FLR_PF_ind      2
-#define NFD_FLR_PF_shf      0
-
-#define NFD_FLR_PEND_BUSY_shf 31
-
-/*
- * Defines used to signal PCI.IN ME0 on completion of FLR processing
- */
-#define NFD_CFG_FLR_AP_SIG_NO       7
-#define NFD_CFG_FLR_AP_CTX_NO       1
-#define NFD_CFG_ISL_MASTER_BASE     0x45
-
-/*
- * Defines to use to access FLR hardware CSRs
- */
-#define NFP_PCIEX_ISL_BASE                                   0x04000000
-#define NFP_PCIEX_ISL_shf                                    24
-/* XXX temp defines that loosely match the BSP pcie_monitor_api.h */
-#define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c
-#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk    0x3f
-#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf    16
-#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_shf            15
-#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE_shf               14
-#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf        13
-#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0           0x00100080
-#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1           0x00100084
-#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc
-#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk         0x3f
-#define NFP_PCIEX_PCIE_INT_MGR_STATUS                        0x00130000
-#define NFP_PCIEX_PCIE_INT_MGR_STATUS_FLR_msk                0x300
-#define NFP_PCIEX_COMPCFG_CFG0                               0x00100000
-#define NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf                 11
 
 #define NFD_CFG_EMEM_IND1(_emem) __LoadTimeConstant("__addr_" #_emem)
 #define NFD_CFG_EMEM_IND0(_emem) NFD_CFG_EMEM_IND1(_emem)
@@ -319,5 +352,7 @@ __intrinsic void nfd_cfg_svc_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
                           __remote SIGNAL *cfg_sig_remote,
                           unsigned int next_me, unsigned int rnum_out,
                           unsigned int rnum_in);
+
+#endif /* __NFP_LANG_MICROC */
 
 #endif /* !_BLOCKS__SHARED_NFD_CFG_H_ */
