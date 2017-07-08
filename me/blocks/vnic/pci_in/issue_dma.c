@@ -1253,7 +1253,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
             issued_tmp.l4_offset = lso_seq_cnt;                              \
             issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
-            issued_tmp.data_len = (offset + lso_hdr_len + lso_payload_len);  \
+            issued_tmp.data_len = (lso_hdr_len + lso_payload_len);           \
             /* if last of LSO segment set lso end flag and we have no */     \
             /* more dma data */                                              \
             if ((lso_dma_index == dma_len) && tx_desc.pkt##_pkt##.eop) {     \
