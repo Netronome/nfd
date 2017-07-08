@@ -196,7 +196,7 @@
  *       +---------------+---------------+---+---------------------------+
  *    2  |     flags     |   lso_hdrlen  |sp0|           mss             |
  *       +---------------+---------------+---|---------------------------+
- *    3  |           data_len            |              vlan             |
+ *    3  |           data_len            |        vlan [L4/L3 off]       |
  *       +-------------------------------+-------------------------------+
  *
  *      E -> End of packet
@@ -220,8 +220,14 @@ struct nfd_in_tx_desc {
             unsigned int sp0:2;
             unsigned int mss:14;        /**< Info for Large Segment Offload */
 
-            unsigned int data_len:16;   /**< Length of the entire packet */
-            unsigned int vlan:16;       /**< VLAN to prepend to this packet */
+            unsigned short data_len;    /**< Length of the entire packet */
+            union {
+                struct {
+                    unsigned char l4_offset;    /**< LSO, L4 data start */
+                    unsigned char l3_offset;    /**< LSO, L3 data start */
+                };
+                unsigned short vlan;    /**< VLAN to prepend to this packet */
+            };
         };
         unsigned int __raw[4];          /**< Direct access to struct words */
     };
@@ -239,7 +245,7 @@ struct nfd_in_tx_desc {
  *       +-+-+-+---------+---------------+-+-+---------------------------+
  *    2  |     flags     |  lso_seq_cnt  |L|S|           mss             |
  *       +---------------+---------------+-+-+---------------------------+
- *    3  |            data_len           |              vlan             |
+ *    3  |            data_len           |       vlan [L4/L3 off]        |
  *       +-------------------------------+-------------------------------+
  *
  *    itf -> intf
@@ -271,8 +277,14 @@ struct nfd_in_pkt_desc {
             unsigned int sp1:1;         /**< Spare bit (unused) */
             unsigned int mss:14;        /**< Info for Large Segment Offload */
 
-            unsigned int data_len:16;   /**< Total packet length */
-            unsigned int vlan:16;       /**< VLAN to prepend to the packet */
+            unsigned short data_len;    /**< Length of the entire packet */
+            union {
+                struct {
+                    unsigned char l4_offset;    /**< LSO, L4 data start */
+                    unsigned char l3_offset;    /**< LSO, L3 data start */
+                };
+                unsigned short vlan;    /**< VLAN to prepend to this packet */
+            };
         };
         unsigned int __raw[4];          /**< Direct access to struct words */
     };
