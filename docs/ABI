@@ -96,6 +96,12 @@ NFP_NET_CFG_UPDATE_GEN updates.
 NFP_NET_CFG_UPDATE_MACADDR indicates an update to the
 MAC address while up.
 
+4.5:
+
+Add general use mailbox area and NFP_NET_CFG_CTRL_CTAG_FILTER, a
+capabilities and control flag to indicate that the firmware is able to
+filter CTAG or 802.1q frames based on the vid.
+
 5.0:
 
 Advertise _pf##_isl##_net_app_id rtsym to notify host of advanced firmware

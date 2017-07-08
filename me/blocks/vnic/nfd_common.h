@@ -58,9 +58,9 @@
 #endif
 #define NFD_CFG_MAJOR_VF_MIN        3
 
-#define NFD_CFG_MINOR_PF            4
-#define NFD_CFG_MINOR_CTRL          4
-#define NFD_CFG_MINOR_VF_MAX        4
+#define NFD_CFG_MINOR_PF            5
+#define NFD_CFG_MINOR_CTRL          5
+#define NFD_CFG_MINOR_VF_MAX        5
 #define NFD_CFG_MINOR_VF_MIN        0
 
 #define NFD_CFG_CLASS_DEFAULT       0
