@@ -177,7 +177,11 @@ nfd_flr_init_pf_cfg_bar(__emem char *isl_base, unsigned int vid)
     __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
                                     NFD_RSS_HASH_FUNC};
 #ifdef NFD_BPF_CAPABLE
-    __xwrite unsigned int bpf_cfg[] = { NFP_NET_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
+#ifndef NFD_BPF_ABI
+#define NFD_BPF_ABI (NFP_NET_BPF_ABI)
+#endif
+
+    __xwrite unsigned int bpf_cfg[] = { NFD_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
                                         NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
                                         30 << 8 /* CTM buf size / 64 */ };
 #endif
