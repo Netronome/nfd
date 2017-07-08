@@ -127,6 +127,24 @@ NFD_CFG_RINGS_INIT(3);
 #endif
 
 
+#if (NFD_MAX_VFS != 0)
+#define NFD_CFG_VF_DECLARE_IND(_isl)                                    \
+    NFD_CFG_BASE_DECLARE(_isl)                                          \
+    _NFP_CHIPRES_ASM(.declare_resource nfd_cfg_base##_isl##_res global  \
+                     ((NFD_MAX_VFS + NFD_MAX_PFS + NFD_MAX_CTRL) *      \
+                       NFP_NET_CFG_BAR_SZ)                              \
+                     nfd_cfg_base##_isl)                                \
+    _NFP_CHIPRES_ASM(.alloc_resource _pf##_isl##_net_vf_bar             \
+                     nfd_cfg_base##_isl##_res+0                         \
+                     global (NFD_MAX_VFS * NFP_NET_CFG_BAR_SZ))         \
+
+#else
+#define NFD_CFG_VF_DECLARE_IND(_isl)
+#endif
+
+#define NFD_CFG_VF_DECLARE(_isl) NFD_CFG_VF_DECLARE_IND(_isl)
+
+
 #if (defined(NFD_USE_CTRL) && (PCIE_ISL == 0))
 #define NFD_CFG_CTRL_DECLARE_IND(_isl)                                      \
     NFD_CFG_BASE_DECLARE(_isl)                                              \
