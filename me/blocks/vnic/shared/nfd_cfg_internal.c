@@ -490,7 +490,7 @@ _nfd_cfg_init_vf_cfg_bar(unsigned int vid)
 #else
     unsigned int q_base = 0;
 #endif
-    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION,
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION(VF),
                                    (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
                                     << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
                                    NFD_CFG_VF_CAP,
@@ -519,7 +519,7 @@ static void
 _nfd_cfg_init_ctrl_cfg_bar(unsigned int vid)
 {
     unsigned int q_base =  NFD_VID2NATQ(vid, 0);
-    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION,
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION(CTRL),
                                    (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
                                     << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
                                    NFD_CFG_CTRL_CAP,
@@ -547,7 +547,7 @@ static void
 _nfd_cfg_init_pf_cfg_bar(unsigned int vid)
 {
     unsigned int q_base =  NFD_VID2NATQ(vid, 0);
-    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION,
+    __xwrite unsigned int cfg[] = {NFD_CFG_VERSION(PF),
                                    (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
                                     << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
                                    NFD_CFG_PF_CAP,

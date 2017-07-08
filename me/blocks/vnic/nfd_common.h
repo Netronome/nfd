@@ -24,12 +24,20 @@
 
 
 /* NFD version number define guards */
-#ifdef NFD_CFG_MAJOR
-#error "NFD application code may not set NFD_CFG_MAJOR version number"
+#ifdef NFD_CFG_MAJOR_PF
+#error "NFD application code may not set NFD_CFG_MAJOR_PF version number"
 #endif
 
-#ifdef NFD_CFG_MINOR
-#error "NFD application code may not set NFD_CFG_MINOR version number"
+#ifdef NFD_CFG_MINOR_PF
+#error "NFD application code may not set NFD_CFG_MINOR_PF version number"
+#endif
+
+#ifdef NFD_CFG_MAJOR_CTRL
+#error "NFD application code may not set NFD_CFG_MAJOR_CTRL version number"
+#endif
+
+#ifdef NFD_CFG_MINOR_CTRL
+#error "NFD application code may not set NFD_CFG_MINOR_CTRL version number"
 #endif
 
 /* NFD version numbers.  Increment major version number for each incompatible
@@ -40,11 +48,21 @@
 /* Firmwares using CTRL vNICs need an app_id and must use ABI 5
  * Firmwares that advertise an app_id but don't use CTRL vNICs
  * may choose whether to advertise ABI 5 */
-#define NFD_CFG_MAJOR               5
+    #define NFD_CFG_MAJOR_PF            5
+    #define NFD_CFG_MAJOR_CTRL          5
+    #define NFD_CFG_MAJOR_VF_MAX        5
 #else
-#define NFD_CFG_MAJOR               4
+    #define NFD_CFG_MAJOR_PF            4
+    #define NFD_CFG_MAJOR_CTRL          4
+    #define NFD_CFG_MAJOR_VF_MAX        4
 #endif
-#define NFD_CFG_MINOR               4
+#define NFD_CFG_MAJOR_VF_MIN        3
+
+#define NFD_CFG_MINOR_PF            4
+#define NFD_CFG_MINOR_CTRL          4
+#define NFD_CFG_MINOR_VF_MAX        4
+#define NFD_CFG_MINOR_VF_MIN        0
+
 #define NFD_CFG_CLASS_DEFAULT       0
 
 /* Version number helper defines */
@@ -81,6 +99,30 @@
 
 #ifndef NFD_MAX_PFS
 #error "NFD_MAX_PFS is not defined but is required"
+#endif
+
+#ifdef NFD_CFG_MAJOR_VF
+#if (NFD_CFG_MAJOR_VF > NFD_CFG_MAJOR_VF_MAX)
+#error "NFD_CFG_MAJOR_VF out of supported range"
+#endif
+
+#if (NFD_CFG_MAJOR_VF < NFD_CFG_MAJOR_VF_MIN)
+#error "NFD_CFG_MAJOR_VF out of supported range"
+#endif
+#else
+#define NFD_CFG_MAJOR_VF NFD_CFG_MAJOR_VF_MAX
+#endif
+
+#ifdef NFD_CFG_MINOR_VF
+#if (NFD_CFG_MINOR_VF > NFD_CFG_MINOR_VF_MAX)
+#error "NFD_CFG_MINOR_VF out of supported range"
+#endif
+
+#if (NFD_CFG_MINOR_VF < NFD_CFG_MINOR_VF_MIN)
+#error "NFD_CFG_MINOR_VF out of supported range"
+#endif
+#else
+#define NFD_CFG_MINOR_VF NFD_CFG_MINOR_VF_MAX
 #endif
 
 

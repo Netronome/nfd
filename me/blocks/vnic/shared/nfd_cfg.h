@@ -29,10 +29,6 @@
 #include <vnic/shared/nfd_ctrl.h>
 
 
-/* /\* XXX Magic number currently */
-/*  * Set to official version number before release *\/ */
-/* #define NFD_CFG_VERSION 0x1248 */
-
 #ifndef NFD_CFG_CLASS
 /* The user hasn't specified a firmware class, so we set default class */
 #define NFD_CFG_CLASS NFD_CFG_CLASS_DEFAULT
@@ -48,13 +44,6 @@
 #error "NFD_CFG_CLASS_VERSION must be zero for default class firmwares"
 #endif
 #endif
-
-
-#define NFD_CFG_VERSION                         \
-    (NFD_CFG_CLASS_VER(NFD_CFG_CLASS_VERSION) | \
-     NFD_CFG_CLASS_TYPE(NFD_CFG_CLASS) |        \
-     NFD_CFG_MAJOR_VERSION(NFD_CFG_MAJOR) |     \
-     NFD_CFG_MINOR_VERSION(NFD_CFG_MINOR))
 
 
 #ifndef NFD_CFG_MAX_MTU
@@ -147,6 +136,14 @@
 #ifndef _link_sym
 #define _link_sym(x) __link_sym(#x)
 #endif
+
+
+#define NFD_CFG_VERSION(_type)                      \
+    (NFD_CFG_CLASS_VER(NFD_CFG_CLASS_VERSION) |     \
+     NFD_CFG_CLASS_TYPE(NFD_CFG_CLASS) |            \
+     NFD_CFG_MAJOR_VERSION(NFD_CFG_MAJOR_##_type) |  \
+     NFD_CFG_MINOR_VERSION(NFD_CFG_MINOR_##_type))
+
 
 /* Configuration mechanism memory and ring defines */
 #define NFD_CFG_RINGS_RES_IND(_emem)                                    \
