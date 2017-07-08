@@ -120,6 +120,17 @@
 
 #include <nfp/mem_atomic.h>     /* TEMP */
 
+/* Provide a standard symbol for host drivers to access MAC stats */
+#ifdef NFD_MAX_PHYS_PORTS
+#include <nfp/macstats.h>
+
+#ifndef NFD_MAC_STATS_MEM_TYPE
+#define NFD_MAC_STATS_MEM_TYPE __emem
+#endif
+__export __shared __align256 NFD_MAC_STATS_MEM_TYPE
+    struct macstats_port_accum mac_stats[NFD_MAX_PHYS_PORTS];
+#endif
+
 /*
  * CPP2PCIe BAR allocation
  * XXX This should go into chip_res
