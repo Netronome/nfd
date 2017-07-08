@@ -285,13 +285,9 @@ __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
  * @param _sig              signal to check for messages
  * @param _pci              PCIe island
  */
-#ifdef USE_SVC_ME
 #define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
     nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 5))
-#else
-#define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
-    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 4))
-#endif
+
 
 /**
  * Notify the host that a cfg_msg has been processed
