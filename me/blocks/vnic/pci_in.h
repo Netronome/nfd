@@ -194,7 +194,7 @@
  *       +-+-------------+-------------------------------+---------------+
  *    1  |                          dma_addr_lo                          |
  *       +---------------+---------------+---+---------------------------+
- *    2  |     flags     |   l4_offsets  |sp0|           mss             |
+ *    2  |     flags     |   lso_hdrlen  |sp0|           mss             |
  *       +---------------+---------------+---|---------------------------+
  *    3  |           data_len            |              vlan             |
  *       +-------------------------------+-------------------------------+
@@ -216,7 +216,7 @@ struct nfd_in_tx_desc {
             unsigned int dma_addr_lo:32; /**< Bits[31:0] of the host address */
 
             unsigned int flags:8;       /**< Flags for the packet */
-            unsigned int l4_offset:8;   /**< Offset of L4 header in packet */
+            unsigned int lso_hdrlen:8;  /**< LSO, TCP payload offset */
             unsigned int sp0:2;
             unsigned int mss:14;        /**< Info for Large Segment Offload */
 
@@ -237,7 +237,7 @@ struct nfd_in_tx_desc {
  *       +-+-+-+---------+-------------------------------+---+-----------+
  *    1  |I|J|S|                       buf_addr                          |
  *       +-+-+-+---------+---------------+-+-+---------------------------+
- *    2  |     flags     |   l4_offset   |L|S|           mss             |
+ *    2  |     flags     |  lso_seq_cnt  |L|S|           mss             |
  *       +---------------+---------------+-+-+---------------------------+
  *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
@@ -266,7 +266,7 @@ struct nfd_in_pkt_desc {
             unsigned int buf_addr:29;   /**< Bits [39:11] of the MU buffer */
 
             unsigned int flags:8;       /**< Flags for the packet */
-            unsigned int l4_offset:8;   /**< Offset of L4 header in packet */
+            unsigned int lso_seq_cnt:8; /**< LSO index/count for this series */
             unsigned int lso_end:1;     /**< Last packet in a series of LSO packets */
             unsigned int sp1:1;         /**< Spare bit (unused) */
             unsigned int mss:14;        /**< Info for Large Segment Offload */

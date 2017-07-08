@@ -170,7 +170,7 @@ enum NFD_IN_LSO_CNTR_IDX {
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING,
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_EXC_PKT_TO_NOTIFY_RING,
     NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS,
-    NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET,
+    NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_HDRLEN,
     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC,
     NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC,
     NFD_IN_LSO_CNTR_T_NOTIFY_LSO_PKT_DESC,
@@ -208,7 +208,7 @@ static const char *nfd_in_lso_cntr_names[] = {
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING",
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_EXC_PKT_TO_NOTIFY_RING",
     "NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS",
-    "NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_L4_OFFSET",
+    "NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_HDRLEN",
     "NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC",
     "NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC",
     "NFD_IN_LSO_CNTR_T_NOTIFY_LSO_PKT_DESC",
@@ -358,9 +358,9 @@ struct nfd_in_queue_info {
 #define NFD_IN_DMA_STATE_LOCKED_msk         1
 #define NFD_IN_DMA_STATE_LOCKED_shf         29
 #define NFD_IN_DMA_STATE_LOCKED_wrd         0
-#define NFD_IN_DMA_STATE_LSO_HDR_LEN_msk    0xFF
-#define NFD_IN_DMA_STATE_LSO_HDR_LEN_shf    16
-#define NFD_IN_DMA_STATE_LSO_HDR_LEN_wrd    0
+#define NFD_IN_DMA_STATE_LSO_OFFHDR_msk     0xFF
+#define NFD_IN_DMA_STATE_LSO_OFFHDR_shf     16
+#define NFD_IN_DMA_STATE_LSO_OFFHDR_wrd     0
 #define NFD_IN_DMA_STATE_LSO_SEQ_CNT_msk    0xFF
 #define NFD_IN_DMA_STATE_LSO_SEQ_CNT_shf    8
 #define NFD_IN_DMA_STATE_LSO_SEQ_CNT_wrd    0
@@ -381,9 +381,9 @@ struct nfd_in_queue_info {
 #define NFD_IN_DMA_STATE_FLAGS_msk          0xFF
 #define NFD_IN_DMA_STATE_FLAGS_shf          24
 #define NFD_IN_DMA_STATE_FLAGS_wrd          2
-#define NFD_IN_DMA_STATE_L4OFFSET_msk       0xFF
-#define NFD_IN_DMA_STATE_L4OFFSET_shf       16
-#define NFD_IN_DMA_STATE_L4OFFSET_wrd       2
+#define NFD_IN_DMA_STATE_LSO_HDRLEN_msk     0xFF
+#define NFD_IN_DMA_STATE_LSO_HDRLEN_shf     16
+#define NFD_IN_DMA_STATE_LSO_HDRLEN_wrd     2
 #define NFD_IN_DMA_STATE_LSO_RES_msk        3
 #define NFD_IN_DMA_STATE_LSO_RES_shf        14
 #define NFD_IN_DMA_STATE_LSO_RES_wrd        2
@@ -411,10 +411,12 @@ struct nfd_in_dma_state {
             unsigned int cont:1;
             unsigned int locked:1;
             unsigned int sp0:5;
-            unsigned int lso_hdr_len:8; /* length of header and if we have a header
-                                         * non-zero used in issue_dma */
-            unsigned int lso_seq_cnt:8; /* last sequence count for lso segments sent
-                                           to NFP. Used in notify. */
+            unsigned int lso_offhdr:8;  /* length of offset + header
+                                           if zero indicates no header
+                                           in progress. Used in issue_dma */
+            unsigned int lso_seq_cnt:8; /* last sequence count for
+                                           lso segments sent to NFP.
+                                           Used in notify. */
             unsigned int rid:8;
 
             unsigned int invalid:1;
@@ -423,7 +425,7 @@ struct nfd_in_dma_state {
             unsigned int curr_buf:29;
 
             unsigned int flags:8;       /* Original flags for the packet */
-            unsigned int l4_offset:8;   /* Original LSO l4_offset */
+            unsigned int lso_hdrlen:8;  /* Original LSO header len */
             unsigned int res:2;         /* Not tested for consistency */
             unsigned int mss:14;        /* Original LSO MSS */
 
@@ -462,7 +464,7 @@ struct nfd_in_batch_desc {
  *       +-+-------------+---------------+---------------+---+-----------+
  *    1  |                           buf_addr                            |
  *       +---------------+---------------+-+-+---------------------------+
- *    2  |     flags     |   l4_offset   |L|S|           mss             |
+ *    2  |     flags     |  lso_seq_cnt  |L|S|           mss             |
  *       +---------------+---------------+-+-+---------------------------+
  *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
@@ -485,7 +487,7 @@ struct nfd_in_issued_desc {
             unsigned int buf_addr:32;
 
             unsigned int flags:8;
-            unsigned int l4_offset:8;
+            unsigned int lso_seq_cnt:8;
             unsigned int lso_end:1;
             unsigned int sp2:1;
             unsigned int mss:14;

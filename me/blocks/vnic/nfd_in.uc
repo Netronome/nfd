@@ -102,9 +102,9 @@
  *       +-+-+-+---------+-------------------------------+---+-----------+
  *    1  |I|J|S|                       buf_addr                          |
  *       +-+-+-+---------+---------------+-+-+---------------------------+
- *    2  |     flags     |   l4_offset   |L|S|           mss             |
+ *    2  |     flags     |  lso_seq_cnt  |L|S|           mss             |
  *       +---------------+---------------+-+-+---------------------------+
- *    3  |            data_len           |              vlan             |
+ *    3  |            data_len           |       vlan [L3/L4 off]        |
  *       +-------------------------------+-------------------------------+
  *
  *       Flag bits (31-24) expanded:
@@ -143,7 +143,6 @@
 #define NFD_IN_FLAGS_TX_LSO_fld         2, 26, 26
 #define NFD_IN_FLAGS_TX_ENCAP_VXLAN_fld 2, 25, 25
 #define NFD_IN_FLAGS_TX_ENCAP_GRE_fld   2, 24, 24
-#define NFD_IN_L4OFF_fld        2, 23, 16
 #define NFD_IN_LSO_fld          2, 23, 0
 #define NFD_IN_LSO_SEQ_CNT_fld  2, 23, 16
 #define NFD_IN_LSO_END_fld      2, 15, 15
