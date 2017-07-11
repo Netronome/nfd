@@ -180,10 +180,15 @@ nfd_flr_init_pf_cfg_bar(__emem char *isl_base, unsigned int vid)
 #ifndef NFD_BPF_ABI
 #define NFD_BPF_ABI (NFP_NET_BPF_ABI)
 #endif
+#ifndef NFD_BPF_CAPS
+#define NFD_BPF_CAPS 0
+#endif
 
-    __xwrite unsigned int bpf_cfg[] = { NFD_BPF_ABI | (8 * 1024 - NFD_BPF_START_OFF) << 16,
-                                        NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
-                                        30 << 8 /* CTM buf size / 64 */ };
+    __xwrite unsigned int bpf_cfg[] =
+        { (NFD_BPF_ABI | (NFD_BPF_CAPS << 8) |
+           ((8 * 1024 - NFD_BPF_START_OFF) << 16)),
+          NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
+          30 << 8 /* CTM buf size / 64 */ };
 #endif
 
     mem_write64(&cfg,
