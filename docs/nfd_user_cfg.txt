@@ -1,0 +1,168 @@
+/*
+ * Copyright (C) 2017,  Netronome Systems, Inc.  All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * @file          docs/nfd_user_cfg.txt
+ * @brief         Description of NFD configuration defines
+ */
+
+/**
+ * Queue number defines
+ * The total number of queues allocated must be less than or equal to
+ * 64, and the number of queues for each vNIC must be a power of two.
+ * Currently NFD_MAX_VF_QUEUES must be 1.  The control vNIC (if used)
+ * requires one queue.
+ * @NFD_MAX_VFS         Number of virtual function vNICs to support
+ * @NFD_MAX_PFS         Number of physical function vNICs to support
+ * @NFD_MAX_VF_QUEUES   Number of queues to support per VF vNIC
+ * @NFD_MAX_PF_QUEUES   Number of queues to support per PF vNIC
+ * @NFD_USE_CTRL        Create control vNIC, requires one queue
+ */
+
+/**
+ * The app ID is a value that the firmware advertises to the host PF
+ * driver via a run time symbol so that the host can specialise the
+ * driver behaviour for the particular firmware.  The value must be
+ * an ID known to the host.  If not specified, the host driver will
+ * assume a simple app type.
+ * @NFD_NET_APP_ID      App ID to advertise
+ */
+
+/**
+ * vNIC read-only data configuration
+ * See kernel/nfp_net_ctrl.h for more info
+ * XXX CTRL vNICs get standard capabilities set in nfd_ctrl.h
+ * @NFD_CFG_MAX_MTU     Maximum MTU supported
+ * @NFD_CFG_VF_CAP      Capabilities to advertise for VF vNICs
+ * @NFD_CFG_PF_CAP      Capabilities to advertise for PF vNICs
+ * @NFD_CFG_MAJOR_VF    Major ABI version number to advertise for VFs
+ * @NFD_CFG_MINOR_VF    Minor ABI version number to advertise for VFs
+ */
+
+/**
+ * Defines to select which NFP PCIe to CPP BARs to program
+ * @NFD_VNIC_VF         Program VF P2C BARs, use even if NFD_MAX_VFS 0
+ */
+
+/**
+ * Defines to select EMEM units to use for NFD
+ * @NFD_PCIE##_isl##_EMEM   Memory unit to use to per PCIe island memory
+ * @NFD_CFG_RING_EMEM       Memory unit to use for shared memory
+ */
+
+/**
+ * PCI.IN block defines
+ * @NFD_IN_BLM_REG_BLS          BLM BLS for regular packets, e.g. 0
+ * @NFD_IN_BLM_REG_POOL         BLM pool name for regular packets,
+ *                              e.g. BLM_NBI8_BLQ0_EMU_QID
+ * @NFD_IN_BLM_RADDR            microC compatible name for BLM ring
+ *                              memory, e.g. __LoadTimeConstant("__addr_emem0")
+ * @NFD_IN_BLM_REG_SIZE         Size of regular buffers in bytes
+ * @NFD_IN_BLM_JUMBO_BLS        BLM BLS for jumbo packets, e.g. 0
+ * @NFD_IN_BLM_JUMBO_POOL       BLM pool name for regular packets,
+ *                              e.g. BLM_NBI8_BLQ0_EMU_QID
+ * @NFD_IN_BLM_JUMBO_SIZE       Size of jumbo buffers in bytes
+ * @NFD_IN_HAS_ISSUE0           Set to 1.  PCI.IN issue DMA ME 0 must
+ *                              be used if PCI.IN is used.
+ * @NFD_IN_HAS_ISSUE1           Set to 1 if a second issue DMA ME is required
+ * @NFD_IN_ISSUE_DMA_QSHIFT     Number of bits to right shift queue
+ *                              number (QID) by when selecting issue
+ *                              DMA ME to process the packet.
+ * @NFD_IN_ISSUE_DMA_QXOR       Default 0, set XOR to 1 to invert
+ *                              issue DMA ME  selection.
+ *
+ * @NFD_IN_WQ_SZ                Size in bytes of NFD PCI.IN output
+ *                              work queue.  Each item in the ring is
+ *                              16B,and the ring must be sized to hold
+ *                              the maximum possible items.  Users can
+ *                              determine the maximum possible items
+ *                              based on the number of MU buffers the
+ *                              application provides.
+ *
+ * @NFD_IN_NUM_WQS              Number of output work queues to
+ *                              initialise, recommended value 1.
+ * @NFD_IN_ADD_SEQN             Insert a sequence number into PCI.IN
+ *                              packet descriptor.
+ * @NFD_IN_NUM_SEQRS            Number of sequencers to use if
+ *                              sequence numbers are inserted.  The
+ *                              sequencer used for a particular packet
+ *                              is selected from the QID.
+ * @NFD_IN_SEQR_QSHIFT          Number of bits to shift QID before
+ *                              masking with (NFD_IN_NUM_SEQRS - 1) to
+ *                              select sequencer.
+ */
+
+
+/**
+ * PCI.OUT block defines
+ * @NFD_OUT_RX_OFFSET   Non-zero: starting offset for packet data
+ *                      within the host buffer.
+ *                      Zero (NFP_NET_CFG_RX_OFFSET_DYNAMIC):
+ *                      DMA data to start at address zero in the host
+ *                      buffer.  If the packet has prepend meta data,
+ *                      that data will start at address zero, else
+ *                      packet data will start at address zero.
+ *
+ * @NFD_OUT_FL_BUFS_PER_QUEUE   Number of freelist descriptors to cache
+ *                              per queue (default 256)
+ * @NFD_PCIE##_isl##_FL_CACHE_MEM   Where to store freelist descriptors
+ *                                  (default PCIe island CTM)
+ *
+ * @NFD_OUT_BLM_POOL_START  Ring index of first BLM pool
+ * @NFD_OUT_BLM_RADDR       microC compatible name for BLM ring
+ *                          memory, e.g. __LoadTimeConstant("__addr_emem0")
+ * @NFD_OUT_BLM_RADDR_UC    microcode compatible name for BLM ring
+ *                          memory, e.g. __ADDR_EMEM0
+ *
+ * @NFD_OUT_CREDITS_NFP_CACHED  NFD credits issued once cached to NFP, required
+ * @NFD_OUT_RING_SZ             Size in bytes of NFD PCI.OUT input ring
+ *                              Each item in the ring is 16B, and the
+ *                              ring must be sized to hold the maximum
+ *                              possible items.  Users can determine
+ *                              the maximum possible items based on the
+ *                              number of packet buffers the application
+ *                              provides.
+ */
+
+/**
+ * eBPF defines
+ * @NFD_BPF_CAPABLE     Firmware can handle eBPF offload, advertise ABI info
+ * @NFD_BPF_START_OFF   Offset at which BPF will be loaded
+ * @NFD_BPF_DONE_OFF    Offset to jump to on exit
+ */
+
+/**
+ * RSS defines
+ * @NFP_NET_CFG_RSS_HFUNC   Which RSS hash function to use,
+ *                          default NFP_NET_CFG_RSS_TOEPLITZ
+ */
+
+/**
+ * Depreciated defines (can be removed from builds)
+ * @NFD_CFG_CLASS           Sets the firmware class advertised to the
+ *                          host, but no host drivers currently support
+ *                          this feature.  Use APP ID instead.
+ * @NFD_CFG_CLASS_VERSION   Sets version number for the class, but see
+ *                          comments for NFD_CFG_CLASS.
+ * @USE_SVC_ME              Previously was required to include the svc_me
+ *                          into the NFD message chain, but this is now
+ *                          the default.
+ */
+
+/**
+ * Experimental defines
+ * @NFD_OUT_CREDITS_HOST_ISSUED An experimental option not fully supported
+ * @NFD_NO_ISOLATION        An experimental option not fully supported
+ * @NFD_VNIC_PF             Program PF P2C BARs, *special purposes only*
+ */
