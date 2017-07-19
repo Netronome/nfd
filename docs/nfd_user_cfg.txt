@@ -142,6 +142,7 @@
  *                      (see NFP_NET_CFG_BPF_CAP in kernel/nfp_net_ctrl.h) 
  * @NFD_BPF_START_OFF   Offset at which BPF will be loaded
  * @NFD_BPF_DONE_OFF    Offset to jump to on exit
+ * @NFD_BPF_MAX_LEN     Maximum BPF program length in instruction words
  */
 
 /**
