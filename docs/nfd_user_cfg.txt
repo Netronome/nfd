@@ -136,6 +136,13 @@
  */
 
 /**
+ * VF CFG defines (support for *ndo_set_vf_xyz call backs)
+ * see shared/nfd_vf_cfg_iface*
+ * @NFD_VF_CFG_ABI_VER  ABI version number to support (1 or 2 currently)
+ * @NFD_VF_CFG_CAP      Capabilities to advertise for ABI 2
+ */
+
+/**
  * eBPF defines
  * @NFD_BPF_CAPABLE     Firmware can handle eBPF offload, advertise ABI info
  * @NFD_BPF_CAPS        Mask of application specific BPF capability bits

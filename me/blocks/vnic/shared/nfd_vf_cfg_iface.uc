@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2016-2017,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,8 +29,26 @@
 /* Microcode declaration of per island symbol */
 #macro nfd_vf_cfg_declare(isl)
     .alloc_mem _pf/**/isl/**/_net_vf_cfg/**/NFD_VF_CFG_ABI_VER \
-         NFD_PCIE/**/isl/**/_EMEM global \
-         (NFD_MAX_VFS * NFD_VF_CFG_SZ) NFD_VF_CFG_SZ
+         emem global (NFD_VF_CFG_MB_SZ + (NFD_MAX_VFS * NFD_VF_CFG_SZ)) \
+         NFD_VF_CFG_SZ
+#endm
+
+#macro nfd_vf_cfg_declare_all()
+    #ifdef NFD_PCIE0_EMEM
+        nfd_vf_cfg_declare(0)
+    #endif
+
+    #ifdef NFD_PCIE1_EMEM
+        nfd_vf_cfg_declare(1)
+    #endif
+
+    #ifdef NFD_PCIE2_EMEM
+        nfd_vf_cfg_declare(2)
+    #endif
+
+    #ifdef NFD_PCIE3_EMEM
+        nfd_vf_cfg_declare(3)
+    #endif
 #endm
 
 /* Microcode access to per island start address */
@@ -45,8 +63,10 @@
 /* Microcode access to per VF data offset within per island symbol */
 #macro nfd_vf_cfg_offset(off, vf)
     alu[off, --, b, vf, <<(log2(NFD_VF_CFG_SZ))]
+#if (NFD_VF_CFG_MB_SZ > 0)
+    alu[off, off, +, NFD_VF_CFG_MB_SZ]
+#endif
 #endm
-
 
 /* Microcode access to per VF data address */
 #macro nfd_vf_cfg_addr(addr_hi, addr_lo, isl, vf)

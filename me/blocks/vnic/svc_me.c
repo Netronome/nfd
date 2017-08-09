@@ -51,6 +51,7 @@ struct nfd_cfg_msg cfg_msg0;
 
 NFD_CFG_BASE_DECLARE(0);
 NFD_VF_CFG_DECLARE(0);
+NFD_VF_CFG_INIT(0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
@@ -61,6 +62,7 @@ struct nfd_cfg_msg cfg_msg1;
 
 NFD_CFG_BASE_DECLARE(1);
 NFD_VF_CFG_DECLARE(1);
+NFD_VF_CFG_INIT(1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
@@ -71,6 +73,7 @@ struct nfd_cfg_msg cfg_msg2;
 
 NFD_CFG_BASE_DECLARE(2);
 NFD_VF_CFG_DECLARE(2);
+NFD_VF_CFG_INIT(2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
@@ -81,6 +84,7 @@ struct nfd_cfg_msg cfg_msg3;
 
 NFD_CFG_BASE_DECLARE(3);
 NFD_VF_CFG_DECLARE(3);
+NFD_VF_CFG_INIT(3);
 #endif
 
 NFD_FLR_DECLARE;
