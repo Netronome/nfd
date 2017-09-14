@@ -110,7 +110,7 @@
  *       Flag bits (31-24) expanded:
  *          31       30      29      28      27      26      25     24
  *       +-------+-------+-------+-------+-------+-------+-------+-------+
- *    2  |TX_CSUM|IPV4_CS|TCP_CS |UDP_CS |TX_VLAN|TX_LSO |VXLAN  |GRE    |
+ *    2  |TX_CSUM|IPV4_CS|TCP_CS |UDP_CS |TX_VLAN|TX_LSO |ENCAP  |OIP4_CS|
  *       +-------+-------+-------+-------+-------+-------+-------+-------+
  *       This corresponds to nfp_net_pmd.h, TX descriptor format
  *       (lines 152-160).
@@ -121,8 +121,8 @@
  *       28  UDP_CS  -> PCIE_DESC_TX_UDP_CSUM
  *       27  TX_VLAN -> PCIE_DESC_TX_VLAN
  *       26  TX_LSO  -> PCIE_DESC_TX_LSO
- *       25  VXLAN   -> PCIE_DESC_TX_ENCAP_VXLAN
- *       24  GRE     -> PCIE_DESC_TX_ENCAP_GRE
+ *       25  ENCAP   -> PCIE_DESC_TX_ENCAP
+ *       24  OIP4_CS -> PCIE_DESC_TX_O_IP4_CSUM
  *
  *      S -> sp0 (spare)
  *    itf -> intf
@@ -141,8 +141,8 @@
 #define NFD_IN_FLAGS_TX_UDP_CSUM_fld    2, 28, 28
 #define NFD_IN_FLAGS_TX_VLAN_fld        2, 27, 27
 #define NFD_IN_FLAGS_TX_LSO_fld         2, 26, 26
-#define NFD_IN_FLAGS_TX_ENCAP_VXLAN_fld 2, 25, 25
-#define NFD_IN_FLAGS_TX_ENCAP_GRE_fld   2, 24, 24
+#define NFD_IN_FLAGS_TX_ENCAP_fld       2, 25, 25
+#define NFD_IN_FLAGS_TX_O_IPV4_CSUM_fld 2, 24, 24
 #define NFD_IN_LSO_fld          2, 23, 0
 #define NFD_IN_LSO_SEQ_CNT_fld  2, 23, 16
 #define NFD_IN_LSO_END_fld      2, 15, 15
@@ -444,14 +444,14 @@
     bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_LSO_fld))
 .end
 #endm
-#macro nfd_in_get_tx_encap_vxlan(out_value, in_nfd_meta)
+#macro nfd_in_get_tx_encap(out_value, in_nfd_meta)
 .begin
-    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_ENCAP_VXLAN_fld))
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_ENCAP_fld))
 .end
 #endm
-#macro nfd_in_get_tx_encap_gre(out_value, in_nfd_meta)
+#macro nfd_in_get_tx_o_ipv4_csum(out_value, in_nfd_meta)
 .begin
-    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_ENCAP_GRE_fld))
+    bitfield_extract__sz1(out_value, BF_AML(in_nfd_meta, NFD_IN_FLAGS_TX_O_IPV4_CSUM_fld))
 .end
 #endm
 
