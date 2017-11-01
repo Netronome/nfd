@@ -379,7 +379,7 @@ check_queues(void *queue_info_struct,
      * an event for outstanding pointer writes
      */
     clear_queue(&queue, active_bmsk);
-    qc_ping_queue(PCIE_ISL, qc_queue, c->event_data, c->event_type);
+    qc_ping_queue(c->pcie_isl, qc_queue, c->event_data, c->event_type);
 
     return 0;
 }
