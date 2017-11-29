@@ -147,6 +147,22 @@ struct nfd_out_input {
 
 /** \endcond */
 
+
+/* Define the default maximum length in bytes of prepended chained metadata.
+ * Assume one 32-bit word is used to encode the metadata types in a chain and
+ * that each metadata value for a corresponding metadata type is 4 bytes
+ * long. */
+#ifndef NFD_OUT_MAX_META_LEN
+#define NFD_OUT_MAX_META_LEN (4 * 32 / NFP_NET_META_FIELD_SIZE + 4)
+#endif
+
+/* Maximum length of a single meta data item that will be prepended using
+ * nfd_out_metadata_push() */
+#ifndef NFD_OUT_MAX_META_ITEM_LEN
+#define NFD_OUT_MAX_META_ITEM_LEN 4
+#endif
+
+
 /**
  * Prepare ME data structures required to send packets to NFD.
  *
@@ -239,6 +255,28 @@ __intrinsic void __nfd_out_cnt_pkt(unsigned int pcie_isl,
 __intrinsic void __nfd_out_push_pkt_cnt(unsigned int pcie_isl,
                                         unsigned int queue,
                                         sync_t sync, SIGNAL *sig);
+
+/**
+ * Push metada onto prepended packet metadata chain.
+ * @param meta_len      Length of metadata currently prepended
+ * @param meta_types    Types of metadata being prepended
+ * @param meta_val      Metadata to prepend
+ * @param meta_type_num Number of metadata type fields being prepended
+ * @param meta_val_len  Length of metadata value in bytes
+ * @param pkt_start_ptr Pointer to start of packet
+ *
+ * The application firmware initialises meta_len to zero and it is then
+ * updated by this function as metadata is prepended. Returns -1 if the
+ * maximum supported metadata length (defined by NFD_OUT_MAX_META_LEN)
+ * is exceeded.
+ * NFD_OUT_MAX_META_ITEM_LEN is used to allocate sufficient write xfers.
+ */
+__intrinsic int nfd_out_metadata_push(unsigned int *meta_len,
+                                      unsigned int meta_types,
+                                      void *meta_val,
+                                      const unsigned int meta_type_num,
+                                      const unsigned int meta_val_len,
+                                      __addr40 void *pkt_start_ptr);
 
 /**
  * Populate the buffer address fields of the CPP descriptor for a packet.

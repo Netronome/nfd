@@ -162,6 +162,20 @@
 #define NFD_IN_RING_INFO_ITEM_SZ   4
 
 
+/* Define the default maximum length in bytes of prepended chained metadata.
+ * Assume one 32-bit word is used to encode the metadata types in a chain and
+ * that each metadata value for a corresponding metadata type is 4 bytes
+ * long. */
+#ifndef NFD_IN_MAX_META_LEN
+#define NFD_IN_MAX_META_LEN (4 * 32 / NFP_NET_META_FIELD_SIZE + 4)
+#endif
+
+/* Maximum length of a single meta data item that will be fetched using
+ * nfd_in_metadata_pop() */
+#ifndef NFD_IN_MAX_META_ITEM_LEN
+#define NFD_IN_MAX_META_ITEM_LEN 4
+#endif
+
 
 #macro nfd_in_recv_init()
 
@@ -325,6 +339,221 @@
     nfd_in_get_pcie(pcinum, io_nfd_meta)
     nfd_in_get_qid(qid, io_nfd_meta)
     nfd_stats_update_received(pcinum, qid, pktlen)
+.end
+#endm
+
+
+/**
+ * Retrieve metadata from prepended packet metadata chain.
+ * @param out_meta_type     Type of retrieved metadata
+ * @param out_meta_val      Optionally an array of retrieved metadata
+ * @param io_meta_len       Length of metadata unretrieved before calling
+ * @param io_meta_info      Encodes types of metadata in metadata chain
+ * @param in_pkt_buf_hi     Upper bits of packet buffer address
+ * @param IN_EMPTY_LABEL    Branch here if all data retrieved
+ * @param IN_ERROR_LABEL    Branch here if an error occurs
+ *
+ * The application firmware initialises io_meta_len to the length of metadata
+ * prepended to the packet and io_meta_info to zero. io_meta_info is then
+ * updated by this macro as metadata is retrieved.
+ *
+ * The user can set NFD_IN_MAX_META_LEN to specify the maximum amount of
+ * prepend metadata that they expect.  If meta_len is larger than this value,
+ * it is caught as an error.
+ * "out_meta_val" must be sized to hold NFD_IN_MAX_META_ITEM_LEN (default 4B).
+ * "out_meta_val" is a scalar for 4B and an aggregate if NFD_IN_MAX_ITEM_LEN > 4
+ * The user inspects the "out_meta_type" to decide how to process the metadata,
+ * and to determine the amount of data associated with this type.
+ *
+ * @note the user must subtract the data length of the meta type from
+ * "io_meta_len" before invoking this function again.
+ */
+#macro nfd_in_metadata_pop(out_meta_type, out_meta_val, io_meta_len, \
+                           io_meta_info, in_pkt_buf_hi,
+                           IN_EMPTY_LABEL, IN_ERROR_LABEL)
+.begin
+
+    .reg meta_offset
+    .reg read $meta_data[(1 + (NFD_IN_MAX_META_ITEM_LEN >> 2))]
+    .xfer_order $meta_data
+    .sig sig_meta
+
+    .if (io_meta_len > NFD_IN_MAX_META_LEN)
+        #if (!streq('IN_ERROR_LABEL', '--'))
+            br[IN_ERROR_LABEL]
+        #else
+            br[meta_pop_err#]
+        #endif
+    .endif
+
+    .if (io_meta_len == 0)
+        move(out_meta_type, 0)
+        #if (!streq('IN_EMPTY_LABEL', '--'))
+            br[IN_EMPTY_LABEL]
+        #else
+            br[meta_pop_empty#]
+        #endif
+    .endif
+
+    alu[meta_offset, NFD_IN_DATA_OFFSET, -, io_meta_len]
+
+    /* If this is the first word of metadata being "popped", read
+     * meta_info word too. */
+    #define_eval _META_INFO_LW (1 + (NFD_IN_MAX_ITEM_LEN >> 2))
+    #define_eval _META_LW (NFD_IN_MAX_ITEM_LEN >> 2)
+    .if (io_meta_info == 0)
+
+        ov_single(OV_LENGTH, _META_INFO_LW, OVF_SUBTRACT_ONE)
+        mem[read32, $meta_data[0], in_pkt_buf_hi, <<8, meta_offset, \
+            max_/**/_META_INFO_LW], indirect_ref, ctx_swap[sig_meta]
+        move(io_meta_info, $meta_data[0])
+        alu[io_meta_len, io_meta_len, -, 4]
+
+    .else
+
+        ov_single(OV_LENGTH, _META_LW, OVF_SUBTRACT_ONE)
+        mem[read32, $meta_data[1], in_pkt_buf_hi, <<8, meta_offset, \
+            max_/**/_META_LW], ctx_swap[sig_meta]
+
+    .endif
+
+    /* "Pop" NFD_IN_MAX_META_ITEM_LEN bytes of metadata */
+    #if (NFD_IN_MAX_META_ITEM_LEN > 4)
+        aggregate_copy(out_meta_val, 0, $meta_data, 1, (NFD_IN_MAX_META_ITEM_LEN >> 2))
+    #else
+        move(out_meta_val, $meta_data[1])
+    #endif
+
+    /* "Pop" type from meta_info */
+    alu[out_meta_type, io_meta_info, AND, NFP_NET_META_FIELD_MASK]
+
+    alu[io_meta_info, --, B, io_meta_info, \
+        >>(NFP_NET_META_FIELD_SIZE * in_meta_type_num)]
+
+meta_pop_err#:
+meta_pop_empty#:
+
+    #undef _META_INFO_LW
+    #undef _META_LW
+
+.end
+#endm
+
+
+/**
+ * Retrieve metadata from cache of prepended packet metadata chain.
+ * @param out_meta_type     Type of retrieved metadata
+ * @param out_meta_val      Optionally an array of retrieved metadata
+ * @param io_meta_len       Length of metadata currently unretrieved
+ * @param io_meta_info      Encodes types of metadata in metadata chain
+ * @param io_meta_t_idx     T_INDEX value for next transger register to access
+ * @param in_ctx_num        [Optional] Context number of executing thread
+ * @param in_meta_cache     Transfer registers in which metadata cached
+ * @param in_meta_cache_len Number of transfer registers in metadata cache
+ * @param in_pkt_buf_hi     Upper bits of packet buffer address
+ * @param IN_EMPTY_LABEL    Branch here if all data retrieved
+ * @param IN_ERROR_LABEL    Branch here if error occured
+ *
+ * The application firmware initialises io_meta_len to the length of metadata
+ * prepended to the packet and meta_info to zero. io_meta_info is then
+ * updated by this macro as metadata is retrieved.
+ * Prepended metadata is cached in an array of read transfer registers
+ * large enough to store in_meta_cache_len bytes.
+ *
+ * The user can set NFD_IN_MAX_META_LEN to specify the maximum amount of
+ * prepend metadata that they expect.  If meta_len is larger than this value,
+ * it is caught as an error.
+ * "out_meta_val" must be sized to hold NFD_IN_MAX_META_ITEM_LEN (default 4B).
+ * "out_meta_val" is a scalar for 4B and an aggregate if NFD_IN_MAX_ITEM_LEN > 4
+ * The user inspects the "out_meta_type" to decide how to process the metadata,
+ * and to determine the amount of data associated with this type.
+ *
+ * @note the user must subtract the data length of the meta type from
+ * "io_meta_len" and must add the data length to "io_meta_t_idx" before invoking
+ * macro again.
+ */
+#macro nfd_in_metadata_pop_cache(out_meta_type, out_meta_val, io_meta_len, \
+                                 io_meta_info, io_meta_t_idx, in_ctx_num, \
+                                 in_meta_cache, in_meta_cache_len, \
+                                 in_pkt_buf_hi, IN_EMPTY_LABEL, IN_ERROR_LABEL)
+.begin
+
+    .reg meta_offset
+    .reg ctx_pop
+    .reg active_ctx
+    .sig sig_meta
+
+    passert(is_ct_const(in_meta_cache_len));
+    passert(in_meta_cache_len <= NFD_MAX_META_VAL_LEN);
+    passert(in_meta_cache_len % 4 == 0);
+
+    #define_eval _META_CACHE_LW in_meta_cache_len>>2
+
+    .if (io_meta_len > in_meta_cache_len)
+        #if (!streq('IN_ERROR_LABEL', '--'))
+            br[IN_ERROR_LABEL]
+        #else
+            br[meta_pop_cache_err#]
+        #endif
+    .endif
+
+    .if (io_meta_len == 0)
+        move(out_meta_type, 0)
+        #if (!streq('IN_EMPTY_LABEL', '--'))
+            br[IN_EMPTY_LABEL]
+        #else
+            br[meta_pop_cache_empty#]
+        #endif
+    .endif
+
+    /* Cache all metadata in transfer registers */
+    .if (io_meta_info == 0)
+
+        alu[meta_offset, NFD_IN_DATA_OFFSET, -, io_meta_len]
+        alu[meta_lw, --, B, io_meta_len, >>2]
+        ov_single(OV_LENGTH, meta_lw, OVF_SUBTRACT_ONE)
+        mem[read32, in_meta_cache[0], in_pkt_buf_hi, <<8, meta_offset, \
+            max_/**/_META_CACHE_LW], indirect_ref, \
+            sig_done[sig_meta]
+
+        /* Set up T_INDEX to access cached metadata */
+        #if (streq('in_ctx_num', '--'))
+            local_csr_rd[ACTIVE_CTX_STS]
+            immed[active_ctx, 0]
+            alu[ctx_pop, active_ctx, AND, NFP_MECSR_ACTIVE_CTX_STS_ACNO_mask]
+            alu[io_meta_t_idx, (&in_meta_cache[1] << 2), OR, ctx_pop, <<7]
+        #else
+            alu[io_meta_t_idx, (&in_meta_cache[1] << 2), OR, in_ctx_num, <<7]
+        #endif
+
+        ctx_arb[sig_meta]
+
+        move(io_meta_info, in_meta_cache[0])
+        alu[io_meta_len, io_meta_len, -, 4]
+
+    .endif
+
+    local_csr_wr[T_INDEX, io_meta_t_idx]
+
+    /* "Pop" type from meta_info */
+    alu[out_meta_type, io_meta_info, AND, NFP_NET_META_FIELD_MASK]
+    alu[io_meta_info, --, B, io_meta_info, \
+        >>(NFP_NET_META_FIELD_SIZE)]
+    nop
+
+    /* "Pop" NFD_IN_MAX_META_ITEM_LEN bytes of metadata */
+    #if (NFD_IN_MAX_META_ITEM_LEN > 4)
+        aggregate_copy(out_meta_val, 0, *$index, ++, \
+                       (NFD_IN_MAX_META_ITEM_LEN >> 2))
+    #else
+        move(out_meta_val, *$index++)
+    #endif
+
+meta_pop_cache_err#:
+meta_pop_cache_empty#:
+
+    #undef _META_CACHE_LW
+
 .end
 #endm
 

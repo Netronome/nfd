@@ -147,6 +147,21 @@
 #define NFD_OUT_RING_INFO_ITEM_SZ   4
 
 
+/* Define the default maximum length in bytes of prepended chained metadata.
+ * Assume one 32-bit word is used to encode the metadata types in a chain and
+ * that each metadata value for a corresponding metadata type is 4 bytes
+ * long. */
+#ifndef NFD_OUT_MAX_META_LEN
+#define NFD_OUT_MAX_META_LEN (4 * 32 / NFP_NET_META_FIELD_SIZE + 4)
+#endif
+
+/* Maximum length of a single meta data item that will be prepended using
+ * nfd_out_metadata_push() */
+#ifndef NFD_OUT_MAX_META_ITEM_LEN
+#define NFD_OUT_MAX_META_ITEM_LEN 4
+#endif
+
+
 #macro nfd_out_ring_declare()
 
     #ifndef __NFD_OUT_RINGS_DECLARED
@@ -273,6 +288,109 @@
         move(io_ncred, $x)
     .endif
 .end
+#endm
+
+
+/**
+ * Prepend packet with metadata.
+ * @param io_meta_len       Length of metadata currently prepended
+ * @param in_meta_types     Type of metadata being prepended
+ * @param in_meta_val       Optionally an array of metadata to prepend
+ * @param in_meta_type_num  Number of metadata type fields being prepended
+ * @param in_meta_val_len   Length of metadata value in bytes
+ * @param in_pkt_start_hi   Upper bits of packet start address
+ * @param in_pkt_start_lo   Lower bits of packet start address
+ * @param IN_ERROR_LABEL    Branch to label if metadata cannot be prepended
+ *
+ * The application firmware initialises in_meta_len to zero and it is then
+ * updated by this macro as metadata is prepended. Branches to error label
+ * if maximum supported metadata length is exceeded.
+ *
+ * @note Set in_meta_val_len to -- when in_meta_val is a scalar value
+ */
+#macro nfd_out_metadata_push(io_meta_len, in_meta_types, in_meta_val, \
+                             in_meta_type_num, in_meta_val_len, \
+                             in_pkt_start_hi, in_pkt_start_lo, IN_ERROR_LABEL)
+.begin
+
+    .reg pkt_start_lo
+    .reg meta_offset
+    .reg meta_len_diff
+    .reg $meta_info
+
+    passert(is_ct_const(in_meta_type_num))
+    #if (!streq('in_meta_val_len', '--'))
+        passert(is_ct_const(in_meta_val_len))
+        passert(in_meta_val_len <= NFD_MAX_META_VAL_LEN)
+        passert(in_meta_val_len <= NFD_OUT_MAX_META_ITEM_LEN)
+        passert(in_meta_val_len % 4 == 0)
+        #define_eval _META_VAL_LEN in_meta_val_len
+    #else
+        #define _META_VAL_LEN 4
+    #endif
+
+    .reg $meta_data[(1 + (_META_VAL_LEN >> 2))]
+    .xfer_order $meta_data
+    .sig sig_meta
+    .set $meta_data[0]
+
+    move(pkt_start_lo, in_pkt_start_lo)
+
+    .if (io_meta_len == 0)
+
+        /* This is the first word of metadata being prepended. */
+        move($meta_data[0], in_meta_types)
+        alu[io_meta_len, --, B, 4]
+
+    .elif (io_meta_len <= (NFD_OUT_MAX_CHAIN_META_LEN - _META_VAL_LEN))
+
+        alu[meta_offset, pkt_start_lo, -, io_meta_len]
+        mem[read32, $meta_info, in_pkt_start_hi, <<8, meta_offset, 1], \
+           ctx_swap[sig_meta]
+        alu[$meta_data[0], in_meta_types, OR, $meta_info, \
+            <<(NFP_NET_META_FIELD_SIZE * in_meta_type_num)]
+
+    .else
+
+        #if (!streq('IN_ERROR_LABEL', '--'))
+            br[IN_ERROR_LABEL]
+        #else
+            br[meta_push_err#]
+        #endif
+
+    .endif
+
+    #if (!streq('in_meta_val_len', '--'))
+        aggregate_copy($meta_data, 1, in_meta_val, 0, \
+                       (_META_VAL_LEN>>2))
+    #else
+        move($meta_data[1], in_meta_val)
+    #endif
+
+    alu[io_meta_len, io_meta_len, +, _META_VAL_LEN]
+    alu[meta_offset, pkt_start_lo, -, io_meta_len]
+
+    #define_eval _META_LW (1 + (_META_VAL_LEN >> 2))
+    ov_single(OV_LENGTH, _META_LW, OVF_SUBTRACT_ONE)
+    mem[write32, $meta_data[0], in_pkt_start_hi, <<8, meta_offset, \
+        max_/**/_META_LW], indirect_ref, ctx_swap[sig_meta]
+
+meta_push_err#:
+
+    #undef _META_VAL_LEN
+    #undef _META_LW
+
+.end
+#endm
+
+
+/* Call nfd_out_metadata_push() with in_meta_val as a scalar */
+#macro nfd_out_metadata_push(io_meta_len, in_meta_types, in_meta_val, \
+                             in_meta_type_num, \
+                             in_pkt_start_hi, in_pkt_start_lo, IN_ERROR_LABEL)
+    nfd_out_metadata_push(io_meta_len, in_meta_types, in_meta_val, \
+                          in_meta_type_num, --, \
+                          in_pkt_start_hi, in_pkt_start_lo, IN_ERROR_LABEL)
 #endm
 
 

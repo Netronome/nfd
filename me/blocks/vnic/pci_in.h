@@ -90,6 +90,22 @@
 
 /** @endcond */
 
+
+/* Define the default maximum length in bytes of prepended chained metadata.
+ * Assume one 32-bit word is used to encode the metadata types in a chain and
+ * that each metadata value for a corresponding metadata type is 4 bytes
+ * long. */
+#ifndef NFD_IN_MAX_META_LEN
+#define NFD_IN_MAX_META_LEN (4 * 32 / NFP_NET_META_FIELD_SIZE + 4)
+#endif
+
+/* Maximum length of a single meta data item that will be fetched using
+ * nfd_in_metadata_pop() */
+#ifndef NFD_IN_MAX_META_ITEM_LEN
+#define NFD_IN_MAX_META_ITEM_LEN 4
+#endif
+
+
 /**
  * Determine the input sequencer for a packet given its queue number.
  *
@@ -357,6 +373,66 @@ __intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,
                                        unsigned int queue,
                                        sync_t sync, SIGNAL *sig);
 
+
+/**
+ * Retrieve metadata from prepended packet metadata chain.
+ * @param meta_val      Retrieved metadata
+ * @param meta_len      Length of metadata unretrieved before calling
+ * @param meta_info     Encodes types of metadata in metadata chain
+ * @param pkt_buf_ptr   Pointer to start of packet buffer
+ *
+ * The application firmware initialises meta_len to the length of metadata
+ * prepended to the packet and meta_info to zero. The meta_info is then
+ * updated by this function as metadata is retrieved.
+ * Returns the meta type if there is more data, zero if meta_len is zero, else
+ * -1 to indicate an error.  The user can set NFD_IN_MAX_META_LEN to specify
+ * the maximum amount of prepend metadata that they expect.  If meta_len is
+ * larger than this value, it is caught as an error.
+ * "meta_val" must be sized to hold NFD_IN_MAX_META_ITEM_LEN (default 4B).  The
+ * user inspects the type returned to decide how to process the metadata, and
+ * to determine the amount of data associated with this type.
+ *
+ * @note the user must subtract the data length of the meta type from meta_len
+ * before invoking this function again.
+ */
+__intrinsic int nfd_in_metadata_pop(void *meta_val,
+                                    unsigned int *meta_len,
+                                    unsigned int *meta_info,
+                                    __addr40 void *pkt_buf_ptr);
+
+
+/**
+ * Retrieve metadata from cache of prepended packet metadata chain.
+ * @param meta_val          Retrieved metadata
+ * @param meta_len          Length of metadata unretrieved before calling
+ * @param meta_info         Encodes types of metadata in metadata chain
+ * @param meta_cache        Transfer registers in which metadata chain cached
+ * @param meta_cache_ptr    Pointer to the location in the cache to use next
+ * @param meta_cache_len    Size of metadata cache in bytes
+ * @param pkt_buf_ptr       Pointer to start of packet buffer
+ *
+ * The application firmware initialises meta_len to the length of metadata
+ * prepended to the packet and meta_info to zero. The meta_info is then
+ * updated by this function as metadata is retrieved.
+ * Returns the meta type if there is more data, zero if meta_len is zero, else
+ * -1 to indicate an error.  The user can set NFD_IN_MAX_META_LEN to specify
+ * the maximum amount of prepend metadata that they expect.  If meta_len is
+ * larger than this value, it is caught as an error.
+ * "meta_val" must be sized to hold NFD_IN_MAX_META_ITEM_LEN (default 4B).  The
+ * user inspects the type returned to decide how to process the metadata, and
+ * to determine the amount of data associated with this type.
+ *
+ * @note the user must subtract the data length of the meta type from "meta_len"
+ * and must add the data length to "meta_cache_ptr" before invoking this
+ * function again.
+ */
+__intrinsic int nfd_in_metadata_pop_cache(void *meta_val,
+                                          unsigned int *meta_len,
+                                          unsigned int *meta_info,
+                                          __xread unsigned int *meta_cache,
+                                          unsigned int *meta_cache_ptr,
+                                          const unsigned int meta_cache_len,
+                                          __addr40 void *pkt_buf_ptr);
 
 
 /**

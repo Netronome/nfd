@@ -101,6 +101,14 @@
  * @NFD_IN_SEQR_QSHIFT          Number of bits to shift QID before
  *                              masking with (NFD_IN_NUM_SEQRS - 1) to
  *                              select sequencer.
+ *
+ * @NFD_IN_MAX_META_LEN         Overwrite the maximum length in bytes
+ *                              of PCI.IN prepended metadata the
+ *                              application supports.
+ * @NFD_IN_MAX_META_ITEM_LEN    Maximum length in byte that one the data
+ *                              can be for a single chained meta data
+ *                              type.  Used in microcode and microC to
+ *                              determine how much data to fetch.
  */
 
 
@@ -133,6 +141,14 @@
  *                              the maximum possible items based on the
  *                              number of packet buffers the application
  *                              provides.
+ *
+ * @NFD_OUT_MAX_META_LEN        Overwrite the maximum length in bytes
+ *                              of PCI.OUT prepended metadata the
+ *                              application supports.
+ * @NFD_OUT_MAX_META_ITEM_LEN   Maximum length in byte that one the data
+ *                              can be for a single chained meta data
+ *                              type.  Used in microC to size transfer
+ *                              registers for data to write.
  */
 
 /**
@@ -146,7 +162,7 @@
  * eBPF defines
  * @NFD_BPF_CAPABLE     Firmware can handle eBPF offload, advertise ABI info
  * @NFD_BPF_CAPS        Mask of application specific BPF capability bits
- *                      (see NFP_NET_CFG_BPF_CAP in kernel/nfp_net_ctrl.h) 
+ *                      (see NFP_NET_CFG_BPF_CAP in kernel/nfp_net_ctrl.h)
  * @NFD_BPF_START_OFF   Offset at which BPF will be loaded
  * @NFD_BPF_DONE_OFF    Offset to jump to on exit
  * @NFD_BPF_MAX_LEN     Maximum BPF program length in instruction words

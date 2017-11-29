@@ -62,4 +62,13 @@
 /* XXX add defines for RX descriptor? */
 
 
+/*
+ * Prepended chained metadata defines
+ */
+#define NFP_NET_META_FIELD_MASK ((1 << NFP_NET_META_FIELD_SIZE) - 1)
+
+/* The maximum supported length of a single metadata value */
+#define NFD_MAX_META_VAL_LEN 60
+
+
 #endif /* !_BLOCKS__VNIC_SHARED_NFD_NET_H_ */

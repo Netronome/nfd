@@ -69,6 +69,7 @@ do {                                                                    \
 
 #endif /* NFD_IN_WQ_SHARED */
 
+
 __intrinsic uint64_t
 swapw64(uint64_t val)
 {
@@ -173,6 +174,129 @@ __nfd_in_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
                     sizeof xfer_update, sizeof xfer_update, sync, sig);
     }
 }
+
+
+__intrinsic int
+nfd_in_metadata_pop(void *meta_val,
+                    unsigned int *meta_len,
+                    unsigned int *meta_info,
+                    __addr40 void *pkt_buf_ptr)
+{
+    __addr40 char *meta_ptr;
+    __xread unsigned int meta_data[(NFD_IN_MAX_META_ITEM_LEN + 4) / 4];
+    SIGNAL sig_meta;
+    int ret = 0;
+
+    ctassert(__is_in_reg_or_lmem(meta_val));
+    ctassert(__is_in_reg_or_lmem(meta_len));
+    ctassert(__is_in_reg_or_lmem(meta_info));
+    ctassert(__is_in_reg_or_lmem(pkt_buf_ptr));
+
+    if (*meta_len > NFD_IN_MAX_META_LEN) {
+        ret = -1;
+        goto err;
+    }
+
+    if (*meta_len == 0) {
+        ret = 0;
+        goto done;
+    }
+
+    meta_ptr = (__addr40 char *)((unsigned long long)pkt_buf_ptr +
+                                 NFD_IN_DATA_OFFSET -
+                                 (unsigned long long)(*meta_len));
+
+    /* If this is the first word of metadata being "popped", read
+     * meta_info word too. */
+    if (*meta_info == 0) {
+        __mem_read32(meta_data, meta_ptr, 4 + NFD_IN_MAX_META_ITEM_LEN,
+                     4 + NFD_IN_MAX_META_ITEM_LEN, ctx_swap, &sig_meta);
+        *meta_info = meta_data[0];
+        *meta_len -= 4;
+    } else {
+        __mem_read32(&meta_data[1], meta_ptr, NFD_IN_MAX_META_ITEM_LEN,
+                     NFD_IN_MAX_META_ITEM_LEN, ctx_swap, &sig_meta);
+    }
+
+    /* "Pop" NFD_IN_MAX_META_ITEM_LEN bytes of metadata */
+    reg_cp(meta_val, &meta_data[1], NFD_IN_MAX_META_ITEM_LEN);
+
+    /* "Pop" type from meta_info */
+    ret = *meta_info & NFP_NET_META_FIELD_MASK;
+    *meta_info >>= NFP_NET_META_FIELD_SIZE;
+
+done:
+err:
+    return ret;
+}
+
+
+__intrinsic int
+nfd_in_metadata_pop_cache(void *meta_val,
+                          unsigned int *meta_len,
+                          unsigned int *meta_info,
+                          __xread unsigned int *meta_cache,
+                          unsigned int *meta_cache_ptr,
+                          const unsigned int meta_cache_len,
+                          __addr40 void *pkt_buf_ptr)
+{
+    __addr40 char *meta_ptr;
+    int ret = 0;
+    unsigned int *meta_val_ptr = (unsigned int *)meta_val;
+    unsigned int i;
+    SIGNAL sig_meta;
+
+    ctassert(__is_in_reg_or_lmem(meta_val));
+    ctassert(__is_in_reg_or_lmem(meta_len));
+    ctassert(__is_in_reg_or_lmem(meta_info));
+    ctassert(__is_ct_const(meta_cache_len));
+    ctassert(__is_in_reg_or_lmem(pkt_buf_ptr));
+    ctassert(meta_cache_len <= NFD_IN_MAX_META_LEN);
+    ctassert(meta_cache_len % 4 == 0);
+
+    if (*meta_len > meta_cache_len) {
+        ret = -1;
+        goto err;
+    }
+
+    if (*meta_len == 0) {
+        ret = 0;
+        goto done;
+    }
+
+
+    /* Cache all metadata in transfer registers */
+    if (*meta_info == 0) {
+        meta_ptr = (__addr40 char *)((unsigned long long)pkt_buf_ptr +
+                                     NFD_IN_DATA_OFFSET -
+                                     (unsigned long long)(*meta_len));
+        __mem_read32(meta_cache, meta_ptr, *meta_len, meta_cache_len,
+                     ctx_swap, &sig_meta);
+
+        /* Set up T_INDEX to access cached metadata */
+        *meta_cache_ptr =
+            ((__ctx() << 7) | __xfer_reg_number(&meta_cache[1])) << 2;
+        *meta_len -= 4;
+        *meta_info = meta_cache[0];
+    }
+
+    local_csr_write(local_csr_t_index, *meta_cache_ptr);
+
+    /* "Pop" type from meta_info to return */
+    ret = *meta_info & NFP_NET_META_FIELD_MASK;
+    *meta_info >>= NFP_NET_META_FIELD_SIZE;
+
+    /* "Pop" NFD_IN_MAX_META_ITEM_LEN bytes of metadata */
+    for (i = 0; i < (NFD_IN_MAX_META_ITEM_LEN >> 2); i++) {
+        __asm alu[*meta_val_ptr, --, B, *$index++]
+        meta_val_ptr = (unsigned int *)((unsigned char *)meta_val + 4 * i);
+    }
+
+done:
+err:
+    return ret;
+}
+
 
 __intrinsic void
 nfd_in_fill_meta(void *pkt_info,
