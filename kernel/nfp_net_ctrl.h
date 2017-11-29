@@ -50,6 +50,7 @@
 #define NFP_NET_META_MARK               2
 #define NFP_NET_META_PORTID             5
 #define NFP_NET_META_CSUM               6 /* checksum complete type */
+#define NFP_NET_META_APP                15 /* app specific meta data */
 
 #define NFP_META_PORT_ID_CTRL           0xffffffff
 
