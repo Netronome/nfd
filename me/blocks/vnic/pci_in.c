@@ -275,7 +275,7 @@ nfd_in_metadata_pop_cache(void *meta_val,
 
         /* Set up T_INDEX to access cached metadata */
         *meta_cache_ptr =
-            ((__ctx() << 7) | __xfer_reg_number(&meta_cache[1])) << 2;
+            (__ctx() << 7) | (__xfer_reg_number(&meta_cache[1]) << 2);
         *meta_len -= 4;
         *meta_info = meta_cache[0];
     }
