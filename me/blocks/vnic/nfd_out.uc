@@ -22,6 +22,8 @@
 
 #include <nfp_chipres.h>
 #include <stdmac.uc>
+#include <ov.uc>
+#include <passert.uc>
 
 #include <nfd_user_cfg.h>
 
@@ -313,7 +315,7 @@
                              in_pkt_start_hi, in_pkt_start_lo, IN_ERROR_LABEL)
 .begin
 
-    .reg pkt_start_lo
+    .reg _pkt_start_lo
     .reg meta_offset
     .reg meta_len_diff
     .reg $meta_info
@@ -334,7 +336,7 @@
     .sig sig_meta
     .set $meta_data[0]
 
-    move(pkt_start_lo, in_pkt_start_lo)
+    move(_pkt_start_lo, in_pkt_start_lo)
 
     .if (io_meta_len == 0)
 
@@ -342,9 +344,9 @@
         move($meta_data[0], in_meta_types)
         alu[io_meta_len, --, B, 4]
 
-    .elif (io_meta_len <= (NFD_OUT_MAX_CHAIN_META_LEN - _META_VAL_LEN))
+    .elif (io_meta_len <= (NFD_OUT_MAX_META_LEN - _META_VAL_LEN))
 
-        alu[meta_offset, pkt_start_lo, -, io_meta_len]
+        alu[meta_offset, _pkt_start_lo, -, io_meta_len]
         mem[read32, $meta_info, in_pkt_start_hi, <<8, meta_offset, 1], \
            ctx_swap[sig_meta]
         alu[$meta_data[0], in_meta_types, OR, $meta_info, \
@@ -368,7 +370,7 @@
     #endif
 
     alu[io_meta_len, io_meta_len, +, _META_VAL_LEN]
-    alu[meta_offset, pkt_start_lo, -, io_meta_len]
+    alu[meta_offset, _pkt_start_lo, -, io_meta_len]
 
     #define_eval _META_LW (1 + (_META_VAL_LEN >> 2))
     ov_single(OV_LENGTH, _META_LW, OVF_SUBTRACT_ONE)

@@ -426,7 +426,7 @@ __intrinsic int nfd_in_metadata_pop(void *meta_val,
  * and must add the data length to "meta_cache_ptr" before invoking this
  * function again.
  */
-__intrinsic int nfd_in_metadata_pop_cache(void *meta_val,
+__intrinsic int nfd_in_metadata_pop_cache(unsigned int *meta_val,
                                           unsigned int *meta_len,
                                           unsigned int *meta_info,
                                           __xread unsigned int *meta_cache,

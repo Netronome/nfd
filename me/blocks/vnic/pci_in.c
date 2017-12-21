@@ -232,7 +232,7 @@ err:
 
 
 __intrinsic int
-nfd_in_metadata_pop_cache(void *meta_val,
+nfd_in_metadata_pop_cache(unsigned int *meta_val,
                           unsigned int *meta_len,
                           unsigned int *meta_info,
                           __xread unsigned int *meta_cache,
@@ -242,7 +242,6 @@ nfd_in_metadata_pop_cache(void *meta_val,
 {
     __addr40 char *meta_ptr;
     int ret = 0;
-    unsigned int *meta_val_ptr = (unsigned int *)meta_val;
     unsigned int i;
     SIGNAL sig_meta;
 
@@ -264,7 +263,6 @@ nfd_in_metadata_pop_cache(void *meta_val,
         goto done;
     }
 
-
     /* Cache all metadata in transfer registers */
     if (*meta_info == 0) {
         meta_ptr = (__addr40 char *)((unsigned long long)pkt_buf_ptr +
@@ -281,16 +279,63 @@ nfd_in_metadata_pop_cache(void *meta_val,
     }
 
     local_csr_write(local_csr_t_index, *meta_cache_ptr);
+    __asm nop
 
     /* "Pop" type from meta_info to return */
     ret = *meta_info & NFP_NET_META_FIELD_MASK;
     *meta_info >>= NFP_NET_META_FIELD_SIZE;
 
     /* "Pop" NFD_IN_MAX_META_ITEM_LEN bytes of metadata */
-    for (i = 0; i < (NFD_IN_MAX_META_ITEM_LEN >> 2); i++) {
-        __asm alu[*meta_val_ptr, --, B, *$index++]
-        meta_val_ptr = (unsigned int *)((unsigned char *)meta_val + 4 * i);
-    }
+    #if NFD_IN_MAX_META_ITEM_LEN == 4
+    __asm alu[*meta_val, --, B, *$index++]
+    #elif NFD_IN_MAX_META_ITEM_LEN > 4
+    __asm alu[meta_val[0], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 8
+        __asm alu[meta_val[1], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 12
+        __asm alu[meta_val[2], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 16
+        __asm alu[meta_val[3], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 20
+        __asm alu[meta_val[4], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 24
+        __asm alu[meta_val[5], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 28
+        __asm alu[meta_val[6], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 32
+        __asm alu[meta_val[7], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 36
+        __asm alu[meta_val[8], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 40
+        __asm alu[meta_val[9], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 44
+        __asm alu[meta_val[10], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 48
+        __asm alu[meta_val[11], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 52
+        __asm alu[meta_val[12], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN >= 56
+        __asm alu[meta_val[13], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN == 60
+        __asm alu[meta_val[14], --, B, *$index++]
+    #endif
+    #if NFD_IN_MAX_META_ITEM_LEN > 60
+        #error "Maximum supported value of NFD_IN_MAX_META_ITEM_LEN is 60"
+    #endif
 
 done:
 err:

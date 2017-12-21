@@ -23,6 +23,8 @@
 #include <nfp_chipres.h>
 #include <stdmac.uc>
 #include <bitfields.uc>
+#include <ov.uc>
+#include <passert.uc>
 
 #include <nfd_user_cfg.h>
 
@@ -174,6 +176,11 @@
  * nfd_in_metadata_pop() */
 #ifndef NFD_IN_MAX_META_ITEM_LEN
 #define NFD_IN_MAX_META_ITEM_LEN 4
+#endif
+
+/* Defined in <nfp3200/nfp_me.h> */
+#ifndef NFP_MECSR_ACTIVE_CTX_STS_ACNO_mask
+#define NFP_MECSR_ACTIVE_CTX_STS_ACNO_mask (0x7)
 #endif
 
 
@@ -361,7 +368,8 @@
  * prepend metadata that they expect.  If meta_len is larger than this value,
  * it is caught as an error.
  * "out_meta_val" must be sized to hold NFD_IN_MAX_META_ITEM_LEN (default 4B).
- * "out_meta_val" is a scalar for 4B and an aggregate if NFD_IN_MAX_ITEM_LEN > 4
+ * "out_meta_val" is a scalar for 4B and an aggregate if
+ * NFD_IN_MAX_META_ITEM_LEN > 4
  * The user inspects the "out_meta_type" to decide how to process the metadata,
  * and to determine the amount of data associated with this type.
  *
@@ -369,7 +377,7 @@
  * "io_meta_len" before invoking this function again.
  */
 #macro nfd_in_metadata_pop(out_meta_type, out_meta_val, io_meta_len, \
-                           io_meta_info, in_pkt_buf_hi,
+                           io_meta_info, in_pkt_buf_hi, \
                            IN_EMPTY_LABEL, IN_ERROR_LABEL)
 .begin
 
@@ -377,6 +385,8 @@
     .reg read $meta_data[(1 + (NFD_IN_MAX_META_ITEM_LEN >> 2))]
     .xfer_order $meta_data
     .sig sig_meta
+
+    move(out_meta_type, 0)
 
     .if (io_meta_len > NFD_IN_MAX_META_LEN)
         #if (!streq('IN_ERROR_LABEL', '--'))
@@ -387,7 +397,6 @@
     .endif
 
     .if (io_meta_len == 0)
-        move(out_meta_type, 0)
         #if (!streq('IN_EMPTY_LABEL', '--'))
             br[IN_EMPTY_LABEL]
         #else
@@ -399,8 +408,8 @@
 
     /* If this is the first word of metadata being "popped", read
      * meta_info word too. */
-    #define_eval _META_INFO_LW (1 + (NFD_IN_MAX_ITEM_LEN >> 2))
-    #define_eval _META_LW (NFD_IN_MAX_ITEM_LEN >> 2)
+    #define_eval _META_INFO_LW (1 + (NFD_IN_MAX_META_ITEM_LEN >> 2))
+    #define_eval _META_LW (NFD_IN_MAX_META_ITEM_LEN >> 2)
     .if (io_meta_info == 0)
 
         ov_single(OV_LENGTH, _META_INFO_LW, OVF_SUBTRACT_ONE)
@@ -413,7 +422,7 @@
 
         ov_single(OV_LENGTH, _META_LW, OVF_SUBTRACT_ONE)
         mem[read32, $meta_data[1], in_pkt_buf_hi, <<8, meta_offset, \
-            max_/**/_META_LW], ctx_swap[sig_meta]
+            max_/**/_META_LW], indirect_ref, ctx_swap[sig_meta]
 
     .endif
 
@@ -427,8 +436,7 @@
     /* "Pop" type from meta_info */
     alu[out_meta_type, io_meta_info, AND, NFP_NET_META_FIELD_MASK]
 
-    alu[io_meta_info, --, B, io_meta_info, \
-        >>(NFP_NET_META_FIELD_SIZE * in_meta_type_num)]
+    alu[io_meta_info, --, B, io_meta_info, >>(NFP_NET_META_FIELD_SIZE)]
 
 meta_pop_err#:
 meta_pop_empty#:
@@ -464,7 +472,8 @@ meta_pop_empty#:
  * prepend metadata that they expect.  If meta_len is larger than this value,
  * it is caught as an error.
  * "out_meta_val" must be sized to hold NFD_IN_MAX_META_ITEM_LEN (default 4B).
- * "out_meta_val" is a scalar for 4B and an aggregate if NFD_IN_MAX_ITEM_LEN > 4
+ * "out_meta_val" is a scalar for 4B and an aggregate if
+ * NFD_IN_MAX_META_ITEM_LEN > 4
  * The user inspects the "out_meta_type" to decide how to process the metadata,
  * and to determine the amount of data associated with this type.
  *
@@ -479,15 +488,18 @@ meta_pop_empty#:
 .begin
 
     .reg meta_offset
+    .reg meta_lw
     .reg ctx_pop
     .reg active_ctx
     .sig sig_meta
 
     passert(is_ct_const(in_meta_cache_len));
-    passert(in_meta_cache_len <= NFD_MAX_META_VAL_LEN);
+    passert(in_meta_cache_len <= NFD_IN_MAX_META_LEN);
     passert(in_meta_cache_len % 4 == 0);
 
     #define_eval _META_CACHE_LW in_meta_cache_len>>2
+
+    move(out_meta_type, 0)
 
     .if (io_meta_len > in_meta_cache_len)
         #if (!streq('IN_ERROR_LABEL', '--'))
@@ -498,7 +510,6 @@ meta_pop_empty#:
     .endif
 
     .if (io_meta_len == 0)
-        move(out_meta_type, 0)
         #if (!streq('IN_EMPTY_LABEL', '--'))
             br[IN_EMPTY_LABEL]
         #else
