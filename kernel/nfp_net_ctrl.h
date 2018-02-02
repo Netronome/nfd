@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Netronome, Inc.
+ * Copyright 2014-2018 Netronome, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,8 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * vim:shiftwidth=8:noexpandtab
- *
+ * nfp_net_ctrl.h
  * Netronome network device driver: Control BAR layout
  */
 #ifndef _NFP_NET_CTRL_H_
@@ -23,14 +22,10 @@
 /**
  * Configuration BAR size.
  *
- * The configuration BAR is 8K in size, but on the NFP6000, due to
+ * The configuration BAR is 8K in size, but due to
  * THB-350, 32k needs to be reserved.
  */
-#ifdef __NFP_IS_6000
 #define NFP_NET_CFG_BAR_SZ              (32 * 1024)
-#else
-#define NFP_NET_CFG_BAR_SZ              (8 * 1024)
-#endif
 
 /**
  * Offset in Freelist buffer where packet starts on RX
@@ -69,6 +64,7 @@
 #define NFP_NET_RSS_IPV6_EX_UDP         9
 
 /**
+ * Ring counts
  * @NFP_NET_TXR_MAX:         Maximum number of TX rings
  * @NFP_NET_RXR_MAX:         Maximum number of RX rings
  */
@@ -120,11 +116,13 @@
 #define   NFP_NET_CFG_CTRL_CSUM_COMPLETE  (0x1 << 30) /* Checksum complete */
 #define   NFP_NET_CFG_CTRL_LIVE_ADDR      (0x1 << 31) /* live MAC addr change */
 
-#define   NFP_NET_CFG_CTRL_LSO_ANY      (NFP_NET_CFG_CTRL_LSO | \
+#define NFP_NET_CFG_CTRL_LSO_ANY        (NFP_NET_CFG_CTRL_LSO | \
                                          NFP_NET_CFG_CTRL_LSO2)
-#define   NFP_NET_CFG_CTRL_RSS_ANY      (NFP_NET_CFG_CTRL_RSS | \
+#define NFP_NET_CFG_CTRL_RSS_ANY        (NFP_NET_CFG_CTRL_RSS | \
                                          NFP_NET_CFG_CTRL_RSS2)
-#define   NFP_NET_CFG_CTRL_CHAIN_META   (NFP_NET_CFG_CTRL_RSS2 | \
+#define NFP_NET_CFG_CTRL_RXCSUM_ANY     (NFP_NET_CFG_CTRL_RXCSUM | \
+                                         NFP_NET_CFG_CTRL_CSUM_COMPLETE)
+#define NFP_NET_CFG_CTRL_CHAIN_META     (NFP_NET_CFG_CTRL_RSS2 | \
                                          NFP_NET_CFG_CTRL_CSUM_COMPLETE)
 
 #define NFP_NET_CFG_UPDATE              0x0004
@@ -156,9 +154,9 @@
  * @NFP_NET_CFG_VERSION:     Firmware version number
  * @NFP_NET_CFG_STS:         Status
  * @NFP_NET_CFG_CAP:         Capabilities (same bits as @NFP_NET_CFG_CTRL)
- * @NFP_NET_MAX_TXRINGS:     Maximum number of TX rings
- * @NFP_NET_MAX_RXRINGS:     Maximum number of RX rings
- * @NFP_NET_MAX_MTU:         Maximum support MTU
+ * @NFP_NET_CFG_MAX_TXRINGS: Maximum number of TX rings
+ * @NFP_NET_CFG_MAX_RXRINGS: Maximum number of RX rings
+ * @NFP_NET_CFG_MAX_MTU:     Maximum support MTU
  * @NFP_NET_CFG_START_TXQ:   Start Queue Control Queue to use for TX (PF only)
  * @NFP_NET_CFG_START_RXQ:   Start Queue Control Queue to use for RX (PF only)
  *
@@ -180,7 +178,7 @@
 #define   NFP_NET_CFG_STS_LINK_RATE_SHIFT 1
 #define   NFP_NET_CFG_STS_LINK_RATE_MASK  0xF
 #define   NFP_NET_CFG_STS_LINK_RATE       \
-	(NFP_NET_CFG_STS_LINK_RATE_MASK << NFP_NET_CFG_STS_LINK_RATE_SHIFT)
+        (NFP_NET_CFG_STS_LINK_RATE_MASK << NFP_NET_CFG_STS_LINK_RATE_SHIFT)
 #define   NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED   0
 #define   NFP_NET_CFG_STS_LINK_RATE_UNKNOWN       1
 #define   NFP_NET_CFG_STS_LINK_RATE_1G            2
@@ -212,7 +210,7 @@
 #define   NFP_NET_CFG_RSS_CAP_HFUNC       0xff000000
 
 /**
- * NFP6000/NFP4000 - VXLAN/UDP encap configuration
+ * VXLAN/UDP encap configuration
  * @NFP_NET_CFG_VXLAN_PORT:     Base address of table of tunnels' UDP dst ports
  * @NFP_NET_CFG_VXLAN_SZ:       Size of the UDP port table in bytes
  */
@@ -223,7 +221,7 @@
 #define NFP_NET_N_VXLAN_PORTS  (NFP_NET_CFG_VXLAN_SZ / sizeof(uint16_t))
 
 /**
- * NFP6000 - BPF section
+ * BPF section
  * @NFP_NET_CFG_BPF_ABI:        BPF ABI version
  * @NFP_NET_CFG_BPF_CAP:        BPF capabilities
  * @NFP_NET_CFG_BPF_MAX_LEN:    Maximum size of JITed BPF code in bytes
@@ -291,7 +289,7 @@
  * @NFP_NET_CFG_TXR_SZ:      Per TX ring ring size (1B entries)
  * @NFP_NET_CFG_TXR_VEC:     Per TX ring MSI-X table entry (1B entries)
  * @NFP_NET_CFG_TXR_PRIO:    Per TX ring priority (1B entries)
- * @NFP_NET_CFG_TXR_IRQ_MOD: Per TX ring interrupt moderation (4B entries)
+ * @NFP_NET_CFG_TXR_IRQ_MOD: Per TX ring interrupt moderation packet
  */
 #define NFP_NET_CFG_TXR_BASE            0x0200
 #define NFP_NET_CFG_TXR_ADDR(_x)        (NFP_NET_CFG_TXR_BASE + ((_x) * 0x8))
@@ -398,20 +396,14 @@
 
 /**
  * VLAN filtering using general use mailbox
- * @NFP_NET_CFG_VLAN_FILTER:           Base address of VLAN filter mailbox
- * @NFP_NET_CFG_VLAN_FILTER_VID:       VLAN ID to filter
- * @NFP_NET_CFG_VLAN_FILTER_PROTO:     VLAN proto to filter
- * @NFP_NET_CFG_VXLAN_SZ:              Size of the VLAN filter mailbox in bytes
+ * @NFP_NET_CFG_VLAN_FILTER:            Base address of VLAN filter mailbox
+ * @NFP_NET_CFG_VLAN_FILTER_VID:        VLAN ID to filter
+ * @NFP_NET_CFG_VLAN_FILTER_PROTO:      VLAN proto to filter
+ * @NFP_NET_CFG_VXLAN_SZ:               Size of the VLAN filter mailbox in bytes
  */
 #define NFP_NET_CFG_VLAN_FILTER         NFP_NET_CFG_MBOX_VAL
-#define  NFP_NET_CFG_VLAN_FILTER_VID   NFP_NET_CFG_VLAN_FILTER
-#define  NFP_NET_CFG_VLAN_FILTER_PROTO  (NFP_NET_CFG_VLAN_FILTER + 2)
-#define NFP_NET_CFG_VLAN_FILTER_SZ      0x0004
+#define  NFP_NET_CFG_VLAN_FILTER_VID    NFP_NET_CFG_VLAN_FILTER
+#define  NFP_NET_CFG_VLAN_FILTER_PROTO   (NFP_NET_CFG_VLAN_FILTER + 2)
+#define NFP_NET_CFG_VLAN_FILTER_SZ       0x0004
 
 #endif /* _NFP_NET_CTRL_H_ */
-/*
- * Local variables:
- * c-file-style: "Linux"
- * indent-tabs-mode: t
- * End:
- */
