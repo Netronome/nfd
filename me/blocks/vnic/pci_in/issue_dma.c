@@ -111,7 +111,7 @@ __shared __lmem struct nfd_in_dma_state queue_data[NFD_IN_MAX_QUEUES];
 
 static unsigned int nfd_in_lso_cntr_addr = 0;
 /* storage for LSO header on a per queue basis */
-__export __shared __ctm __align(NFD_IN_MAX_LSO_HDR_SZ) unsigned char
+__export __shared __addr40 __ctm __align(NFD_IN_MAX_LSO_HDR_SZ) unsigned char
     lso_hdr_data[NFD_IN_MAX_LSO_HDR_SZ * NFD_IN_MAX_QUEUES];
 
 static __shared __gpr unsigned int lso_hdr_data_base;
@@ -134,7 +134,7 @@ __shared __gpr unsigned int jumbo_dma_seq_compl = 0;
 __export __shared __cls __align(NFD_IN_DESC_RING_SZ) struct nfd_in_tx_desc
     desc_ring0[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
 
-__export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING0_SZ)
+__export __addr40 __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING0_SZ)
     struct nfd_in_issued_desc nfd_in_issued_ring0[NFD_IN_ISSUED_RING0_SZ];
 
 /* Signals and transfer registers for managing
@@ -155,7 +155,8 @@ __visible volatile SIGNAL nfd_in_gather_compl_refl_sig0;
 __export __shared __cls __align(NFD_IN_DESC_RING_SZ) struct nfd_in_tx_desc
     desc_ring1[NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ];
 
-__export __ctm __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING1_SZ)
+__export __addr40 __ctm
+    __align(sizeof(struct nfd_in_issued_desc) * NFD_IN_ISSUED_RING1_SZ)
     struct nfd_in_issued_desc nfd_in_issued_ring1[NFD_IN_ISSUED_RING1_SZ];
 
 /* Signals and transfer registers for managing
@@ -331,7 +332,8 @@ issue_dma_setup_shared()
     lso_hdr_data_base = ((unsigned int) &lso_hdr_data) & 0xFFFFFFFF;
     for (i = 0; i < ((NFD_IN_MAX_LSO_HDR_SZ >> 2) * NFD_IN_MAX_QUEUES); i++) {
         lso_hdr_data_init_xw = 0xDEADBEEF;
-        mem_write32(&lso_hdr_data_init_xw, (__mem void *)&lso_hdr_data[i * 4],
+        mem_write32(&lso_hdr_data_init_xw,
+                    (__addr40 __mem void *)&lso_hdr_data[i * 4],
                     sizeof(lso_hdr_data_init_xw));
     }
 
@@ -494,7 +496,8 @@ issue_dma_setup()
                                     NFD_IN_ISSUE_END_CTX);
 
 #ifdef NFD_IN_LSO_CNTR_ENABLE
-    nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *) nfd_in_lso_cntrs);
+    nfd_in_lso_cntr_addr =
+        cntr64_get_addr((__addr40 __mem void *) nfd_in_lso_cntrs);
 #endif
     nfd_in_issued_lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
                                                NFD_IN_ISSUED_LSO_RING_NUM);
@@ -731,7 +734,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     SIGNAL lso_enq_sig;                                                      \
     SIGNAL lso_hdr_sig;                                                      \
     SIGNAL lso_journal_sig;                                                  \
-    __addr40 void *hdr_pkt_ptr;                                              \
+    __addr40 __mem void *hdr_pkt_ptr;                                        \
     unsigned int mu_buf_left;                                                \
     unsigned int dma_left;                                                   \
     unsigned int dma_length;                                                 \
@@ -1063,8 +1066,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
                 header_to_read = ((lso_offhdr + 0x3F) & ~0x3F);              \
                 __mem_pe_dma_ctm_to_mu(                                      \
-                    (__mem void *)hdr_pkt_ptr,                               \
-                    (__ctm void *)&lso_hdr_data[                             \
+                    (__addr40 __mem void *)hdr_pkt_ptr,                      \
+                    (__addr40 __ctm void *)&lso_hdr_data[                    \
                         (queue << __log2(NFD_IN_MAX_LSO_HDR_SZ))],           \
                     header_to_read, sig_done, &lso_hdr_sig);                 \
                                                                              \

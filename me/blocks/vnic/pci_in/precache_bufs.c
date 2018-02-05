@@ -48,7 +48,7 @@
 /* Configure *l$index3 to be a global pointer, and
  * set up a convenience define */
 #define NFD_IN_BUF_STORE_PTR *l$index3
-_init_csr("mecsr:CtxEnables.LMAddr3Global 1");
+__asm .init_csr mecsr:CtxEnables.LMAddr3Global 1
 
 
 struct precache_bufs_state {

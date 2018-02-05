@@ -23,7 +23,7 @@
 #include <types.h>
 
 
-__intrinsic void ctm_ring_setup(unsigned int rnum, __ctm void *base,
+__intrinsic void ctm_ring_setup(unsigned int rnum, __addr40 __ctm void *base,
                                 size_t size);
 
 __intrinsic void ctm_ring_put(unsigned int isl, unsigned int rnum,

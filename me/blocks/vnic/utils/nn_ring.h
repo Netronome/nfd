@@ -35,9 +35,10 @@
  * Configure NN put and get pointers at init time.
  * The pointers on the receiving ME determine the behaviour of the NN ring.
  */
-#define NN_RING_ZERO_PTRS       \
-    _init_csr("mecsr:NNPut 0"); \
-    _init_csr("mecsr:NNGet 0")
+#define NN_RING_ZERO_PTRS               \
+    __asm { .init_csr mecsr:NNPut 0 }   \
+    __asm { .init_csr mecsr:NNGut 0 }
+
 
 /**
  * Configure the NN ring empty assert setting in CtxEnables.  This should
@@ -45,7 +46,7 @@
  * See the databook for a description of possible values.
  */
 #define NN_RING_EMPTY_ASSERT_SET(_x)                        \
-    _init_csr("mecsr:CtxEnables.NextNeighborEmptyAssert " #_x)
+    __asm .init_csr mecsr:CtxEnables.NextNeighborEmptyAssert #_x
 
 
 /**

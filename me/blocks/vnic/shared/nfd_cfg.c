@@ -100,7 +100,7 @@ _nfd_flr_ack_pf(unsigned int pcie_isl)
     unsigned int flr_addr;
 
     unsigned int atomic_data;
-    __mem char *atomic_addr;
+    __addr40 __mem char *atomic_addr;
 
 
     flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
@@ -133,7 +133,7 @@ _nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
     unsigned int flr_addr;
 
     __xwrite unsigned int atomic_data;
-    __mem char *atomic_addr;
+    __addr40 __mem char *atomic_addr;
 
     flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
             (pcie_isl << NFP_PCIEX_ISL_shf));

@@ -320,7 +320,8 @@ notify_setup()
                                     NFD_IN_NOTIFY_END_CTX);
 #ifdef NFD_IN_LSO_CNTR_ENABLE
     /* get the location of LSO statistics */
-    nfd_in_lso_cntr_addr = cntr64_get_addr((__mem void *) nfd_in_lso_cntrs);
+    nfd_in_lso_cntr_addr =
+        cntr64_get_addr((__addr40 __mem void *) nfd_in_lso_cntrs);
 #endif
     nfd_in_issued_lso_ring_num0 = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
                                                 NFD_IN_ISSUED_LSO_RING0_NUM);

@@ -37,7 +37,7 @@
             island 8 8}
 
 #define NFD_OUT_ACTIVE_BMSK_LINK                \
-    (__mem void *) _link_sym(nfd_out_active_bmsk)
+    (__addr40 __mem void *) _link_sym(nfd_out_active_bmsk)
 
 
 struct qc_xfers {
