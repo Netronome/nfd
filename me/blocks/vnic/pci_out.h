@@ -276,7 +276,7 @@ __intrinsic int nfd_out_metadata_push(unsigned int *meta_len,
                                       void *meta_val,
                                       const unsigned int meta_type_num,
                                       const unsigned int meta_val_len,
-                                      __addr40 void *pkt_start_ptr);
+                                      __mem40 void *pkt_start_ptr);
 
 /**
  * Populate the buffer address fields of the CPP descriptor for a packet.

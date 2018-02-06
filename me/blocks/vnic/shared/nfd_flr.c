@@ -315,7 +315,7 @@ nfd_flr_check_pf(unsigned int pcie_isl,
                  __shared __gpr unsigned int *flr_pend_status)
 {
     __xread unsigned int seen_flr;
-    __addr40 __mem char *atomic_addr;
+    __mem40 char *atomic_addr;
     SIGNAL atomic_sig;
     __xread unsigned int cntrlr3;
     unsigned int xpb_addr;
@@ -362,7 +362,7 @@ nfd_flr_check_vfs(unsigned int pcie_isl,
 {
     __xread unsigned int seen_flr[2];
     __xread unsigned int hw_flr[2];
-    __addr40 __mem char *atomic_addr;
+    __mem40 char *atomic_addr;
     SIGNAL atomic_sig;
     __xread unsigned int cntrlr3;
     unsigned int xpb_addr;
@@ -445,7 +445,7 @@ nfd_flr_ack_pf(unsigned int pcie_isl)
     unsigned int flr_addr;
 
     unsigned int atomic_data;
-    __addr40 __mem char *atomic_addr;
+    __mem40 char *atomic_addr;
 
 
     flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
@@ -481,7 +481,7 @@ nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
     unsigned int flr_addr;
 
     __xwrite unsigned int atomic_data;
-    __addr40 __mem char *atomic_addr;
+    __mem40 char *atomic_addr;
 
     flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
             (pcie_isl << NFP_PCIEX_ISL_shf));

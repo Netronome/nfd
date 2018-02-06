@@ -180,9 +180,9 @@ __intrinsic int
 nfd_in_metadata_pop(void *meta_val,
                     unsigned int *meta_len,
                     unsigned int *meta_info,
-                    __addr40 void *pkt_buf_ptr)
+                    __mem40 void *pkt_buf_ptr)
 {
-    __addr40 char *meta_ptr;
+    __mem40 char *meta_ptr;
     __xread unsigned int meta_data[(NFD_IN_MAX_META_ITEM_LEN + 4) / 4];
     SIGNAL sig_meta;
     int ret = 0;
@@ -202,9 +202,9 @@ nfd_in_metadata_pop(void *meta_val,
         goto done;
     }
 
-    meta_ptr = (__addr40 char *)((unsigned long long)pkt_buf_ptr +
-                                 NFD_IN_DATA_OFFSET -
-                                 (unsigned long long)(*meta_len));
+    meta_ptr = (__mem40 char *)((unsigned long long)pkt_buf_ptr +
+                                NFD_IN_DATA_OFFSET -
+                                (unsigned long long)(*meta_len));
 
     /* If this is the first word of metadata being "popped", read
      * meta_info word too. */
@@ -238,9 +238,9 @@ nfd_in_metadata_pop_cache(unsigned int *meta_val,
                           __xread unsigned int *meta_cache,
                           unsigned int *meta_cache_ptr,
                           const unsigned int meta_cache_len,
-                          __addr40 void *pkt_buf_ptr)
+                          __mem40 void *pkt_buf_ptr)
 {
-    __addr40 char *meta_ptr;
+    __mem40 char *meta_ptr;
     int ret = 0;
     unsigned int i;
     SIGNAL sig_meta;
@@ -265,9 +265,9 @@ nfd_in_metadata_pop_cache(unsigned int *meta_val,
 
     /* Cache all metadata in transfer registers */
     if (*meta_info == 0) {
-        meta_ptr = (__addr40 char *)((unsigned long long)pkt_buf_ptr +
-                                     NFD_IN_DATA_OFFSET -
-                                     (unsigned long long)(*meta_len));
+        meta_ptr = (__mem40 char *)((unsigned long long)pkt_buf_ptr +
+                                    NFD_IN_DATA_OFFSET -
+                                    (unsigned long long)(*meta_len));
         __mem_read32(meta_cache, meta_ptr, *meta_len, meta_cache_len,
                      ctx_swap, &sig_meta);
 

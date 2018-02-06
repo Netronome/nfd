@@ -212,7 +212,7 @@ NFD_CFG_RINGS_DECL(3);
                      global 64 64)
 
 #define NFD_FLR_LINK_IND(_isl)                                  \
-    ((__addr40  __mem char *) _link_sym(nfd_flr_seen) + ((_isl) * 16))
+    ((__mem40 char *) _link_sym(nfd_flr_seen) + ((_isl) * 16))
 #define NFD_FLR_LINK(_isl) NFD_FLR_LINK_IND(_isl)
 
 

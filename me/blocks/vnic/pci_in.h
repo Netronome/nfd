@@ -398,7 +398,7 @@ __intrinsic void __nfd_in_push_pkt_cnt(unsigned int pcie_isl,
 __intrinsic int nfd_in_metadata_pop(void *meta_val,
                                     unsigned int *meta_len,
                                     unsigned int *meta_info,
-                                    __addr40 void *pkt_buf_ptr);
+                                    __mem40 void *pkt_buf_ptr);
 
 
 /**
@@ -432,7 +432,7 @@ __intrinsic int nfd_in_metadata_pop_cache(unsigned int *meta_val,
                                           __xread unsigned int *meta_cache,
                                           unsigned int *meta_cache_ptr,
                                           const unsigned int meta_cache_len,
-                                          __addr40 void *pkt_buf_ptr);
+                                          __mem40 void *pkt_buf_ptr);
 
 
 /**

@@ -28,7 +28,7 @@
 
 
 __intrinsic void
-ctm_ring_setup(unsigned int rnum, __addr40 __ctm void *base, size_t size)
+ctm_ring_setup(unsigned int rnum, __ctm40 void *base, size_t size)
 {
     unsigned int entries = size / 4;
     __gpr struct nfp_ctm_ring_base ctm_ring_base_tmp;

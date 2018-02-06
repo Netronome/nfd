@@ -119,7 +119,7 @@ FL_CACHE_MEM_ALLOC(PCIE_ISL);
 
 
 #define FL_CACHE_MEM_IND(_isl)                      \
-    ((__addr40 __mem char *) _link_sym(fl_cache_mem##_isl))
+    ((__mem40 char *) _link_sym(fl_cache_mem##_isl))
 #define FL_CACHE_MEM(_isl) FL_CACHE_MEM_IND(_isl)
 
 

@@ -222,8 +222,7 @@ msix_qmon_init(unsigned int pcie_isl)
  */
 __intrinsic static void
 msix_reconfig_rings(unsigned int pcie_isl, unsigned int vid,
-                    __addr40 __mem char *cfg_bar, int rx_rings,
-                    uint64_t vf_rings)
+                    __mem40 char *cfg_bar, int rx_rings, uint64_t vf_rings)
 {
     unsigned int qnum;
     uint64_t rings;
@@ -232,7 +231,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vid,
     __xread unsigned int entry_r, tmp_r;
     __xwrite unsigned int tmp_w;
     __cls uint8_t *cls_addr;
-    __addr40 __mem char *entry_addr;
+    __mem40 char *entry_addr;
 
     uint64_t queues;
     uint64_t new_queues_en;
@@ -320,14 +319,13 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vid,
  */
 __intrinsic static void
 msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vid,
-                      __addr40 __mem char *cfg_bar, int rx_rings,
-                      uint64_t vf_rings)
+                      __mem40 char *cfg_bar, int rx_rings, uint64_t vf_rings)
 {
     unsigned int qnum;
     uint64_t rings;
     unsigned int ring;
     __xread unsigned int entry_r;
-    __addr40 __mem char *entry_addr;
+    __mem40 char *entry_addr;
 
     /* Update the interrupt vector data, i.e. the MSI-X table entry
      * number, for all active rings. */
@@ -372,8 +370,7 @@ msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vid,
  */
 __intrinsic void
 msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
-                   __addr40 __mem char *cfg_bar,
-                   __xread unsigned int cfg_bar_data[6])
+                   __mem40 char *cfg_bar, __xread unsigned int cfg_bar_data[6])
 {
     unsigned int control, update;
 
@@ -823,13 +820,13 @@ msix_send_q_irq(const unsigned int pcie_isl, int qnum, int rx_queue,
     if (!automask) {
         cfg_bar = NFD_CFG_BAR(msix_cfg_bars[pcie_isl], vid);
         cfg_bar += NFP_NET_CFG_ICR(entry);
-        mem_read32_le(&mask_r, (__addr40 __mem void *)cfg_bar, sizeof(mask_r));
+        mem_read32_le(&mask_r, (__mem40 void *)cfg_bar, sizeof(mask_r));
         if (mask_r & 0x000000ff) {
             ret = 1;
             goto out;
         }
         mask_w = NFP_NET_CFG_ICR_RXTX;
-        mem_write8_le(&mask_w, (__addr40 __mem void *)cfg_bar, 1);
+        mem_write8_le(&mask_w, (__mem40 void *)cfg_bar, 1);
     }
 
     if (NFD_VID_IS_VF(vid))
