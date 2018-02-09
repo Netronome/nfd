@@ -161,6 +161,7 @@
 /**
  * eBPF defines
  * @NFD_BPF_CAPABLE     Firmware can handle eBPF offload, advertise ABI info
+ * @NFD_BPF_ABI         BPF ABI version number to advertise
  * @NFD_BPF_CAPS        Mask of application specific BPF capability bits
  *                      (see NFP_NET_CFG_BPF_CAP in kernel/nfp_net_ctrl.h)
  * @NFD_BPF_START_OFF   Offset at which BPF will be loaded
