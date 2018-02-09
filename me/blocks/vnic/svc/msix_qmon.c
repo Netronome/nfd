@@ -73,8 +73,6 @@
  * logic translates from "rings" to queues.
  */
 
-#define MAX_QUEUE_NUM (NFD_MAX_VFS * NFD_MAX_VF_QUEUES + \
-                       NFD_MAX_PFS * NFD_MAX_PF_QUEUES - 1)
 #define MAX_NUM_PCI_ISLS 4
 
 
