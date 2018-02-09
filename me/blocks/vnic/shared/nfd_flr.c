@@ -186,11 +186,14 @@ nfd_flr_init_pf_cfg_bar(__emem char *isl_base, unsigned int vid)
 #ifndef NFD_BPF_MAX_LEN
 #define NFD_BPF_MAX_LEN (8 * 1024 - NFD_BPF_START_OFF)
 #endif
+#ifndef NFD_BPF_STACK_SZ
+#define NFD_BPF_STACK_SZ 0
+#endif
 
     __xwrite unsigned int bpf_cfg[] =
         { (NFD_BPF_ABI | (NFD_BPF_CAPS << 8) | (NFD_BPF_MAX_LEN << 16)),
           NFD_BPF_START_OFF | NFD_BPF_DONE_OFF << 16,
-          30 << 8 /* CTM buf size / 64 */ };
+          NFD_BPF_STACK_SZ / 64 | 30 << 8 /* CTM buf size / 64 */ };
 #endif
 
     mem_write64(&cfg,
