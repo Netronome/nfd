@@ -1546,6 +1546,31 @@ do {                                                                    \
             __critical_path(_priority);                                 \
         }                                                               \
                                                                         \
+        /* Do smart rounding of the DMA length, if the packet */        \
+        /* is large enough to justify it */                             \
+        if (dma_len > (128 + 8 - 1)) {                                  \
+            unsigned int start_off;                                     \
+            unsigned int len_adj;                                       \
+                                                                        \
+            /* dma_len stores "length - 1" */                           \
+            /* round8(v) = 1 + (v - 1) + 7 - ((v - 1) & 7) */           \
+            /* hence round_dma(dma_len) = dma_len + 7 - dma_len & 7 */  \
+            /* it is safe to round dma_len if: */                       \
+            /* 1: start_off == 0; rounding up can't cross an 8B boundary */ \
+            /* 2: sign(start_off + length & 7 - 8) == */                \
+            /*       sign(start_off + 8 - 8) == "+ve" */                \
+            /* Hence start_off > (8 - length & 7) */                    \
+            /* or start_off > len_adj */                                \
+            len_adj = 7 - (dma_len & 7);                                \
+            start_off = pcie_addr_lo & 7;                               \
+            if ((start_off == 0) || (start_off > len_adj)) {            \
+                /* XXX inspecting the list file, it's better to test */ \
+                /* start_off == 0 first so that the len_adj calc */     \
+                /* can be done in the defer shadow */                   \
+                dma_len += len_adj;                                     \
+            }                                                           \
+        }                                                               \
+                                                                        \
         /* Issue final DMA for the packet */                            \
         dma_out.pkt##_pkt##.__raw[0] = cpp_addr_lo + NFD_IN_DATA_OFFSET; \
         dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                    \
