@@ -20,7 +20,10 @@
 /**
  * Queue number defines
  * The total number of queues allocated must be less than or equal to
- * 64, and the number of queues for each vNIC must be a power of two.
+ * 64 (unless queue oversubscription is used), and the number of queues
+ * for each vNIC must be a power of two.  Queue oversubscription allows
+ * the last PF to receive fewer than NFD_MAX_PF_QUEUES, to keep the
+ * total queues within the 64 limit.
  * Currently NFD_MAX_VF_QUEUES must be 1.  The control vNIC (if used)
  * requires one queue.
  * @NFD_MAX_VFS         Number of virtual function vNICs to support
@@ -28,6 +31,7 @@
  * @NFD_MAX_VF_QUEUES   Number of queues to support per VF vNIC
  * @NFD_MAX_PF_QUEUES   Number of queues to support per PF vNIC
  * @NFD_USE_CTRL        Create control vNIC, requires one queue
+ * @NFD_USE_OVERSUBSCRIPTION    Allow queue oversubscription
  */
 
 /**

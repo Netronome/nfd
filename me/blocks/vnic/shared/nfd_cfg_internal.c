@@ -578,6 +578,16 @@ _nfd_cfg_init_pf_cfg_bar(unsigned int vid)
           NFD_BPF_STACK_SZ / 64 | 30 << 8 /* CTM buf size / 64 */ };
 #endif
 
+#ifdef NFD_USE_OVERSUBSCRIPTION
+    /* Adjust the number of queues advertised to the host
+     * for the last PF */
+    if (vid == NFD_LAST_PF) {
+        cfg[(NFP_NET_CFG_MAX_TXRINGS - NFP_NET_CFG_VERSION) / 4] =
+            NFD_LAST_PF_MAX_QUEUES;
+        cfg[(NFP_NET_CFG_MAX_RXRINGS - NFP_NET_CFG_VERSION) / 4] =
+            NFD_LAST_PF_MAX_QUEUES;
+    }
+#endif
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
 
@@ -958,6 +968,11 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 #endif
             }
 
+#ifdef NFD_USE_OVERSUBSCRIPTION
+            if (vid == NFD_LAST_PF)
+                cfg_msg->queue = NFD_LAST_PF_MAX_QUEUES - 1;
+#endif
+
             /* Setup the remaining parse_msg info */
             cfg_msg->vid = vid;
             cfg_msg->interested = 1;
@@ -1125,6 +1140,11 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
     /* Set the queue to process to the final queue */
     if (NFD_VID_IS_PF(cfg_msg->vid)) {
         cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
+#ifdef NFD_USE_OVERSUBSCRIPTION
+        if (cfg_msg->vid == NFD_LAST_PF) {
+            cfg_msg->queue = NFD_LAST_PF_MAX_QUEUES - 1;
+        }
+#endif
     } else if (NFD_VID_IS_CTRL(cfg_msg->vid)) {
         cfg_msg->queue = NFD_MAX_CTRL_QUEUES - 1;
     } else {

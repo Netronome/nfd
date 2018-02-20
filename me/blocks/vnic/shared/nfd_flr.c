@@ -196,6 +196,16 @@ nfd_flr_init_pf_cfg_bar(__emem char *isl_base, unsigned int vid)
           NFD_BPF_STACK_SZ / 64 | 30 << 8 /* CTM buf size / 64 */ };
 #endif
 
+#ifdef NFD_USE_OVERSUBSCRIPTION
+    /* Adjust the number of queues advertised to the host
+     * for the last PF */
+    if (vid == NFD_LAST_PF) {
+        cfg[(NFP_NET_CFG_MAX_TXRINGS - NFP_NET_CFG_VERSION) / 4] =
+            NFD_LAST_PF_MAX_QUEUES;
+        cfg[(NFP_NET_CFG_MAX_RXRINGS - NFP_NET_CFG_VERSION) / 4] =
+            NFD_LAST_PF_MAX_QUEUES;
+    }
+#endif
     mem_write64(&cfg,
                 NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_VERSION,
                 sizeof cfg);

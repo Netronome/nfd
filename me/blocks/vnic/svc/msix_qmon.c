@@ -82,6 +82,9 @@
 #define MSIX_RINGS_MASK(num_rings)  ((num_rings) == 64 ? 0xffffffffffffffff : \
                                      (1ull << (num_rings)) - 1)
 #define MSIX_PF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_PF_QUEUES)
+#ifdef NFD_USE_OVERSUBSCRIPTION
+#define MSIX_LAST_PF_RINGS_MASK     MSIX_RINGS_MASK(NFD_LAST_PF_MAX_QUEUES)
+#endif
 #define MSIX_VF_RINGS_MASK          MSIX_RINGS_MASK(NFD_MAX_VF_QUEUES)
 #define MSIX_CTRL_RINGS_MASK        MSIX_RINGS_MASK(NFD_MAX_CTRL_QUEUES)
 
@@ -282,12 +285,17 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vid,
     }
 
     /* Update the enabled bit mask with queues for this VF. */
-    if (NFD_VID_IS_PF(vid))
+    if (NFD_VID_IS_PF(vid)) {
         vf_queue_mask = MSIX_PF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
-    else if (NFD_VID_IS_CTRL(vid))
+#ifdef NFD_USE_OVERSUBSCRIPTION
+        if (vid == NFD_LAST_PF)
+            vf_queue_mask = MSIX_LAST_PF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
+#endif
+    } else if (NFD_VID_IS_CTRL(vid)) {
         vf_queue_mask = MSIX_CTRL_RINGS_MASK << NFD_VID2NATQ(vid, 0);
-    else
+    } else {
         vf_queue_mask = MSIX_VF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
+    }
 
     if (rx_rings) {
         msix_cls_rx_enabled[pcie_isl] &= ~vf_queue_mask;
@@ -406,8 +414,18 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
 
         /* Make sure the vnic is not configuring rings it has no control over */
         if (NFD_VID_IS_PF(vid)) {
+#ifdef NFD_USE_OVERSUBSCRIPTION
+            if (vid != NFD_LAST_PF) {
+                vf_tx_rings_new &= MSIX_PF_RINGS_MASK;
+                vf_rx_rings_new &= MSIX_PF_RINGS_MASK;
+            } else {
+                vf_tx_rings_new &= MSIX_LAST_PF_RINGS_MASK;
+                vf_rx_rings_new &= MSIX_LAST_PF_RINGS_MASK;
+            }
+#else
             vf_tx_rings_new &= MSIX_PF_RINGS_MASK;
             vf_rx_rings_new &= MSIX_PF_RINGS_MASK;
+#endif
         } else if (NFD_VID_IS_CTRL(vid)) {
             vf_tx_rings_new &= MSIX_CTRL_RINGS_MASK;
             vf_rx_rings_new &= MSIX_CTRL_RINGS_MASK;

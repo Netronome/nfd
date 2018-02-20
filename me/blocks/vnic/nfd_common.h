@@ -166,7 +166,26 @@
 
 #define NFD_TOTAL_VFQS      (NFD_MAX_VFS * NFD_MAX_VF_QUEUES)
 #define NFD_TOTAL_CTRLQS    (NFD_MAX_CTRL * NFD_MAX_CTRL_QUEUES)
-#define NFD_TOTAL_PFQS      (NFD_MAX_PFS * NFD_MAX_PF_QUEUES)
+#ifdef NFD_USE_OVERSUBSCRIPTION
+    #define NFD_OVERSUBSCRIBED (NFD_TOTAL_VFQS + NFD_TOTAL_CTRLQS + \
+                                NFD_MAX_PFS * NFD_MAX_PF_QUEUES - 64)
+    #if (NFD_OVERSUBSCRIBED < 0)
+        #undef NFD_OVERSUBSCRIBED
+        #define NFD_OVERSUBSCRIBED 0
+    #endif
+
+    #if ((NFD_OVERSUBSCRIBED != 0) &&               \
+         (NFD_OVERSUBSCRIBED >= NFD_MAX_PF_QUEUES))
+        #error "Insufficient queues on PF for requested oversubscription"
+    #endif
+
+    #define NFD_LAST_PF_MAX_QUEUES (NFD_MAX_PF_QUEUES - NFD_OVERSUBSCRIBED)
+    #define NFD_TOTAL_PFQS                                  \
+        (NFD_MAX_PFS * NFD_MAX_PF_QUEUES - NFD_OVERSUBSCRIBED)
+
+#else
+    #define NFD_TOTAL_PFQS      (NFD_MAX_PFS * NFD_MAX_PF_QUEUES)
+#endif
 
 #if (NFD_TOTAL_VFQS + NFD_TOTAL_CTRLQS + NFD_TOTAL_PFQS > 64)
 #error "Total number of NFD queues per island cannot exceed 64"

@@ -291,6 +291,11 @@
     #if ((NFD_MAX_VFS != 0) && (NFD_MAX_PFS != 0) && defined(NFD_USE_CTRL))
         .if (NFD_VID_IS_PF(in_vid))
             move(maxqs, NFD_MAX_PF_QUEUES)
+            #ifdef NFD_USE_OVERSUBSCRIPTION
+                .if (in_vid == NFD_LAST_PF)
+                    move(maxqs, NFD_LAST_PF_MAX_QUEUES)
+                .endif
+            #endif
             immed[rid, 0]
         .elif (NFD_VID_IS_VF(in_vid))
             move(maxqs, NFD_MAX_VF_QUEUES)
@@ -302,6 +307,11 @@
     #elif ((NFD_MAX_PFS != 0) && defined(NFD_USE_CTRL))
         .if (NFD_VID_IS_PF(in_vid))
             move(maxqs, NFD_MAX_PF_QUEUES)
+            #ifdef NFD_USE_OVERSUBSCRIPTION
+                .if (in_vid == NFD_LAST_PF)
+                    move(maxqs, NFD_LAST_PF_MAX_QUEUES)
+                .endif
+            #endif
             immed[rid, 0]
         .else
             move(maxqs, NFD_MAX_CTRL_QUEUES)
@@ -310,6 +320,11 @@
     #elif ((NFD_MAX_VFS != 0) && (NFD_MAX_PFS != 0))
         .if (NFD_VID_IS_PF(in_vid))
             move(maxqs, NFD_MAX_PF_QUEUES)
+            #ifdef NFD_USE_OVERSUBSCRIPTION
+                .if (in_vid == NFD_LAST_PF)
+                    move(maxqs, NFD_LAST_PF_MAX_QUEUES)
+                .endif
+            #endif
             immed[rid, 0]
         .else
             move(maxqs, NFD_MAX_VF_QUEUES)
@@ -317,6 +332,11 @@
         .endif
     #elif (NFD_MAX_PFS != 0)
         move(maxqs, NFD_MAX_PF_QUEUES)
+        #ifdef NFD_USE_OVERSUBSCRIPTION
+            .if (in_vid == NFD_LAST_PF)
+                move(maxqs, NFD_LAST_PF_MAX_QUEUES)
+            .endif
+        #endif
         immed[rid, 0]
     #elif (NFD_MAX_VFS != 0)
         move(maxqs, NFD_MAX_VF_QUEUES)
