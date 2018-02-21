@@ -953,25 +953,18 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
             vid = ((flr_pend_status >> NFD_CFG_FLR_NEXT_PF_shf) &
                    NFD_CFG_FLR_NEXT_PF_msk);
 
-            /* Set cfg_msg->queue to most likely value, and
-             * only correct it to the CTRL vNIC value if necessary */
-            cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
-
             /* vid == 0 means nothing in progress, so pick the starting
              * new starting vid. */
             if (vid == 0) {
 #if (defined(NFD_USE_CTRL) && (PCIE_ISL == 0))
                 vid = NFD_CTRL_VNIC;
-                cfg_msg->queue = NFD_MAX_CTRL_QUEUES - 1;
 #else
                 vid = NFD_FIRST_PF;
 #endif
             }
 
-#ifdef NFD_USE_OVERSUBSCRIPTION
-            if (vid == NFD_LAST_PF)
-                cfg_msg->queue = NFD_LAST_PF_MAX_QUEUES - 1;
-#endif
+            /* Set the last queue to service for this VID */
+            cfg_msg->queue = NFD_VID_MAXQS(vid) - 1;
 
             /* Setup the remaining parse_msg info */
             cfg_msg->vid = vid;
@@ -1138,18 +1131,7 @@ nfd_cfg_parse_msg(struct nfd_cfg_msg *cfg_msg, enum nfd_cfg_component comp)
     }
 
     /* Set the queue to process to the final queue */
-    if (NFD_VID_IS_PF(cfg_msg->vid)) {
-        cfg_msg->queue = NFD_MAX_PF_QUEUES - 1;
-#ifdef NFD_USE_OVERSUBSCRIPTION
-        if (cfg_msg->vid == NFD_LAST_PF) {
-            cfg_msg->queue = NFD_LAST_PF_MAX_QUEUES - 1;
-        }
-#endif
-    } else if (NFD_VID_IS_CTRL(cfg_msg->vid)) {
-        cfg_msg->queue = NFD_MAX_CTRL_QUEUES - 1;
-    } else {
-        cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;
-    }
+    cfg_msg->queue = NFD_VID_MAXQS(cfg_msg->vid) - 1;
 
     /* Copy ring configs
      * If the vNIC is not up, set all ring enables to zero */

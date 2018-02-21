@@ -505,4 +505,33 @@ do {                                                     \
     ((_qc_q) >> 2)
 
 
+/*
+ * Find the number of queues supported by a vNIC
+ */
+#ifdef NFD_USE_OVERSUBSCRIPTION
+#define NFD_VNIC_MAXQS(_type, _vnic)                            \
+    (((_type) == NFD_VNIC_TYPE_VF) ? NFD_MAX_VF_QUEUES :        \
+     ((_type) == NFD_VNIC_TYPE_CTRL) ? NFD_MAX_CTRL_QUEUES :    \
+     ((_vnic) < (NFD_MAX_PFS -1)) ? NFD_MAX_PF_QUEUES :         \
+     NFD_LAST_PF_MAX_QUEUES)
+
+#define NFD_VID_MAXQS(_vid)                         \
+    (NFD_VID_IS_VF(_vid) ? NFD_MAX_VF_QUEUES :      \
+     NFD_VID_IS_CTRL(_vid) ? NFD_MAX_CTRL_QUEUES :  \
+     ((_vid) < NFD_LAST_PF) ? NFD_MAX_PF_QUEUES :   \
+     NFD_LAST_PF_MAX_QUEUES)
+
+#else
+#define NFD_VNIC_MAXQS(_type, _vnic)                        \
+    (((_type) == NFD_VNIC_TYPE_PF) ? NFD_MAX_PF_QUEUES :    \
+     ((_type) == NFD_VNIC_TYPE_VF) ? NFD_MAX_VF_QUEUES :    \
+     NFD_MAX_CTRL_QUEUES)
+
+#define NFD_VID_MAXQS(_vid)                         \
+    (NFD_VID_IS_PF(_vid) ? NFD_MAX_PF_QUEUES :      \
+     NFD_VID_IS_VF(_vid) ? NFD_MAX_VF_QUEUES :      \
+     NFD_MAX_CTRL_QUEUES)
+
+#endif
+
 #endif /* __NFD_COMMON_H */

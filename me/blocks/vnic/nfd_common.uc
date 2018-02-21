@@ -486,4 +486,154 @@
     nfd_vid2vnic(out_t, out_f, in_vid, --, --, --)
 #endm
 
+
+#macro nfd_vnic_maxqs(out_maxqs, in_t, in_f)
+    #if (isnum(in_t) && isnum(in_f))
+        move(out_maxqs, NFD_VNIC_MAXQS(in_t, in_f))
+    #elif (isnum(in_t))
+        #if (in_t == NFD_VNIC_TYPE_PF)
+            alu[out_maxqs, --, B, NFD_MAX_PF_QUEUES]
+            #ifdef NFD_USE_OVERSUBSCRIPTION
+                .if (in_f == (NFD_MAX_PFS -1))
+                    alu[out_maxqs, --, B, NFD_LAST_PF_MAX_QUEUES]
+                .endif
+            #endif
+        #elif (in_t == NFD_VNIC_TYPE_VF)
+            alu[out_maxqs, --, B, NFD_MAX_VF_QUEUES]
+        #elif (in_t == NFD_VNIC_TYPE_CTRL)
+            alu[out_maxqs, --, B, NFD_MAX_CTRL_QUEUES]
+        #else
+            #error "Illegal vNIC type"
+        #endif
+    #else
+        #if ((NFD_MAX_VFS != 0) && (NFD_MAX_PFS != 0) && defined(NFD_USE_CTRL))
+            .if (in_t == NFD_VNIC_TYPE_PF)
+                alu[out_maxqs, --, B, NFD_MAX_PF_QUEUES]
+                #ifdef NFD_USE_OVERSUBSCRIPTION
+                    .if (in_f == (NFD_MAX_PFS -1))
+                        alu[out_maxqs, --, B, NFD_LAST_PF_MAX_QUEUES]
+                    .endif
+                #endif
+            .elif (in_t == NFD_VNIC_TYPE_VF)
+                alu[out_maxqs, --, B, NFD_MAX_VF_QUEUES]
+            .else
+                alu[out_maxqs, --, B, NFD_MAX_CTRL_QUEUES]
+            .endif
+        #elif ((NFD_MAX_PFS != 0) && defined(NFD_USE_CTRL))
+            .if (in_t == NFD_VNIC_TYPE_PF)
+                alu[out_maxqs, --, B, NFD_MAX_PF_QUEUES]
+                #ifdef NFD_USE_OVERSUBSCRIPTION
+                    .if (in_f == (NFD_MAX_PFS -1))
+                        alu[out_maxqs, --, B, NFD_LAST_PF_MAX_QUEUES]
+                    .endif
+                #endif
+            .else
+                alu[out_maxqs, --, B, NFD_MAX_CTRL_QUEUES]
+            .endif
+        #elif ((NFD_MAX_VFS != 0) && (NFD_MAX_PFS != 0))
+            .if (in_t == NFD_VNIC_TYPE_PF)
+                alu[out_maxqs, --, B, NFD_MAX_PF_QUEUES]
+                #ifdef NFD_USE_OVERSUBSCRIPTION
+                    .if (in_f == (NFD_MAX_PFS -1))
+                        alu[out_maxqs, --, B, NFD_LAST_PF_MAX_QUEUES]
+                    .endif
+                #endif
+            .else (in_t == NFD_VNIC_TYPE_VF)
+                alu[out_maxqs, --, B, NFD_MAX_VF_QUEUES]
+            .endif
+        #elif (NFD_MAX_PFS != 0)
+            alu[out_maxqs, --, B, NFD_MAX_PF_QUEUES]
+            #ifdef NFD_USE_OVERSUBSCRIPTION
+                .if (in_f == (NFD_MAX_PFS -1))
+                    alu[out_maxqs, --, B, NFD_LAST_PF_MAX_QUEUES]
+                .endif
+            #endif
+        #elif (NFD_MAX_VFS != 0)
+            alu[out_maxqs, --, B, NFD_MAX_VF_QUEUES]
+        #else
+            #error "Unsupported vNIC parameters"
+        #endif
+    #endif
+#endm
+
+
+#macro nfd_vf_maxqs(out_maxqs, in_vid, VF_TGT)
+    alu[out_maxqs, --, B, NFD_MAX_VF_QUEUES]
+    #if (!streq('VF_TGT', '--'))
+        br[VF_TGT]
+    #endif
+
+#endm
+
+
+#macro nfd_ctrl_maxqs(out_maxqs, in_vid, CTRL_TGT)
+    alu[out_maxqs, --, B, NFD_MAX_CTRL_QUEUES]
+    #if (!streq('CTRL_TGT', '--'))
+        br[CTRL_TGT]
+    #endif
+#endm
+
+
+#macro nfd_pf_maxqs(out_maxqs, in_vid, PF_TGT)
+    alu[out_maxqs, --, B, NFD_MAX_PF_QUEUES]
+    #ifdef NFD_USE_OVERSUBSCRIPTION
+        .if (in_vid == NFD_LAST_PF)
+            alu[out_maxqs, --, B, NFD_LAST_PF_MAX_QUEUES]
+        .endif
+    #endif
+    #if (!streq('PF_TGT', '--'))
+        br[PF_TGT]
+    #endif
+#endm
+
+
+#macro nfd_vid_maxqs(out_maxqs, in_vid, VF_TGT, CTRL_TGT, PF_TGT)
+.begin
+    #if (isnum(in_vid))
+        #if (NFD_VID_IS_PF(in_vid))
+            nfd_pf_maxqs(out_maxqs, in_vid, PF_TGT)
+        #elif (NFD_VID_IS_VF(in_vid))
+            nfd_vf_maxqs(out_maxqs, in_vid, VF_TGT)
+        #elif (NFD_VID_IS_CTRL(in_vid))
+            nfd_ctrl_maxqs(out_maxqs, in_vid, CTRL_TGT)
+        #else
+            #error "Invalid vid number"
+        #endif
+    #else
+        #if ((NFD_MAX_VFS != 0) && (NFD_MAX_PFS != 0) && defined(NFD_USE_CTRL))
+            .if (NFD_VID_IS_PF(in_vid))
+                nfd_pf_maxqs(out_maxqs, in_vid, PF_TGT)
+            .elif (NFD_VID_IS_VF(in_vid))
+                nfd_vf_maxqs(out_maxqs, in_vid, VF_TGT)
+            .else
+                nfd_ctrl_maxqs(out_maxqs, in_vid, CTRL_TGT)
+            .endif
+        #elif ((NFD_MAX_PFS != 0) && defined(NFD_USE_CTRL))
+            .if (NFD_VID_IS_PF(in_vid))
+                nfd_pf_maxqs(out_maxqs, in_vid, PF_TGT)
+            .else
+                nfd_ctrl_maxqs(out_maxqs, in_vid, CTRL_TGT)
+            .endif
+        #elif ((NFD_MAX_VFS != 0) && (NFD_MAX_PFS != 0))
+            .if (NFD_VID_IS_PF(in_vid))
+                nfd_pf_maxqs(out_maxqs, in_vid, PF_TGT)
+            .else
+                nfd_vf_maxqs(out_maxqs, in_vid, VF_TGT)
+            .endif
+        #elif (NFD_MAX_PFS != 0)
+            nfd_pf_maxqs(out_maxqs, in_vid, PF_TGT)
+        #elif (NFD_MAX_VFS != 0)
+            nfd_vf_maxqs(out_maxqs, in_vid, VF_TGT)
+        #else
+            #error "Unsupported vNIC parameters"
+        #endif
+
+    #endif
+.end
+#endm
+
+#macro nfd_vid_maxqs(out_maxqs, in_vid)
+    nfd_vid_maxqs(out_maxqs, in_vid, --, --, --)
+#endm
+
 #endif /* __NFD_COMMON_UC */
