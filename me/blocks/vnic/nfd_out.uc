@@ -396,11 +396,14 @@ meta_push_err#:
 #endm
 
 
-#macro nfd_out_fill_desc(io_nfd_desc, in_ctm_isl, in_ctm_pnum, in_ctm_split, \
-                         in_bls, in_muptr, in_offset, in_len, in_meta_len)
+#macro nfd_out_fill_desc(io_nfd_desc, in_ctm_isl, in_ctm_pnum, in_bls, \
+                         in_muptr, in_pkt_len, in_nbi, in_ctm_split, \
+                         in_pkt_offset, in_meta_len)
 .begin
     .reg tmp
     .reg eoff
+    .reg data_offset
+    .reg data_len
 
     /* sanity */
     // io_nfd_desc[0]..[2] are zeroed with alu "B" ops below
@@ -408,8 +411,14 @@ meta_push_err#:
 
     /* word 0 */
     passert(BF_W(NFD_OUT_OFFSET_fld), "EQ", 0)
-    alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B, in_offset,
-        <<BF_L(NFD_OUT_OFFSET_fld)]
+    #if (!is_ct_const(in_meta_len) || (in_meta_len != 0))
+        alu[data_offset, in_pkt_offset, -, in_meta_len]
+        alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B, data_offset,
+            <<BF_L(NFD_OUT_OFFSET_fld)]
+    #else
+        alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B, in_pkt_offset,
+            <<BF_L(NFD_OUT_OFFSET_fld)]
+    #endif
 
     #if (!is_ct_const(in_ctm_isl) || (in_ctm_isl != 0))
         bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_CTM_ISL_fld), in_ctm_isl)
@@ -428,7 +437,7 @@ meta_push_err#:
     /* check whether the ending offset of the packet */
     /* goes past the end of the CTM buffer.  If so, */
     /* set the CTM_ONLY bit in the packet. */
-    alu[eoff, in_len, +, in_offset]
+    alu[eoff, in_pkt_len, +, in_pkt_offset]
     #if (is_ct_const(in_ctm_split))
         immed[tmp, (256 << in_ctm_split)]
     #else
@@ -441,7 +450,6 @@ meta_push_err#:
 
 not_ctm_only#:
     /* word 1 */
-    /* XXX for now fill in NBI field as 0 */
     passert(BF_W(NFD_OUT_BLS_fld), "EQ", 1)
     passert(BF_W(NFD_OUT_MUADDR_fld), "EQ", 1)
     passert(BF_L(NFD_OUT_MUADDR_fld), "EQ", 0)
@@ -454,6 +462,10 @@ not_ctm_only#:
 
     #undef __NFD_OUT_MUADDR_inv_msk
 
+    #if (!is_ct_const(in_nbi) || (in_nbi != 0))
+        bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_NBI_fld), in_nbi)
+    #endif
+
     bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_BLS_fld), in_bls)
 
     /* word2 */
@@ -462,10 +474,25 @@ not_ctm_only#:
 
     #if (!is_ct_const(in_meta_len) || (in_meta_len != 0))
         bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_METALEN_fld), in_meta_len)
+        /* Split data_len calculation into 2 operations to avoid register
+         * allocation error */
+        alu[data_len, --, B, in_pkt_len]
+        alu[data_len, data_len, +, in_meta_len]
+        bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_LEN_fld), data_len)
+    #else
+        bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_LEN_fld), in_pkt_len)
     #endif
 
-    bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_LEN_fld), in_len)
 .end
+#endm
+
+
+#macro nfd_out_fill_desc(io_nfd_desc, in_ctm_isl, in_ctm_pnum, in_bls, \
+                         in_muptr, in_pkt_len, in_ctm_split, in_pkt_offset, \
+                         in_meta_len)
+    nfd_out_fill_desc(io_nfd_desc, in_ctm_isl, in_ctm_pnum, in_bls, \
+                      in_muptr, in_pkt_len, 0, in_ctm_split, \
+                      in_pkt_offset, in_meta_len)
 #endm
 
 
