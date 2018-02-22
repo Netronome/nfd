@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2018,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -402,23 +402,47 @@ meta_push_err#:
 .begin
     .reg tmp
     .reg eoff
-    .reg data_offset
     .reg data_len
+    .reg data_offset
 
     /* sanity */
     // io_nfd_desc[0]..[2] are zeroed with alu "B" ops below
     move(io_nfd_desc[3], 0)
 
+    #if (is_ct_const(in_pkt_offset) && (in_pkt_offset >= 256))
+        #error "nfd_out_fill_desc in_pkt_offset must be <256"
+    #endif
+
     /* word 0 */
     passert(BF_W(NFD_OUT_OFFSET_fld), "EQ", 0)
-    #if (!is_ct_const(in_meta_len) || (in_meta_len != 0))
-        alu[data_offset, in_pkt_offset, -, in_meta_len]
-        alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B, data_offset,
-            <<BF_L(NFD_OUT_OFFSET_fld)]
-    #else
-        alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B, in_pkt_offset,
-            <<BF_L(NFD_OUT_OFFSET_fld)]
-    #endif
+    #if (is_ct_const(in_meta_len))
+        #if (in_meta_len != 0)
+            #if (is_ct_const(in_pkt_offset))
+                alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B,
+                    (in_pkt_offset - in_meta_len), <<BF_L(NFD_OUT_OFFSET_fld)]
+            #else
+                alu[data_offset, in_pkt_offset, -, in_meta_len]
+                alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B,
+                    data_offset, <<BF_L(NFD_OUT_OFFSET_fld)]
+            #endif
+        #else /* in_meta_len != 0 */
+            /* XXX alu_shf supports parameters in reg or up to 8bit immed */
+            alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B, in_pkt_offset,
+                <<BF_L(NFD_OUT_OFFSET_fld)]
+        #endif /* in_meta_len != 0 */
+    #else /* is_ct_const(in_meta_len) */
+        #if (is_ct_const(in_pkt_offset))
+            alu[data_offset, in_pkt_offset, -, in_meta_len]
+        #else
+            /* XXX pkt_len, meta_len, and pkt_off all interact
+             * so we need an intermediate variable to resolve
+             * A-B conflicts.  This is the best place to put it. */
+            alu[data_offset, --, B, in_pkt_offset]
+            alu[data_offset, data_offset, -, in_meta_len]
+        #endif
+        alu[BF_A(io_nfd_desc, NFD_OUT_OFFSET_fld), --, B,
+            data_offset, <<BF_L(NFD_OUT_OFFSET_fld)]
+    #endif /* is_ct_const(in_meta_len) */
 
     #if (!is_ct_const(in_ctm_isl) || (in_ctm_isl != 0))
         bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_CTM_ISL_fld), in_ctm_isl)
@@ -474,10 +498,7 @@ not_ctm_only#:
 
     #if (!is_ct_const(in_meta_len) || (in_meta_len != 0))
         bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_METALEN_fld), in_meta_len)
-        /* Split data_len calculation into 2 operations to avoid register
-         * allocation error */
-        alu[data_len, --, B, in_pkt_len]
-        alu[data_len, data_len, +, in_meta_len]
+        alu[data_len, in_pkt_len, +, in_meta_len]
         bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_LEN_fld), data_len)
     #else
         bits_set__sz1(BF_AL(io_nfd_desc, NFD_OUT_LEN_fld), in_pkt_len)
