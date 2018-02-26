@@ -288,18 +288,22 @@
     nfd_cfg_get_bar_addr(bar_addr_hi, bar_addr_lo, in_vid, PCIE_ISL)
     mem[read32, $bar[0], bar_addr_hi, <<8, bar_addr_lo, 6], ctx_swap[read_sig]
 
-    nfd_vid_maxqs(maxqs, in_vid, vf_cont#, ctrl_cont#, pf_cont#)
-vf_cont#:
-    #if (NFD_MAX_VFS != 0)
-        br[done#], defer[1]
-        alu[rid, in_vid, +, NFD_CFG_VF_OFFSET]
-    #endif
-ctrl_cont#:
-pf_cont#:
-    #if ((NFD_MAX_PFS != 0) || defined(NFD_USE_CTRL))
+    /* Setup maxqs */
+    nfd_vid_maxqs(maxqs, in_vid)
+
+    /* Setup RIDS, PFs and the CTRL vNICs are on 0*/
+    /* XXX nfd_vid_maxqs() supports branch optional parameters
+     * that should avoid the need for this second test, but
+     * using them in this context currently results in spurious
+     * warnings */
+    #if (NFD_MAX_PFS > 0 || defined(NFD_USE_CTRL))
         immed[rid, 0]
     #endif
-done#:
+    #if (NFD_MAX_VFS > 0)
+    .if (NFD_VID_IS_VF(in_vid))
+        alu[rid, in_vid, +, NFD_CFG_VF_OFFSET]
+    .endif
+    #endif
 
     .if ($bar[NFP_NET_CFG_CTRL] & NFP_NET_CFG_CTRL_ENABLE == 0)
 
