@@ -180,6 +180,25 @@
  *                          default NFP_NET_CFG_RSS_TOEPLITZ
  */
 
+
+/**
+ * NFD user context within PCIe island
+ * @NFD_USER_CTX_DECL(_isl) Invoked at global scope.  This is used to
+ *                          declare variables and/or functions to
+ *                          invoke from other defines.  PCIE_ISL is
+ *                          passed into this macro as the _isl parameter.
+ * @NFD_USER_CTX_INIT(_isl) Invoked on PCIe island me0, ctx 2 when it
+ *                          has its turn to run initialisation code.
+ *                          This code must exit.
+ * @NFD_USER_CTX_RUN(_isl)  Invoked as the main loop for CTX 2.  This
+ *                          code must perform its own flow control to
+ *                          ensure that it swaps but does not exit.
+ *                          If the context _does_ exit, it will
+ *                          trigger an NFD_OUT_USER_CTX_ERROR and the
+ *                          PCIe island me0 will halt.
+ */
+
+
 /**
  * Depreciated defines (can be removed from builds)
  * @NFD_CFG_CLASS           Sets the firmware class advertised to the
