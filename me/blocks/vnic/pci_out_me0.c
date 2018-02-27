@@ -34,6 +34,11 @@ NFD_INIT_DONE_DECLARE;
 
 struct nfd_cfg_msg cfg_msg;
 
+#ifdef NFD_USER_CTX_DECL
+NFD_USER_CTX_DECL(PCIE_ISL);
+#endif
+
+
 int
 main(void)
 {
@@ -55,9 +60,12 @@ main(void)
         /* send_desc uses cache_desc_compute_fl_addr
          * as a service function */
         cache_desc_setup();
-
+#ifdef NFD_USER_CTX_INIT
+    } else if (ctx() == 2) {
+        NFD_USER_CTX_INIT(PCIE_ISL);
+#endif
     } else {
-        /* CTX >1 are unused currently */
+        /* Remaining CTXs  are unused currently */
         ctx_wait(kill);
     }
 
@@ -113,10 +121,14 @@ main(void)
 
             /* ctx_swap(); */
         }
+#ifdef NFD_USER_CTX_RUN
+    } else if (ctx() == 2) {
+        NFD_USER_CTX_RUN(PCIE_ISL);
+#endif
     } else {
         /* Worker main loop */
         for (;;) {
-            /* CTX >1 are unused currently */
+            /* Remaining CTXs  are unused currently */
             ctx_wait(kill);
         }
     }
