@@ -132,4 +132,10 @@ main(void)
             ctx_wait(kill);
         }
     }
+
+    /* Some context has fallen through the work loop,
+     * which should be illegal, but might happen if
+     * the user context misbehaves. */
+    local_csr_write(local_csr_mailbox_0, NFD_OUT_USER_CTX_ERROR);
+    halt();
 }

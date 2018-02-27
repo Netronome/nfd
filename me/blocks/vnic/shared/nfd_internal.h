@@ -602,5 +602,6 @@ struct nfd_out_send_desc_msg {
 #define NFD_IN_ISSUE_DMA_BATCH_INVALID  0x805
 #define NFD_OUT_PD_INVALID_LENGTH       0x806
 #define NFD_OUT_PD_UNMARKED_CTM_ONLY    0x807
+#define NFD_OUT_USER_CTX_ERROR          0x808
 
 #endif /* !_BLOCKS__SHARED_NFD_INTERNAL_H_ */
