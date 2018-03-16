@@ -271,7 +271,7 @@ __intrinsic void __nfd_out_push_pkt_cnt(unsigned int pcie_isl,
  * is exceeded.
  * NFD_OUT_MAX_META_ITEM_LEN is used to allocate sufficient write xfers.
  */
-__intrinsic int nfd_out_metadata_push(unsigned int *meta_len,
+__intrinsic int nfd_out_metadata_push(void *meta_len,
                                       unsigned int meta_types,
                                       void *meta_val,
                                       const unsigned int meta_type_num,

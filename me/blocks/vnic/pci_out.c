@@ -183,13 +183,14 @@ __nfd_out_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
 
 
 __intrinsic int
-nfd_out_metadata_push(unsigned int *meta_len,
+nfd_out_metadata_push(void *meta_len,
                       unsigned int meta_types,
                       void *meta_val,
                       const unsigned int meta_type_num,
                       const unsigned int meta_val_len,
                       __mem40 void *pkt_start_ptr)
 {
+    unsigned int meta_len_cp;
     __mem40 char *meta_ptr;
     __xwrite unsigned int meta_data[(NFD_OUT_MAX_META_ITEM_LEN + 4) / 4];
     SIGNAL sig_meta;
@@ -204,15 +205,16 @@ nfd_out_metadata_push(unsigned int *meta_len,
     ctassert(meta_val_len <= NFD_OUT_MAX_META_ITEM_LEN);
     ctassert(meta_val_len % 4 == 0);
 
-    if (*meta_len == 0) {
+    reg_cp((void *) &meta_len_cp, meta_len, sizeof(meta_len_cp));
+    if (meta_len_cp == 0) {
         /* This is the first word of metadata being prepended. */
         meta_data[0] = meta_types;
-        *meta_len = 4;
-    } else if (*meta_len <= (NFD_OUT_MAX_META_LEN - meta_val_len)) {
+        meta_len_cp = 4;
+    } else if (meta_len_cp <= (NFD_OUT_MAX_META_LEN - meta_val_len)) {
         __xread unsigned int meta_info;
 
         meta_ptr = (__mem40 char *)((unsigned long long)pkt_start_ptr -
-                                    (unsigned long long)(*meta_len));
+                                     (unsigned long long)meta_len_cp);
         mem_read32(&meta_info, meta_ptr, 4);
         meta_data[0] = ((meta_info <<
                          (NFP_NET_META_FIELD_SIZE * meta_type_num)) |
@@ -223,13 +225,14 @@ nfd_out_metadata_push(unsigned int *meta_len,
     }
 
     reg_cp(&meta_data[1], meta_val, meta_val_len);
-    *meta_len += meta_val_len;
+    meta_len_cp += meta_val_len;
     meta_ptr = (__mem40 char *)((unsigned long long)pkt_start_ptr -
-                                (unsigned long long)(*meta_len));
+                                (unsigned long long)meta_len_cp);
     __mem_write32(meta_data, meta_ptr, 4 + meta_val_len, 4 + meta_val_len,
                   ctx_swap, &sig_meta);
 
 err:
+    reg_cp(meta_len, (void *) &meta_len_cp, sizeof(meta_len_cp));
     return ret;
 }
 
