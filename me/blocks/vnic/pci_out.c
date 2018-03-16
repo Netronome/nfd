@@ -173,10 +173,9 @@ __nfd_out_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
     if (pkt_count != 0) {
         xfer_update[0] = swapw64(pkt_count);
         xfer_update[1] = swapw64(byte_count);
-        /* Support a single PCIE island */
         NFD_QID2VID(vid, vqn, bmsk_queue);
-        __mem_add64(xfer_update, (NFD_CFG_BAR_ISL(0/*PCIE_ISL*/, vid) +
-                    NFP_NET_CFG_RXR_STATS(vqn)),
+        __mem_add64(xfer_update, (nfd_cfg_bar_base(pcie_isl, vid) +
+                                  NFP_NET_CFG_RXR_STATS(vqn)),
                     sizeof xfer_update, sizeof xfer_update, sync, sig);
     }
 }
