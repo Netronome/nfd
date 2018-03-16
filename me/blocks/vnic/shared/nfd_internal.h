@@ -603,5 +603,6 @@ struct nfd_out_send_desc_msg {
 #define NFD_OUT_PD_INVALID_LENGTH       0x806
 #define NFD_OUT_PD_UNMARKED_CTM_ONLY    0x807
 #define NFD_OUT_USER_CTX_ERROR          0x808
+#define NFD_CFG_BAR_BASE_ISL_INVALID    0x809
 
 #endif /* !_BLOCKS__SHARED_NFD_INTERNAL_H_ */

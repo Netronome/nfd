@@ -259,6 +259,63 @@ NFD_CFG_RINGS_DECL(3);
 #define NFD_CFG_BAR_ISL(_isl, _vid )            \
     NFD_CFG_BAR(NFD_CFG_BASE_LINK(_isl), (_vid))
 
+/**
+ * @param isl           PCIe island, in the range 0..3
+ * @param vid           vNIC ID
+ *
+ * This function is not intended for use on the data plane as it is
+ * expensive to extract the BAR pointer.  Supplying an isl not in the
+ * range 0..3 or for a PCIe island not in use with NFD is illegal.
+ * It is caught with a halt().
+ */
+__intrinsic __emem char *nfd_cfg_bar_base(unsigned int isl, unsigned int vid) {
+    __emem char *bar_base;
+    switch (isl) {
+    case 0:
+        #ifdef NFD_PCIE0_EMEM
+            bar_base = NFD_CFG_BAR_ISL(0, vid);
+        #else
+            goto err;
+        #endif
+        break;
+    case 1:
+        #ifdef NFD_PCIE1_EMEM
+            bar_base = NFD_CFG_BAR_ISL(1, vid);
+        #else
+            goto err;
+        #endif
+        break;
+    case 2:
+        #ifdef NFD_PCIE2_EMEM
+            bar_base = NFD_CFG_BAR_ISL(2, vid);
+        #else
+            goto err;
+        #endif
+        break;
+    case 3:
+        #ifdef NFD_PCIE3_EMEM
+            bar_base = NFD_CFG_BAR_ISL(3, vid);
+        #else
+            goto err;
+        #endif
+        break;
+    default:
+        goto err;
+        break;
+    };
+
+    return bar_base;
+
+err:
+    /* XXX we are halting on this error because it indicates a serious error
+     * the return won't actually execute, and 0 is as good as any other
+     * value.  0x800 == NFD_CFG_BAR_BASE_ISL_INVALID */
+    local_csr_write(local_csr_mailbox_0, 0x809);
+    local_csr_write(local_csr_mailbox_1, isl);
+    halt();
+    return 0;
+};
+
 
 /**
  * @param msg_valid     message contains valid information
