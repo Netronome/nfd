@@ -146,6 +146,24 @@ enum pcie_cpp2pcie_bar {
     PCIE_CPP2PCIE_FREE7
 };
 
+/*
+ * Provide dummy PCIe Resource defines to support older SDKs
+ */
+#ifndef HAS_PCIE_C2P_BAR_GEN_RC
+#define PCIE_C2P_BAR_ALLOC(_name_, _scope_, _isl_, _num_)
+#define PCIE_C2P_BAR_ALLOC_OFF(_name_, _scope_, _isl_, _off_, _num_)
+#endif
+
+#ifndef HAS_PCIE_DMA_GEN_RC
+#define PCIE_DMA_ALLOC(_name_, _scope_, _isl_, _q_, _num_)
+#endif
+
+#ifndef HAS_PCIE_DMA_CFG_GEN_RC
+#define PCIE_DMA_CFG_ALLOC(_name_, _scope_, _isl_, _num_)
+#define PCIE_DMA_CFG_ALLOC_OFF(_name_, _scope_, _isl_, _off_, _num_)
+#endif
+
+
 /* microC helper macros */
 
 /* Expand a constant PCIe number (0..3) to an EMEM island (emem0..emem2),
