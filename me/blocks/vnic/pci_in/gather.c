@@ -104,6 +104,15 @@ _NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring1_num                    \
                  cls_rings+NFD_IN_BATCH_RING1_NUM island 1 1);
 
 
+/*
+ * Reserve PCIe Resources
+ */
+PCIE_DMA_CFG_ALLOC_OFF(nfd_in_gather_dma_cfg, island, PCIE_ISL,
+                       NFD_IN_GATHER_CFG_REG, 1);
+PCIE_DMA_ALLOC(nfd_in_gather_dma, island, PCIE_ISL, frompci_hi,
+               NFD_IN_GATHER_MAX_IN_FLIGHT);
+
+
 /* XXX Move to some sort of CT reflect library */
 __intrinsic void
 reflect_data(unsigned int dst_me, unsigned int dst_xfer,

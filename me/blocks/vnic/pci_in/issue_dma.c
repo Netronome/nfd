@@ -151,6 +151,14 @@ __visible volatile SIGNAL nfd_in_gather_compl_refl_sig0;
 #define NFD_IN_ISSUED_LSO_RING_NUM NFD_IN_ISSUED_LSO_RING0_NUM
 #define NFD_IN_ISSUED_LSO_RING_SZ NFD_IN_ISSUED_LSO_RING0_SZ
 
+/*
+ * Reserve PCIe Resources for DMA Queues
+ */
+PCIE_DMA_ALLOC(nfd_in_data_dma, me, PCIE_ISL, frompci_lo,
+               NFD_IN_DATA_MAX_IN_FLIGHT);
+PCIE_DMA_ALLOC(nfd_in_data_jumbo_dma, me, PCIE_ISL, frompci_lo,
+               NFD_IN_JUMBO_MAX_IN_FLIGHT);
+
 #elif (PCI_IN_ISSUE_DMA_IDX == 1)
 
 __export __shared __cls __align(NFD_IN_DESC_RING_SZ) struct nfd_in_tx_desc
@@ -172,6 +180,14 @@ __visible volatile SIGNAL nfd_in_gather_compl_refl_sig1;
 #define NFD_IN_ISSUED_RING_NUM NFD_IN_ISSUED_RING1_NUM
 #define NFD_IN_ISSUED_LSO_RING_NUM NFD_IN_ISSUED_LSO_RING1_NUM
 #define NFD_IN_ISSUED_LSO_RING_SZ NFD_IN_ISSUED_LSO_RING1_SZ
+
+/*
+ * Reserve PCIe Resources for DMA Queues
+ */
+PCIE_DMA_ALLOC(nfd_in_data_dma, me, PCIE_ISL, frompci_lo,
+               NFD_IN_DATA_MAX_IN_FLIGHT);
+PCIE_DMA_ALLOC(nfd_in_data_jumbo_dma, me, PCIE_ISL, frompci_lo,
+               NFD_IN_JUMBO_MAX_IN_FLIGHT);
 
 #else /* invalid PCI_IN_ISSUE_DMA_IDX */
 
@@ -225,6 +241,16 @@ _NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring0_num \
                  cls_rings+NFD_IN_BATCH_RING0_NUM island 1 1);
 _NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring1_num \
                  cls_rings+NFD_IN_BATCH_RING1_NUM island 1 1);
+
+
+/*
+ * Reserve PCIe Resources for DMA Configuration Registers
+ */
+PCIE_DMA_CFG_ALLOC_OFF(nfd_in_data_dma_cfg, island, PCIE_ISL,
+                       NFD_IN_DATA_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_in_data_sig_only_dma_cfg, island, PCIE_ISL,
+                       NFD_IN_DATA_CFG_REG_SIG_ONLY, 1);
+
 
 /* Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
  * swap token complete correctly for DMAs that aren't 4B multiples in size. */

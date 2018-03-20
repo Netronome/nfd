@@ -52,6 +52,8 @@ struct nfd_cfg_msg cfg_msg0;
 NFD_CFG_BASE_DECLARE(0);
 NFD_VF_CFG_DECLARE(0);
 NFD_VF_CFG_INIT(0);
+
+PCIE_C2P_BAR_ALLOC_OFF(nfd_scv_qmon_bar0, me, 0, PCIE_CPP2PCIE_QMON, 1);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
@@ -63,6 +65,8 @@ struct nfd_cfg_msg cfg_msg1;
 NFD_CFG_BASE_DECLARE(1);
 NFD_VF_CFG_DECLARE(1);
 NFD_VF_CFG_INIT(1);
+
+PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar1, me, 1, PCIE_CPP2PCIE_QMON, 1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
@@ -74,6 +78,8 @@ struct nfd_cfg_msg cfg_msg2;
 NFD_CFG_BASE_DECLARE(2);
 NFD_VF_CFG_DECLARE(2);
 NFD_VF_CFG_INIT(2);
+
+PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar2, me, 2, PCIE_CPP2PCIE_QMON, 1);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
@@ -85,6 +91,8 @@ struct nfd_cfg_msg cfg_msg3;
 NFD_CFG_BASE_DECLARE(3);
 NFD_VF_CFG_DECLARE(3);
 NFD_VF_CFG_INIT(3);
+
+PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar3, me, 3, PCIE_CPP2PCIE_QMON, 1);
 #endif
 
 NFD_FLR_DECLARE;

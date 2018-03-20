@@ -161,6 +161,23 @@ static SIGNAL fl_cache_event_sig;
 static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 
 
+/*
+ * Reserve PCIe Resources
+ */
+PCIE_DMA_CFG_ALLOC_OFF(nfd_out_fl_desc_dma_cfg, island, PCIE_ISL,
+                       NFD_OUT_FL_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_out_rx_desc_dma_cfg, island, PCIE_ISL,
+                       NFD_OUT_DESC_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_out_data_dma_cfg, island, PCIE_ISL,
+                       NFD_OUT_DATA_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_out_data_sig_only_dma_cfg, island, PCIE_ISL,
+                       NFD_OUT_DATA_CFG_REG_SIG_ONLY, 1);
+PCIE_DMA_ALLOC(nfd_out_fl_desc_dma, island, PCIE_ISL, frompci_hi,
+               NFD_OUT_FL_MAX_IN_FLIGHT);
+PCIE_DMA_ALLOC(nfd_out_rx_desc_dma, island, PCIE_ISL, topci_med,
+               NFD_OUT_DESC_MAX_IN_FLIGHT);
+
+
 /**
  *Increment an atomic counter stored in local CTM
  * @param base      Start address of structure to increment

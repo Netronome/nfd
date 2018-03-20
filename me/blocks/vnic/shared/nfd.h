@@ -134,17 +134,17 @@ __export __shared __align256 NFD_MAC_STATS_MEM_TYPE
 /*
  * CPP2PCIe BAR allocation
  * XXX This should go into chip_res
+ * XXX Used to be an enum block, Changed to defines for PCIe Resource Allocation
  */
-enum pcie_cpp2pcie_bar {
-    PCIE_CPP2PCIE_QMON = 0,
-    PCIE_CPP2PCIE_LSC  = 1,
-    PCIE_CPP2PCIE_BPF_LOAD = 2,
-    PCIE_CPP2PCIE_FREE3,
-    PCIE_CPP2PCIE_FREE4,
-    PCIE_CPP2PCIE_FREE5,
-    PCIE_CPP2PCIE_FREE6,
-    PCIE_CPP2PCIE_FREE7
-};
+#define PCIE_CPP2PCIE_QMON      0
+#define PCIE_CPP2PCIE_LSC       1
+#define PCIE_CPP2PCIE_BPF_LOAD  2
+#define PCIE_CPP2PCIE_FREE3     3
+#define PCIE_CPP2PCIE_FREE4     4
+#define PCIE_CPP2PCIE_FREE5     5
+#define PCIE_CPP2PCIE_FREE6     6
+#define PCIE_CPP2PCIE_FREE7     7
+
 
 /*
  * Provide dummy PCIe Resource defines to support older SDKs

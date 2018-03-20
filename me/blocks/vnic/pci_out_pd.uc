@@ -83,6 +83,35 @@
 #endif
 
 /*
+ * Reserve PCIe Resources
+ */
+#ifdef HAS_PCIE_DMA_GEN_RC
+    #ifdef _NFD_OUT_DATA_MAX_IN_FLIGHT
+        #warning "_NFD_OUT_DATA_MAX_IN_FLIGHT is being redefined."
+    #endif
+
+    #if ONE_PKT_AT_A_TIME
+        #define_eval _NFD_OUT_DATA_MAX_IN_FLIGHT (1 * 2)
+    #else
+        #define_eval _NFD_OUT_DATA_MAX_IN_FLIGHT (3 * 2)
+    #endif
+
+    #ifdef NFD_OUT_3_PD_MES
+        #define_eval _NFD_OUT_DATA_MAX_IN_FLIGHT \
+            (7 * _NFD_OUT_DATA_MAX_IN_FLIGHT)
+    #else
+        #define_eval _NFD_OUT_DATA_MAX_IN_FLIGHT \
+            (8 * _NFD_OUT_DATA_MAX_IN_FLIGHT)
+    #endif
+
+    PCIE_DMA_ALLOC(nfd_out_data_dma, me, PCIE_ISL, topci_lo, \
+                   _NFD_OUT_DATA_MAX_IN_FLIGHT)
+
+    #undef _NFD_OUT_DATA_MAX_IN_FLIGHT
+#endif
+
+
+/*
  * DMA Descriptor
  *
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
@@ -868,7 +897,7 @@ ticket_error#:
     /*
      * If there are 3 packet DMA MEs in the system and if we were running
      * 8 threads, then the total number of committed slots in the
-     * FrmPCIELo DMA queue would be:
+     * ToPCIELo DMA queue would be:
      *
      *    3 MEs * 8 thds/ME * 3 pkt blks/thd * 2 DMAs/ptk blk = 144 DMAs
      *
