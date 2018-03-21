@@ -29,6 +29,7 @@
 #include <nfp6000/nfp_pcie.h>
 
 #include <vnic/pci_in.h>
+#include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/cls_ring.h>
