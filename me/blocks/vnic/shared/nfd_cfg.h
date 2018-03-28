@@ -115,6 +115,14 @@
 #define NFP_PCIEX_ISL_BASE                                   0x04000000
 #define NFP_PCIEX_ISL_shf                                    24
 /* XXX temp defines that loosely match the BSP pcie_monitor_api.h */
+#define NFP_PCIEX_COMPCFG_CNTRLR0                            0x00100060
+#define NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_msk       0xf
+#define NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_shf       8
+#define NFP_PCIEX_COMPCFG_CNTRLR0_LINK_STATUS_msk            0x3
+#define NFP_PCIEX_COMPCFG_CNTRLR0_LINK_STATUS_shf            6
+#define NFP_PCIEX_COMPCFG_CNTRLR1                            0x00100064
+#define NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_HOLD_IF_DISABLED_shf  6
+#define NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf  4
 #define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c
 #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk    0x3f
 #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf    16
@@ -129,6 +137,7 @@
 #define NFP_PCIEX_PCIE_INT_MGR_STATUS_FLR_msk                0x300
 #define NFP_PCIEX_COMPCFG_CFG0                               0x00100000
 #define NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf                 11
+#define NFP_PCIEX_COMPCFG_CFG0_PF_BUS_MSTR_ENABLE_shf        25
 
 
 #if defined(__NFP_LANG_MICROC)
