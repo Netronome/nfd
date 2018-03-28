@@ -226,7 +226,10 @@ __shared __gpr struct qc_bitmask cfg_queue_bmsk;
  * NFD_FLR_VF_HI_ind: A VF FLR is pending on at least one of VFs 32..63.
  *                    flr_pend_vf[NFD_FLR_VF_HI_ind] must be examined
  *                    to determine which VFs have pending FLRs.
- * NFD_FLR_PEND_BUSY_shf: One of the above bits is set.  Used to short
+ * NFD_FLR_PCIE_RESET_ind:  A PCIe reset is underway
+ * NFD_FLR_PCIE_STATE_ind:  State of the PCIe island: 0 == down, 1 == up
+ * NFD_FLR_PEND_BUSY_shf: One of the above bits, excluding
+ *                        NFD_FLR_PCIE_STATE_ind, is set.  Used to short
  *                        circuit nfd_cfg_next_flr() if no FLRs pending.
  *
  * The other processing state indicates which, if any, PF vNIC should be

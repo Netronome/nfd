@@ -95,10 +95,13 @@
  * Defines that set the structure of "nfd_flr_seen".  These are also
  * reused for FLR state in nfd_cfg_internal.c.
  */
-#define NFD_FLR_VF_LO_ind   0
-#define NFD_FLR_VF_HI_ind   1
-#define NFD_FLR_PF_ind      2
-#define NFD_FLR_PF_shf      0
+#define NFD_FLR_VF_LO_ind               0
+#define NFD_FLR_VF_HI_ind               1
+#define NFD_FLR_PF_ind                  2
+#define NFD_FLR_PCIE_RESET_ind          3
+#define NFD_FLR_PCIE_STATE_ind          4
+#define NFD_FLR_PF_shf                  0
+#define NFD_FLR_PCIE_RESET_shf          1
 
 #define NFD_FLR_PEND_BUSY_shf 31
 
