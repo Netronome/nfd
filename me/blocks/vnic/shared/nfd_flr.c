@@ -539,6 +539,25 @@ nfd_flr_write_cfg_msg(__emem char *isl_base, unsigned int vid,
 }
 
 
+/** Acknowledge PCIe island resets by clearing the "nfd_flr_seen" bit
+ * @param pcie_isl      PCIe island (0..3)
+ */
+__intrinsic void
+nfd_flr_ack_link_reset(unsigned int pcie_isl)
+{
+    unsigned int atomic_data;
+    __mem40 char *atomic_addr;
+
+    atomic_addr = (NFD_FLR_LINK(pcie_isl) +
+                   sizeof atomic_data * NFD_FLR_PF_ind);
+    atomic_data = (1 << NFD_FLR_PCIE_RESET_shf);
+    mem_bitclr_imm(atomic_data, atomic_addr);
+
+    /* Set NFD_CFG_FLR_AP_SIG_NO so that we recheck the FLR state */
+    signal_ctx(NFD_CFG_FLR_AP_CTX_NO, NFD_CFG_FLR_AP_SIG_NO);
+}
+
+
 /** Acknowledge the FLR to the hardware, and clear "nfd_flr_seen" bit
  * @param pcie_isl      PCIe island (0..3)
  *

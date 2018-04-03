@@ -86,6 +86,22 @@ nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
 }
 
 
+/** Acknowledge PCIe island resets by clearing the "nfd_flr_seen" bit
+ * @param pcie_isl      PCIe island (0..3)
+ */
+__intrinsic void
+_nfd_flr_ack_link_reset(unsigned int pcie_isl)
+{
+    unsigned int atomic_data;
+    __mem40 char *atomic_addr;
+
+    atomic_addr = (NFD_FLR_LINK(pcie_isl) +
+                   sizeof atomic_data * NFD_FLR_PF_ind);
+    atomic_data = (1 << NFD_FLR_PCIE_RESET_shf);
+    mem_bitclr_imm(atomic_data, atomic_addr);
+}
+
+
 /** Acknowledge the FLR to the hardware, and clear "nfd_flr_seen" bit
  * @param pcie_isl      PCIe island (0..3)
  *
@@ -206,6 +222,20 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
         nfd_isl_master = NFD_CFG_ISL_MASTER_BASE | (pcie_isl << 4);
         send_interthread_sig(nfd_isl_master, NFD_CFG_FLR_AP_CTX_NO,
                              NFD_CFG_FLR_AP_SIG_NO);
+    }
+
+    /* Check for and handle PCIe island resets */
+    if (update_request & NFP_NET_CFG_UPDATE_PCI_RST) {
+        if (cfg_msg->vid == NFD_LAST_PF) {
+            /* Only ack the reset on the message for the last VID */
+            _nfd_flr_ack_link_reset(pcie_isl);
+
+            /* Notify the relevant PCIe island master to recheck
+             * the FLR configuration */
+            nfd_isl_master = NFD_CFG_ISL_MASTER_BASE | (pcie_isl << 4);
+            send_interthread_sig(nfd_isl_master, NFD_CFG_FLR_AP_CTX_NO,
+                                 NFD_CFG_FLR_AP_SIG_NO);
+        }
     }
 
     /* Set cfg_sig so that "nfd_cfg_check_cfg_msg()" runs again */
