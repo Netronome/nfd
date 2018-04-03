@@ -22,6 +22,7 @@
 
 #include <nfp/me.h>
 #include <nfp/mem_bulk.h>
+#include <nfp/mem_ring.h>   /* TEMP */
 
 #include <nfp6000/nfp_me.h>
 
@@ -42,6 +43,11 @@
  * Context  0:   Handling configuration messages
  * Contexts 1-4: Monitor RX/TX queues and generate MSI-X (one per PCIe island)
  */
+
+
+/* TEMP add a ring to journal CFG messages */
+DBG_JOURNAL_DECLARE(dbg_cfg_msg_jrnl);
+
 
 #ifdef NFD_PCIE0_EMEM
 __visible SIGNAL nfd_cfg_sig_svc_me0;
@@ -119,6 +125,12 @@ do {                                                                    \
         mem_read64(cfg_bar_data##_isl,                                  \
                    NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),            \
                    sizeof cfg_bar_data##_isl);                          \
+                                                                        \
+        /* TEMP journal cfg messages */                                 \
+        JDBG(dbg_cfg_msg_jrnl, (0x40 | _isl));                          \
+        JDBG(dbg_cfg_msg_jrnl, cfg_msg##_isl.__raw);                    \
+        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data##_isl[0]);                  \
+        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data##_isl[1]);                  \
                                                                         \
         msix_qmon_reconfig(_isl, cfg_msg##_isl.vid,                     \
                            NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),    \
