@@ -1277,6 +1277,9 @@ nfd_cfg_next_queue(struct nfd_cfg_msg *cfg_msg, unsigned int *queue)
  * If the PCIe link is not up, it is not safe to run NFD on the island, so
  * halt the ME immediately.
  *
+ * If the PCIe island is not held in reset, check the link power state and
+ * set an initial value in flr_pend_status, NFD_FLR_PCIE_STATE_ind.
+ *
  * This function "busy waits" on the PCIe link check to ensure that no other
  * contexts can execute while it tests the link.
  */
@@ -1312,5 +1315,23 @@ nfd_cfg_check_pcie_link()
 
         /* Nothing more to do on this PCIe island, stop the ME */
         halt();
+    }
+
+    /* Set an initial value for NFD_FLR_PCIE_STATE_ind */
+    pcie_sts_addr = NFP_PCIEX_COMPCFG_CNTRLR0;
+    __asm ct[xpb_read, pcie_sts_raw, pcie_sts_addr, 0,  \
+             1], sig_done[pcie_sts_sig];
+
+    /* Busy wait on the read signal to prevent other threads executing */
+    while (!signal_test(&pcie_sts_sig));
+
+    pcie_sts =
+        ((pcie_sts_raw >> NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_shf) &
+         NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_msk);
+
+    if (pcie_sts != 0) {
+        flr_pend_status |= (1 << NFD_FLR_PCIE_STATE_ind);
+    } else {
+        flr_pend_status &= ~(1 << NFD_FLR_PCIE_STATE_ind);
     }
 }
