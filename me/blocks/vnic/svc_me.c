@@ -148,6 +148,22 @@ do {                                                                    \
             }                                                           \
         }                                                               \
                                                                         \
+        /* Handle PCIe island resets */                                 \
+        if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_PCI_RST) {       \
+            if (cfg_msg##_isl.vid == 0) {                               \
+                /* This is the start of PCIe island reset */            \
+                /* processing. */                                       \
+                /* TODO implement! */                                   \
+            }                                                           \
+                                                                        \
+            if (cfg_msg##_isl.vid == NFD_LAST_PF) {                     \
+                /* This is the end of PCIe island reset */              \
+                /* processing. */                                       \
+                /* TODO implement! */                                   \
+            }                                                           \
+        }                                                               \
+                                                                        \
+                                                                        \
         /* Complete the message */                                      \
         cfg_msg##_isl.msg_valid = 0;                                    \
         nfd_cfg_complete_cfg_msg(&cfg_msg##_isl,                        \
