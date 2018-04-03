@@ -965,7 +965,8 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
             cfg_ring_enables[1] = 0;
 
             /* Rewrite the CFG BAR for other components */
-            nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vid);
+            nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vid,
+                                  NFD_FLR_UPDATE_FLR);
             nfd_flr_init_cfg_queue(PCIE_ISL, vid,
                                    NFP_QC_STS_LO_EVENT_TYPE_NEVER);
 
@@ -1016,7 +1017,8 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
                 /* Rewrite the CFG BAR for other components */
                 nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL),
-                                      NFD_VNIC2VID(NFD_VNIC_TYPE_VF, vf));
+                                      NFD_VNIC2VID(NFD_VNIC_TYPE_VF, vf),
+                                      NFD_FLR_UPDATE_FLR);
                 nfd_flr_init_cfg_queue(PCIE_ISL,
                                        NFD_VNIC2VID(NFD_VNIC_TYPE_VF, vf),
                                        NFP_QC_STS_LO_EVENT_TYPE_NEVER);
@@ -1054,7 +1056,8 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
                 /* Rewrite the CFG BAR for other components */
                 nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL),
-                                      NFD_VNIC2VID(NFD_VNIC_TYPE_VF, vf));
+                                      NFD_VNIC2VID(NFD_VNIC_TYPE_VF, vf),
+                                      NFD_FLR_UPDATE_FLR);
                 nfd_flr_init_cfg_queue(PCIE_ISL,
                                        NFD_VNIC2VID(NFD_VNIC_TYPE_VF, vf),
                                        NFP_QC_STS_LO_EVENT_TYPE_NEVER);
