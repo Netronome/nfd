@@ -506,7 +506,7 @@ nfd_flr_check_vfs(unsigned int pcie_isl,
 
 /** Write the CFG BAR to indicate an FLR is in process
  * @param isl_base      start address of the CFG BARs for the PCIe island
- * @param vnic          vNIC number on the PCIe island
+ * @param vid           vNIC ID on the PCIe island
  *
  * NFP_NET_CFG_CTRL is cleared so that the vNIC will be disabled, and
  * NFP_NET_CFG_UPDATE is set to "NFP_NET_CFG_UPDATE_GEN |
@@ -518,14 +518,14 @@ nfd_flr_check_vfs(unsigned int pcie_isl,
  * vnic values.
  */
 __intrinsic void
-nfd_flr_write_cfg_msg(__emem char *isl_base, unsigned int vnic)
+nfd_flr_write_cfg_msg(__emem char *isl_base, unsigned int vid)
 {
     __xwrite unsigned int cfg_bar_msg[2] = {0, 0};
 
     cfg_bar_msg[1] = (NFP_NET_CFG_UPDATE_GEN | NFP_NET_CFG_UPDATE_RESET |
                       NFP_NET_CFG_UPDATE_MSIX);
 
-    mem_write64(cfg_bar_msg, NFD_CFG_BAR(isl_base, vnic),
+    mem_write64(cfg_bar_msg, NFD_CFG_BAR(isl_base, vid),
                 sizeof cfg_bar_msg);
 }
 
