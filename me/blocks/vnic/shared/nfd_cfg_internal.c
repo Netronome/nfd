@@ -238,8 +238,13 @@ __shared __gpr struct qc_bitmask cfg_queue_bmsk;
  */
 static __shared __gpr unsigned int flr_pend_status = 0;
 
+/* Fields for tracking progress on PF FLRs and PCIe island resets.
+ * Separate fields are required so that PCIe resets can interrupt
+ * PF FLRs */
 #define NFD_CFG_FLR_NEXT_PF_shf     8
 #define NFD_CFG_FLR_NEXT_PF_msk     0x3f
+#define NFD_CFG_FLR_NEXT_VID_shf    14
+#define NFD_CFG_FLR_NEXT_VID_msk    0x3f
 
 /*
  * "flr_pend_vf" consists of two 32-bit bitmask covering the up-to 64 VFs
@@ -934,8 +939,48 @@ __intrinsic int
 nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 {
     if (bit_test(flr_pend_status, NFD_FLR_PEND_BUSY_shf)) {
-        if (bit_test(flr_pend_status, NFD_FLR_PF_ind)) {
-            /* The PF gets priority */
+        if (bit_test(flr_pend_status, NFD_FLR_PCIE_RESET_ind)) {
+            /* PCIe resets get the highest priority */
+            unsigned int vid;
+
+            vid = ((flr_pend_status >> NFD_CFG_FLR_NEXT_VID_shf) &
+                   NFD_CFG_FLR_NEXT_VID_msk);
+
+            /* Set the last queue to service for this VID */
+            cfg_msg->queue = NFD_VID_MAXQS(vid) - 1;
+
+            /* Setup the remaining parse_msg info */
+            cfg_msg->vid = vid;
+            cfg_msg->interested = 1;
+            cfg_msg->msg_valid = 1;
+
+            cfg_ring_enables[0] = 0;
+            cfg_ring_enables[1] = 0;
+
+            /* Rewrite the CFG BAR for other components */
+            nfd_flr_write_cfg_msg(NFD_CFG_BASE_LINK(PCIE_ISL), vid,
+                                  NFD_FLR_UPDATE_PCI_RST);
+            nfd_flr_init_cfg_queue(PCIE_ISL, vid,
+                                   NFP_QC_STS_LO_EVENT_TYPE_NEVER);
+
+            /* Check whether we have finished with the PCIe reset */
+            if (vid == NFD_LAST_PF) {
+                /* This was the last PF vNIC, so clear the state */
+                flr_pend_status &= ~(NFD_CFG_FLR_NEXT_VID_msk <<
+                                     NFD_CFG_FLR_NEXT_VID_shf);
+                flr_pend_status &= ~(1 << NFD_FLR_PCIE_RESET_ind);
+
+            } else {
+                /* We have more vNICs to service, so increment vid and
+                 * leave NFD_FLR_PCIE_RESET_ind set. */
+                flr_pend_status &= ~(NFD_CFG_FLR_NEXT_VID_msk <<
+                                     NFD_CFG_FLR_NEXT_VID_shf);
+                vid++;
+                flr_pend_status |= (vid << NFD_CFG_FLR_NEXT_VID_shf);
+            }
+
+        } else if (bit_test(flr_pend_status, NFD_FLR_PF_ind)) {
+            /* The PF gets priority over VFs */
             unsigned int vid;
 
 #if ((NFD_MAX_PFS != 0) || defined(NFD_USE_CTRL))
