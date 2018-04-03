@@ -1067,7 +1067,7 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
         } else {
             /* NFD_FLR_PEND_BUSY_shf is set but we aren't actually busy
              * processing an FLR.  */
-            flr_pend_status = 0;
+            flr_pend_status  &= ~(1 << NFD_FLR_PEND_BUSY_shf);
             return -1;
         }
 
