@@ -792,6 +792,7 @@ nfd_cfg_check_flr_ap()
         local_csr_write(local_csr_mailbox_0, flr_ap_xfer);
 
         /* Call nfd_flr.c API to update the FLR pending state */
+        nfd_flr_check_link(PCIE_ISL, &flr_pend_status);
         nfd_flr_check_pf(PCIE_ISL, &flr_pend_status);
         nfd_flr_check_vfs(PCIE_ISL, &flr_pend_status, flr_pend_vf);
 

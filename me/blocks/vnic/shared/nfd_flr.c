@@ -352,6 +352,56 @@ nfd_flr_init_vf_cfg_bar(__emem char *vf_cfg_base, unsigned int pcie,
 
 /* Functions called from PCI.IN ME0 */
 
+__intrinsic void
+nfd_flr_check_link(unsigned int pcie_isl,
+                 __shared __gpr unsigned int *flr_pend_status)
+{
+    __xread unsigned int seen_flr;
+    __mem40 char *atomic_addr;
+    SIGNAL atomic_sig;
+    __xread unsigned int cntrlr0;
+    unsigned int xpb_addr;
+    SIGNAL xpb_sig;
+    unsigned int pf_atomic_data = 1 << NFD_FLR_PCIE_RESET_shf;
+    unsigned int pcie_sts;
+
+    /* Read state of FLR hardware and seen atomics */
+    atomic_addr = (NFD_FLR_LINK(pcie_isl) +
+                   sizeof pf_atomic_data * NFD_FLR_PF_ind);
+    xpb_addr = NFP_PCIEX_COMPCFG_CNTRLR0;
+
+    __mem_read_atomic(&seen_flr, atomic_addr, sizeof seen_flr, sizeof seen_flr,
+                      sig_done, &atomic_sig);
+    __asm ct[xpb_read, cntrlr0, xpb_addr, 0, 1], sig_done[xpb_sig];
+
+    wait_for_all(&atomic_sig, &xpb_sig);
+
+    /* Check for NFD_FLR_PCIE_STATE_ind 1 => 0 transition */
+    pcie_sts =
+        ((cntrlr0 >> NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_shf) &
+         NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_msk);
+    if (pcie_sts != 0) {
+        /* The link is up, just record it in NFD_FLR_PCIE_STATE_ind */
+        *flr_pend_status |= (1 << NFD_FLR_PCIE_STATE_ind);
+    } else {
+        if (*flr_pend_status & (1 << NFD_FLR_PCIE_STATE_ind))
+        {
+            if ((seen_flr & pf_atomic_data) == 0) {
+                /* We have found an unseen PCIe reset, mark it in local and
+                 * atomic state. */
+                *flr_pend_status |= (1 << NFD_FLR_PCIE_RESET_ind);
+                *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
+
+                mem_bitset_imm(pf_atomic_data, atomic_addr);
+            }
+        }
+
+        /* The link is currently down, record it in NFD_FLR_PCIE_STATE_ind */
+        *flr_pend_status &= ~(1 << NFD_FLR_PCIE_STATE_ind);
+    }
+}
+
+
 /** Read the HW FLR and nfd_flr_atomic state
  * @param pcie_isl              PCIe island (0..3)
  * @param flr_pend_status    Internal state for FLR processing
