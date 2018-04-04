@@ -150,6 +150,10 @@ do {                                                                    \
                                                                         \
         /* Handle PCIe island resets */                                 \
         if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_PCI_RST) {       \
+            /* Re-enable the cfg queue for messages from the host */    \
+            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vid,             \
+                                   PCIE_QC_EVENT_NOT_EMPTY);            \
+                                                                        \
             if (cfg_msg##_isl.vid == 0) {                               \
                 /* This is the start of PCIe island reset */            \
                 /* processing. */                                       \
