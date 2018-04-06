@@ -179,7 +179,10 @@ do {                                                                    \
             if (cfg_msg##_isl.vid == 0) {                               \
                 /* This is the start of PCIe island reset */            \
                 /* processing. */                                       \
-                /* TODO implement! */                                   \
+                                                                        \
+                /* Enable MasterDropIfDisabled to allow pcie[write] */  \
+                /* to complete while the island is in reset */          \
+                nfd_flr_update_mstr_drop_if_disabled(_isl, 1);          \
             }                                                           \
                                                                         \
             if (cfg_msg##_isl.vid == NFD_LAST_PF) {                     \
