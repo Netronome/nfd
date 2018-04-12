@@ -219,16 +219,56 @@
 
 #define NFP_PCIE_DMA_TOPCI_LO   0x40040
 
-#macro wait_br_next_state(in_sig0, in_sig1, LABEL)
-    wait_br_next_state(in_sig0, in_sig1, LABEL, --)
+
+/**
+ * Only call after consuming an asserted reset signal when transitioning from a
+ * a state where the thread no longer waits for DMA completion signals. i.e.
+ * state_e0n0, state_e0n1, state_e0n2
+ * NFD_OUT_PD_RST_CTX distributes reset signal to other contexts if ME in
+ * reset (reset flag set).
+ */
+#macro complete_reset()
+
+    // From PRM:2.1.6.5 Event Signals
+    // Event Signals can be set in nine different ways:
+    // 7. On write to Same_ME_Signal Local CSR
+    .if (ctx() == NFD_OUT_PD_RST_CTX)
+        .if (BIT(*n$index, NFD_OUT_PD_RST_BIT))
+
+            #ifdef NFD_OUT_3_PD_MES
+                #define _NUM_CTX 7
+            #else
+                #define _NUM_CTX 8
+            #endif
+
+            #define _IDX 0
+            #while _IDX < _NUM_CTX
+                #if _IDX != NFD_OUT_PD_RST_CTX
+                    local_csr_wr[SAME_ME_SIGNAL, ((NFD_OUT_PD_RST_SIG_NO <<3) |
+                                                  _IDX)]
+                #endif
+            #define_eval _IDX (_IDX + 1)
+            #endloop
+            #undef _IDX
+
+            #undef _NUM_CTX
+
+        .endif
+    .endif
+
 #endm
 
 
 /**
  * Wait one or two signals to arrive and on receiving them branch to
- * a given location.  If one signal is specified, the wait is
- * unconditional and consumes the signal.  If two signals are specified,
- * then we wait for either one to arrive but without clearing either.
+ * a given location. A global reset signal (g_reset_sig) is waited on in
+ * addition to signals specified when calling this macro.
+ *
+ * g_reset_sig is global and is received either
+ * - from an ME which detects a reset in the case of NFD_OUT_PD_RST_CTX
+ * - from NFD_OUT_PD_RST_CTX for all other contexts
+ *
+ * No signals are cleared when a context wakes up after using this macro.
  *
  * @param in_sig0       The first signal to wait on (must be real)
  * @param in_sig1       The second signal to wait on (may be '--' if none)
@@ -236,24 +276,30 @@
  * @param OPT_TOK       An optional token to be added to the command
  *                      (e.g. defer[1]).  If '--' no such token.
  */
+#macro wait_br_next_state(in_sig0, in_sig1, LABEL)
+    wait_br_next_state(in_sig0, in_sig1, LABEL, --)
+#endm
+
+
 #macro wait_br_next_state(in_sig0, in_sig1, LABEL, OPT_TOK)
 
     .set_sig in_sig0
 
     #if (streq('in_sig1', '--'))
         #if (!streq('OPT_TOK', '--'))
-            ctx_arb[in_sig0], br[LABEL], OPT_TOK
+            ctx_arb[in_sig0, g_reset_sig], ANY, br[LABEL], OPT_TOK
         #else
-            ctx_arb[in_sig0], br[LABEL]
+            ctx_arb[in_sig0, g_reset_sig], ANY, br[LABEL]
         #endif
     #else
         .set_sig in_sig1
         #if (!streq('OPT_TOK', '--'))
-            ctx_arb[in_sig0, in_sig1], ANY, br[LABEL], OPT_TOK
+            ctx_arb[in_sig0, in_sig1, g_reset_sig], ANY, br[LABEL], OPT_TOK
         #else
-            ctx_arb[in_sig0, in_sig1], ANY, br[LABEL]
+            ctx_arb[in_sig0, in_sig1, g_reset_sig], ANY, br[LABEL]
         #endif
     #endif
+
 #endm
 
 
@@ -364,6 +410,7 @@
     blt[add_wq_credits#]
 
 start_packet_dma#:
+    br_bset[*n$index, NFD_OUT_PD_RST_BIT, no_dma#]
     wsm_test_bit_clr(in_work, SB_WQ_ENABLED, no_dma#)
     wsm_test_bit_clr(in_work, SB_WQ_CTM_ONLY, not_ctm_only#)
 
@@ -559,7 +606,7 @@ ctm_and_mu_dma#:
 
             // Swap on the DMA completion, which implicitly signals the xfers
             // are free again
-            ctx_arb[dma_sig]
+            ctx_arb[dma_sig, g_reset_sig], ANY
             .io_completed out_dma0[0]
             .io_completed out_dma0[1]
             .io_completed out_dma0[2]
@@ -568,6 +615,7 @@ ctm_and_mu_dma#:
             .io_completed out_dma1[1]
             .io_completed out_dma1[2]
             .io_completed out_dma1[3]
+            br_!signal[dma_sig, no_dma#]
 
             // DMA0 word 0
             alu[out_dma0[0], --, B, mu_lo_start]
@@ -662,7 +710,7 @@ mu_only_dma#:
 
             // Swap on the DMA completion, which implicitly signals the xfers
             // are free again
-            ctx_arb[dma_sig]
+            ctx_arb[dma_sig, g_reset_sig], ANY
             .io_completed out_dma0[0]
             .io_completed out_dma0[1]
             .io_completed out_dma0[2]
@@ -671,6 +719,7 @@ mu_only_dma#:
             .io_completed out_dma1[1]
             .io_completed out_dma1[2]
             .io_completed out_dma1[3]
+            br_!signal[dma_sig, no_dma#]
 
             // DMA0 word 0
             alu[out_dma0[0], --, B, mu_lo_start]
@@ -824,6 +873,7 @@ complete_done#:
     #pragma warning(disable:5009)
     pci_out_pd_request_work(io_work[0], in_wq_sig)
     #pragma warning(default:5009)
+
     wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL)
 
 ticket_error#:
@@ -981,6 +1031,30 @@ main#:
     // General GPRs for initialization
     .reg tmp
 
+
+    /*
+     * Reset handling init
+     */
+
+    // NFD_OUT_PD_RST_NN_OFF must be in NFD_OUT_PD_RST_CTX NN regs
+    passert(NFD_OUT_PD_RST_CTX, "EQ", 0)
+    passert(NFD_OUT_PD_RST_NN_OFF, "GE", 0)
+    passert(NFD_OUT_PD_RST_NN_OFF, "LT", (128 / 8))
+
+    // Set NNReceiveConfig to all updates from CTM misc engine
+    // so NNR written from remote ME using ct[ctnn_write]
+    .init_csr mecsr:CtxEnables.NNreceiveConfig 0x2 const
+
+    // Access n$reset_flag nnr using *n$index
+    .init_csr mecsr:NNGet NFD_OUT_PD_RST_NN_OFF
+    .reg volatile n$reset_flag
+    .addr n$reset_flag NFD_OUT_PD_RST_NN_OFF
+    .init_ctx NFD_OUT_PD_RST_CTX n$reset_flag 0x0
+
+    // Use global reset signal to enter reset "state"
+    .sig volatile g_reset_sig
+    .addr g_reset_sig NFD_OUT_PD_RST_SIG_NO
+
     /*
      * Global initialization
      */
@@ -1081,6 +1155,10 @@ main#:
      * STATE MACHINE
      *
      * (main loop)
+     *
+     * g_reset_sig asserted when remote ME detects PCIe reset.
+     * g_reset_sig asserted until state where not waiting for DMAs
+     * viz. state_e0n0, state_e0n1, state_e0n2
      */
 
     kill_extra_threads()
@@ -1089,12 +1167,29 @@ main#:
 
     kickstart#:
         pci_out_pd_request_work($work_in0[0], work_sig0)
-        ctx_arb[work_sig0]
+        ctx_arb[work_sig0, g_reset_sig], ANY, br[one_packet_issue_dma#]
+
+    one_packet_handle_reset#:
+        complete_reset()
+        ctx_arb[work_sig0, g_reset_sig], ANY
 
     one_packet_issue_dma#:
-        issue_packet_dma(0, one_packet_complete_dma#, dma_sig0)
+        br_signal[g_reset_sig, one_packet_handle_reset#]
+        br_!signal[work_sig0, unreached#]
+        // fall through and process new work if reset signal clear
+
+        issue_packet_dma(0, one_packet_transition_to_complete#, dma_sig0)
+
+    one_packet_transition_to_complete#:
+        br_!signal[dma_sig0, one_packet_complete_dma#]
+        // fall through regardless since either dma_sig or reset signal asserted
+        // only clear dma_sig
+
     one_packet_complete_dma#:
         complete_packet_dma(0, one_packet_issue_dma#, work_sig0)
+
+    unreached#:
+        ctx_arb[bpt], br[unreached#]
 
 #else /* ONE_PACKET_AT_A_TIME */
 
@@ -1102,40 +1197,50 @@ main#:
         pci_out_pd_request_work($work_in0[0], work_sig0)
         pci_out_pd_request_work($work_in1[0], work_sig1)
         pci_out_pd_request_work($work_in2[0], work_sig2)
-        ctx_arb[work_sig0], br[state_e0n0#]
+        ctx_arb[work_sig0, g_reset_sig], ANY, br[state_e0n0_check_reset#]
 
     /* ------------------------------ COLUMN #1 ------------------------------ */
 
-    state_e0n0#:
-        // No demux: fall through
+    state_e0n0_handle_reset#:
+        complete_reset()
+        ctx_arb[work_sig0, g_reset_sig], ANY
+
+    state_e0n0_check_reset#:
+        br_signal[g_reset_sig, state_e0n0_handle_reset#]
+        br_!signal[work_sig0, unreached#]
+        // fall through and process new work if reset signal clear
 
     transition_e0n0_e1n1#:
         issue_packet_dma(0, state_e1n1#, work_sig1, dma_sig0)
 
     state_e1n1#:
         br_signal[dma_sig0, transition_e1n1_e0n1#]
-        br_!signal[work_sig1, unreached#]
-        // fall through
+        br_!signal[work_sig1, transition_e1n1_e0n1#]
+        // fall through if work arrived, otherwise reset signal received
 
     transition_e1n1_e2n2#:
         issue_packet_dma(1, state_e2n2#, work_sig2, dma_sig0)
 
     state_e2n2#:
         br_signal[dma_sig0, transition_e2n2_e1n2#]
-        br_!signal[work_sig2, unreached#]
-        // fall through
+        br_!signal[work_sig2, transition_e2n2_e1n2#]
+        // fall through if work arrived, otherwise reset signal received
 
     transition_e2n2_e3n0#:
         issue_packet_dma(2, state_e3n0#, dma_sig0)
 
     state_e3n0#:
-        // No demux: fall through
+        br_!signal[dma_sig0, transition_e3n0_e2n0#]
+        // fall through regardless since either dma_sig or reset signal asserted
+        // only clear dma_sig
 
     transition_e3n0_e2n0#:
         complete_packet_dma(0, state_e2n0#, work_sig0, dma_sig1)
 
     transition_e1n1_e0n1#:
-        complete_packet_dma(0, state_e0n1#, work_sig1)
+        // The thread is no longer waiting for DMA completions. Clear
+        // reset signal if asserted when transitioning from this state.
+        complete_packet_dma(0, state_e0n1_check_reset#, work_sig1)
 
     transition_e2n2_e1n2#:
         complete_packet_dma(0, state_e1n2#, work_sig2, dma_sig1)
@@ -1143,36 +1248,46 @@ main#:
 
     /* ------------------------------ COLUMN #2 ------------------------------ */
 
-    state_e0n1#:
-        // No demux: fall through
+    state_e0n1_handle_reset#:
+        complete_reset()
+        ctx_arb[work_sig1, g_reset_sig], ANY
+
+    state_e0n1_check_reset#:
+        br_signal[g_reset_sig, state_e0n1_handle_reset#]
+        br_!signal[work_sig1, unreached#]
+        // fall through and process new work if reset signal clear
 
     transition_e0n1_e1n2#:
         issue_packet_dma(1, state_e1n2#, work_sig2, dma_sig1)
 
     state_e1n2#:
         br_signal[dma_sig1, transition_e1n2_e0n2#]
-        br_!signal[work_sig2, unreached#]
-        // fall through
+        br_!signal[work_sig2, transition_e1n2_e0n2#]
+        // fall through if work arrived, otherwise reset signal received
 
     transition_e1n2_e2n0#:
         issue_packet_dma(2, state_e2n0#, work_sig0, dma_sig1)
 
     state_e2n0#:
         br_signal[dma_sig1, transition_e2n0_e1n0#]
-        br_!signal[work_sig0, unreached#]
-        // fall through
+        br_!signal[work_sig0, transition_e2n0_e1n0#]
+        // fall through if work arrived, otherwise reset signal received
 
     transition_e2n0_e3n1#:
         issue_packet_dma(0, state_e3n1#, dma_sig1)
 
     state_e3n1#:
-        // No demux: fall through
+        br_!signal[dma_sig1, transition_e3n1_e2n1#]
+        // fall through regardless since either dma_sig or reset signal asserted
+        // only clear dma_sig
 
     transition_e3n1_e2n1#:
         complete_packet_dma(1, state_e2n1#, work_sig1, dma_sig2)
 
     transition_e1n2_e0n2#:
-        complete_packet_dma(1, state_e0n2#, work_sig2)
+        // The thread is no longer waiting for DMA completions. Clear
+        // reset signal if asserted when transitioning from this state.
+        complete_packet_dma(1, state_e0n2_check_reset#, work_sig2)
 
     transition_e2n0_e1n0#:
         complete_packet_dma(1, state_e1n0#, work_sig0, dma_sig2)
@@ -1180,36 +1295,46 @@ main#:
 
     /* ------------------------------ COLUMN #3 ------------------------------ */
 
-    state_e0n2#:
-        // No demux: fall through
+    state_e0n2_handle_reset#:
+        complete_reset()
+        ctx_arb[work_sig2, g_reset_sig], ANY
+
+    state_e0n2_check_reset#:
+        br_signal[g_reset_sig, state_e0n2_handle_reset#]
+        br_!signal[work_sig2, unreached#]
+        // fall through and process new work if reset signal clear
 
     transition_e0n2_e1n0#:
         issue_packet_dma(2, state_e1n0#, work_sig0, dma_sig2)
 
     state_e1n0#:
         br_signal[dma_sig2, transition_e1n0_e0n0#]
-        br_!signal[work_sig0, unreached#]
-        // fall through
+        br_!signal[work_sig0, transition_e1n0_e0n0#]
+        // fall through if work arrived, otherwise reset signal received
 
     transition_e1n0_e2n1#:
         issue_packet_dma(0, state_e2n1#, work_sig1, dma_sig2)
 
     state_e2n1#:
         br_signal[dma_sig2, transition_e2n1_e1n1#]
-        br_!signal[work_sig1, unreached#]
-        // fall through
+        br_!signal[work_sig1, transition_e2n1_e1n1#]
+        // fall through if work arrived, otherwise reset signal received
 
     transition_e2n1_e3n2#:
         issue_packet_dma(1, state_e3n2#, dma_sig2)
 
     state_e3n2#:
-        // No demux: fall through
+        br_!signal[dma_sig2, transition_e3n2_e2n2#]
+        // fall through regardless since either dma_sig or reset signal asserted
+        // only clear dma_sig
 
     transition_e3n2_e2n2#:
         complete_packet_dma(2, state_e2n2#, work_sig2, dma_sig0)
 
     transition_e1n0_e0n0#:
-        complete_packet_dma(2, state_e0n0#, work_sig0)
+        // The thread is no longer waiting for DMA completions. Clear
+        // reset signal if asserted when transitioning from this state.
+        complete_packet_dma(2, state_e0n0_check_reset#, work_sig0)
 
     transition_e2n1_e1n1#:
         complete_packet_dma(2, state_e1n1#, work_sig1, dma_sig0)
