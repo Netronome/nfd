@@ -257,7 +257,7 @@ __intrinsic void __nfd_out_push_pkt_cnt(unsigned int pcie_isl,
                                         sync_t sync, SIGNAL *sig);
 
 /**
- * Push metada onto prepended packet metadata chain.
+ * Push metadata onto prepended packet metadata chain.
  * @param meta_len      Length of metadata currently prepended
  * @param meta_types    Types of metadata being prepended
  * @param meta_val      Metadata to prepend
