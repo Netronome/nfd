@@ -255,6 +255,32 @@ __intrinsic void __nfd_out_cnt_pkt(unsigned int pcie_isl,
 __intrinsic void __nfd_out_push_pkt_cnt(unsigned int pcie_isl,
                                         unsigned int queue,
                                         sync_t sync, SIGNAL *sig);
+/**
+ * Push metadata onto prepended packet metadata chain.
+ * @param meta_len          Length of metadata currently prepended
+ * @param meta_types        Types of metadata being prepended
+ * @param meta_val          Metadata to prepend
+ * @param meta_type_num     Number of metadata type fields being prepended
+ * @param meta_val_len      Length of metadata value in bytes
+ * @param meta_val_len_max  Maximum length of metadata value in bytes
+ * @param pkt_start_ptr     Pointer to start of packet
+ * @param sync              Type of synchronization
+ * @param sig               Signal to report completion
+ *
+ * The application firmware initialises meta_len to zero and it is then
+ * updated by this function as metadata is prepended. Returns -1 if the
+ * maximum supported metadata length (defined by NFD_OUT_MAX_META_LEN)
+ * is exceeded.
+ * NFD_OUT_MAX_META_ITEM_LEN is used to allocate sufficient write xfers.
+ */
+__intrinsic int __nfd_out_metadata_push(void *meta_len,
+                                        unsigned int meta_types,
+                                        void *meta_val,
+                                        unsigned int meta_type_num,
+                                        unsigned int meta_val_len,
+                                        const unsigned int meta_val_len_max,
+                                        __mem40 void *pkt_start_ptr,
+                                        sync_t sync, SIGNAL *sig);
 
 /**
  * Push metadata onto prepended packet metadata chain.

@@ -180,14 +180,15 @@ __nfd_out_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
     }
 }
 
-
 __intrinsic int
-nfd_out_metadata_push(void *meta_len,
-                      unsigned int meta_types,
-                      void *meta_val,
-                      const unsigned int meta_type_num,
-                      const unsigned int meta_val_len,
-                      __mem40 void *pkt_start_ptr)
+__nfd_out_metadata_push(void *meta_len,
+                        unsigned int meta_types,
+                        void *meta_val,
+                        unsigned int meta_type_num,
+                        unsigned int meta_val_len,
+                        const unsigned int meta_val_len_max,
+                        __mem40 void *pkt_start_ptr,
+                        sync_t sync, SIGNAL *sig)
 {
     unsigned int meta_len_cp;
     __mem40 char *meta_ptr;
@@ -197,12 +198,12 @@ nfd_out_metadata_push(void *meta_len,
 
     ctassert(__is_in_reg_or_lmem((void *)meta_len));
     ctassert(__is_in_reg_or_lmem(meta_val));
-    ctassert(__is_ct_const(meta_type_num));
-    ctassert(__is_ct_const(meta_val_len));
+    ctassert(__is_ct_const(meta_val_len_max));
     ctassert(__is_in_reg_or_lmem((__mem40 void *)pkt_start_ptr));
-    ctassert(meta_val_len <= NFD_MAX_META_VAL_LEN);
-    ctassert(meta_val_len <= NFD_OUT_MAX_META_ITEM_LEN);
-    ctassert(meta_val_len % 4 == 0);
+    ctassert(meta_val_len_max <= NFD_MAX_META_VAL_LEN);
+    ctassert(meta_val_len_max <= NFD_OUT_MAX_META_ITEM_LEN);
+    ctassert(meta_val_len_max % 4 == 0);
+    ctassert(sync == ctx_swap);
 
     reg_cp((void *) &meta_len_cp, meta_len, sizeof(meta_len_cp));
     if (meta_len_cp == 0) {
@@ -223,16 +224,30 @@ nfd_out_metadata_push(void *meta_len,
         goto err;
     }
 
-    reg_cp(&meta_data[1], meta_val, meta_val_len);
+    reg_cp(&meta_data[1], meta_val, meta_val_len_max);
     meta_len_cp += meta_val_len;
     meta_ptr = (__mem40 char *)((unsigned long long)pkt_start_ptr -
                                 (unsigned long long)meta_len_cp);
-    __mem_write32(meta_data, meta_ptr, 4 + meta_val_len, 4 + meta_val_len,
-                  ctx_swap, &sig_meta);
+    __mem_write32(meta_data, meta_ptr, 4 + meta_val_len, 4 + meta_val_len_max,
+                  sync, sig);
 
 err:
     reg_cp(meta_len, (void *) &meta_len_cp, sizeof(meta_len_cp));
     return ret;
+}
+
+__intrinsic int
+nfd_out_metadata_push(void *meta_len,
+                      unsigned int meta_types,
+                      void *meta_val,
+                      unsigned int meta_type_num,
+                      const unsigned int meta_val_len,
+                      __mem40 void *pkt_start_ptr)
+{
+    SIGNAL sig_meta;
+    return __nfd_out_metadata_push(meta_len, meta_types, meta_val,
+                                   meta_type_num, meta_val_len, meta_val_len,
+                                   pkt_start_ptr, ctx_swap, &sig_meta);
 }
 
 
