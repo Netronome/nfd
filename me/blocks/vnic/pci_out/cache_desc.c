@@ -382,7 +382,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         nfd_out_fl_u[bmsk_queue] = 0;
 #endif
 
-        /* Reset credits */
+        /* Reset credits and other atomics */
         _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue, NFD_OUT_ATOMICS_SZ);
 
         rxq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_HI_WATERMARK;
@@ -390,14 +390,10 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue_s, NFD_OUT_FL_QUEUE), &rxq);
 
     } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
-        /* XXX consider what is required for PCI.OUT! */
         /* Down the queue:
          * - Prevent it issuing events
-         * - Clear active_msk bit
-         * - Clear pending_msk bit
-         * - Clear the proc bitmask bit?
-         * - Clear tx_w and tx_s
-         * - Try to count pending packets? Host responsibility? */
+         * - Clear bitmask bits
+         * - Clear queue sequence numbers */
 
         /* Clear all bitmask bits */
         clear_queue(&bmsk_queue, &active_bmsk);
@@ -406,7 +402,6 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         clear_queue(&bmsk_queue, &pending_bmsk);
 
         /* Clear queue LM state */
-        /* XXX check what is required for recycling host buffers */
         queue_data[bmsk_queue].fl_w = 0;
         queue_data[bmsk_queue].fl_s = 0;
         queue_data[bmsk_queue].up = 0;
@@ -418,7 +413,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         nfd_out_fl_u[bmsk_queue] = 0;
 #endif
 
-        /* Reset credits */
+        /* Reset credits and other atomics */
         _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue, NFD_OUT_ATOMICS_SZ);
 
         /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
