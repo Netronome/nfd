@@ -77,11 +77,6 @@ __visible volatile SIGNAL nfd_out_cache_bmsk_sig;
 
 NFD_OUT_ACTIVE_BMSK_DECLARE;
 
-#define NFD_OUT_WIP_STAGE_BATCH
-#ifdef NFD_OUT_WIP_STAGE_BATCH
-__shared __lmem unsigned int nfd_out_fl_u[NFD_OUT_MAX_QUEUES];
-#endif
-
 
 /*
  * Memory for PCI.OUT
@@ -99,6 +94,7 @@ __asm { .alloc_mem queue_data_mem lmem+0 me             \
         (NFD_OUT_QUEUE_INFO_SZ * NFD_OUT_MAX_QUEUES)};
 __shared __lmem struct nfd_out_queue_info *queue_data;
 
+__shared __lmem unsigned int nfd_out_fl_u[NFD_OUT_MAX_QUEUES];
 __shared __lmem unsigned int fl_cache_pending[NFD_OUT_FL_MAX_IN_FLIGHT];
 
 /* NFD credits are fixed at offset zero in CTM */
@@ -378,9 +374,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].rx_s = 0;
         queue_data[bmsk_queue].rx_w = 0;
 
-#ifdef NFD_OUT_WIP_STAGE_BATCH
         nfd_out_fl_u[bmsk_queue] = 0;
-#endif
 
         /* Reset credits and other atomics */
         _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue, NFD_OUT_ATOMICS_SZ);
@@ -409,9 +403,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].rx_s = 0;
         queue_data[bmsk_queue].rx_w = 0;
 
-#ifdef NFD_OUT_WIP_STAGE_BATCH
         nfd_out_fl_u[bmsk_queue] = 0;
-#endif
 
         /* Reset credits and other atomics */
         _zero_imm(NFD_OUT_CREDITS_BASE, bmsk_queue, NFD_OUT_ATOMICS_SZ);
