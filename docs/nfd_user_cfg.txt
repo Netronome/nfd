@@ -165,6 +165,19 @@
  *                              can be for a single chained meta data
  *                              type.  Used in microC to size transfer
  *                              registers for data to write.
+ * @NFD_OUT_USE_RX_BATCH_TGT    The RX descriptor send ME will skip
+ *                              sending descriptors on a queue if the
+ *                              number pending is less than a
+ *                              threshold and the time since last
+ *                              sending descriptors is below a latency
+ *                              threshold.
+ * @NFD_OUT_RX_DESC_REQ_BATCH   Requested minimum batch size for RX
+ *                              descriptors, default value 16.
+ * @NFD_OUT_RX_DESC_LAT_LIMIT   Send batches below the requested batch
+ *                              size if more than the LAT_LIMIT cycles
+ *                              have passed since last sending
+ *                              descriptors from this queue, default
+ *                              value 5000.
  */
 
 /**

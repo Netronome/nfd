@@ -128,6 +128,10 @@ static __gpr unsigned int fl_cache_mem_addr_lo;
 __shared __lmem struct nfd_out_send_desc_msg
     rx_desc_pending[NFD_OUT_DESC_MAX_IN_FLIGHT];
 
+#ifdef NFD_OUT_USE_RX_BATCH_TGT
+__shared __lmem unsigned long long nfd_out_rx_ts[NFD_OUT_MAX_QUEUES];
+#endif
+
 __gpr unsigned int rx_desc_mem_addr_lo;
 __gpr unsigned int inc_sent_msg_addr;
 
@@ -822,6 +826,19 @@ _start_send(__gpr unsigned int *queue)
                 dma_batch += dma_batch_correction;
             }
 
+#ifdef NFD_OUT_USE_RX_BATCH_TGT
+            if (dma_batch < NFD_OUT_RX_DESC_REQ_BATCH) {
+                unsigned long long time_now = me_tsc_read();
+
+                if ((time_now - nfd_out_rx_ts[*queue]) <
+                    (NFD_OUT_RX_DESC_LAT_LIMIT >> 4)) {
+                    /* Suppress this batch */
+                    dma_batch = 0;
+                    desc_dma_issued--;
+                }
+            }
+#endif
+
             pcie_addr_off = rx_s & queue_data[*queue].ring_sz_msk;
             pcie_addr_off = pcie_addr_off * sizeof(struct nfd_out_rx_desc);
 
@@ -859,13 +876,17 @@ _start_send(__gpr unsigned int *queue)
             send_msg.spare = 0;
             send_msg.count = dma_batch;
             send_msg.queue = *queue;
-            rx_desc_pending[pending_slot] = send_msg;
 
-            /* Issue DMA */
-            dma_sig_msk = __signals(&dma_sig);
-            __pcie_dma_enq(PCIE_ISL, &descr, NFD_OUT_DESC_DMA_QUEUE,
-                           sig_done, &dma_sig);
-
+            if (dma_batch != 0) {
+                rx_desc_pending[pending_slot] = send_msg;
+                /* Issue DMA */
+                dma_sig_msk = __signals(&dma_sig);
+                __pcie_dma_enq(PCIE_ISL, &descr, NFD_OUT_DESC_DMA_QUEUE,
+                               sig_done, &dma_sig);
+#ifdef NFD_OUT_USE_RX_BATCH_TGT
+                nfd_out_rx_ts[*queue] = me_tsc_read();
+#endif
+            }
         }
 
         /* Adjust the queue pending flag if necessary.
