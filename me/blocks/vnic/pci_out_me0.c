@@ -34,6 +34,11 @@ NFD_INIT_DONE_DECLARE;
 
 struct nfd_cfg_msg cfg_msg;
 
+/* State tracking for the state of PCI.OUT on this island  */
+__shared __gpr unsigned int pci_out_isl_state = 0;
+#define PCI_OUT_STATE_PCI_UP_shf    0
+
+
 #ifdef NFD_USER_CTX_DECL
 NFD_USER_CTX_DECL(PCIE_ISL);
 #endif
@@ -91,6 +96,21 @@ main(void)
                                       NFD_CFG_RING_NUM(PCIE_ISL, 2));
 
                 if (cfg_msg.msg_valid) {
+                    if (cfg_msg.pci_reset) {
+                        if (cfg_msg.vid == 0) {
+                            pci_out_isl_state &=
+                                ~(1 << PCI_OUT_STATE_PCI_UP_shf);
+                            /* TEMP start of PCIe reset */
+                        }
+                    } else {
+                        if (!(pci_out_isl_state &
+                              (1 << PCI_OUT_STATE_PCI_UP_shf))) {
+                            pci_out_isl_state |=
+                                (1 << PCI_OUT_STATE_PCI_UP_shf);
+                            /* TEMP end of PCIe reset */
+                        }
+                    }
+
                     nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_OUT);
                 }
             } else {
