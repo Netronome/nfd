@@ -422,6 +422,30 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 
 
 /**
+ * Perform clean up required after the final PCIe reset notification
+ *
+ * Advance DMA sequence numbers to account for DMAs that will no longer
+ * complete.  This must only be done after all queues have been downed,
+ * otherwise the threads might send more DMAs for the queues that are
+ * still up.
+ */
+__intrinsic void
+cache_desc_complete_reset()
+{
+    /* Advance DMA sequence numbers to account for DMAs
+     * that won't complete due to the host going away */
+    /* FL sequence numbers */
+    fl_cache_dma_seq_compl = fl_cache_dma_seq_issued;
+    fl_cache_dma_seq_served = fl_cache_dma_seq_issued;
+
+    /* RX sequence numbers */
+    desc_dma_compl = desc_dma_issued;
+    desc_dma_served = desc_dma_issued;
+    desc_dma_pkts_served = desc_dma_pkts_issued;
+}
+
+
+/**
  * Perform checks and issue a FL batch fetch
  * @param queue     Queue selected for the fetch
  *
