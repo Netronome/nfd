@@ -912,6 +912,7 @@ nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
     cfg_msg_tmp.__raw = 0;
     cfg_msg_tmp.msg_valid = 1;
     cfg_msg_tmp.error = cfg_msg->error;
+    cfg_msg_tmp.pci_reset = cfg_msg->pci_reset;
     cfg_msg_tmp.vid = cfg_msg->vid;
     cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
@@ -952,6 +953,7 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
             /* Setup the remaining parse_msg info */
             cfg_msg->msg_valid = 1;
+            cfg_msg->pci_reset = 1;
             cfg_msg->interested = 1;
             cfg_msg->vid = vid;
 

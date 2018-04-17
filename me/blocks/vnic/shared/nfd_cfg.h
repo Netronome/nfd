@@ -71,16 +71,21 @@
 #define NFD_CFG_MSG_ERR_shf             30
 #define NFD_CFG_MSG_ERR_msk             0x1
 #define NFD_CFG_MSG_ERR_bit             30
-#define NFD_CFG_MSG_INTERESTED_bf       0, 29, 29
+#define NFD_CFG_MSG_PCI_RESET_bf        0, 29, 29
+#define NFD_CFG_MSG_PCI_RESET_wrd       0
+#define NFD_CFG_MSG_PCI_RESET_shf       29
+#define NFD_CFG_MSG_PCI_RESET_msk       0x1
+#define NFD_CFG_MSG_PCI_RESET_bit       29
+#define NFD_CFG_MSG_INTERESTED_bf       0, 28, 28
 #define NFD_CFG_MSG_INTERESTED_wrd      0
-#define NFD_CFG_MSG_INTERESTED_shf      29
+#define NFD_CFG_MSG_INTERESTED_shf      28
 #define NFD_CFG_MSG_INTERESTED_msk      0x1
-#define NFD_CFG_MSG_INTERESTED_bit      29
-#define NFD_CFG_MSG_UP_bf               0, 28, 28
+#define NFD_CFG_MSG_INTERESTED_bit      28
+#define NFD_CFG_MSG_UP_bf               0, 27, 27
 #define NFD_CFG_MSG_UP_wrd              0
-#define NFD_CFG_MSG_UP_shf              28
+#define NFD_CFG_MSG_UP_shf              27
 #define NFD_CFG_MSG_UP_msk              0x1
-#define NFD_CFG_MSG_UP_bit              28
+#define NFD_CFG_MSG_UP_bit              27
 #define NFD_CFG_MSG_QUEUE_bf            0, 15, 8
 #define NFD_CFG_MSG_QUEUE_wrd           0
 #define NFD_CFG_MSG_QUEUE_shf           8
@@ -434,6 +439,7 @@ err:
 /**
  * @param msg_valid     message contains valid information
  * @param error         an error has been detected
+ * @param pci_reset     a PCIe reset has occurred
  * @param interested    this component must process this message
  * @param up_bit        the current queue is up
  * @param spare         spare bits
@@ -453,9 +459,10 @@ struct nfd_cfg_msg {
         struct {
             unsigned int msg_valid:1;
             unsigned int error:1;
+            unsigned int pci_reset:1;
             unsigned int interested:1;
             unsigned int up_bit:1;
-            unsigned int spare:12;
+            unsigned int spare:11;
             unsigned int queue:8;
             unsigned int vid:8;
         };

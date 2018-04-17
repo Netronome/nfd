@@ -310,6 +310,7 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
     cfg_msg_tmp.__raw = 0;
     cfg_msg_tmp.msg_valid = 1;
     cfg_msg_tmp.error = cfg_msg->error;
+    cfg_msg_tmp.pci_reset = cfg_msg->pci_reset;
     cfg_msg_tmp.vid = cfg_msg->vid;
     cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
