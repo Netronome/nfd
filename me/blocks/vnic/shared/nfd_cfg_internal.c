@@ -947,12 +947,13 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
                    NFD_CFG_FLR_NEXT_VID_msk);
 
             /* Set the last queue to service for this VID */
+            cfg_msg->__raw = 0;
             cfg_msg->queue = NFD_VID_MAXQS(vid) - 1;
 
             /* Setup the remaining parse_msg info */
-            cfg_msg->vid = vid;
-            cfg_msg->interested = 1;
             cfg_msg->msg_valid = 1;
+            cfg_msg->interested = 1;
+            cfg_msg->vid = vid;
 
             cfg_ring_enables[0] = 0;
             cfg_ring_enables[1] = 0;
@@ -999,12 +1000,13 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
             }
 
             /* Set the last queue to service for this VID */
+            cfg_msg->__raw = 0;
             cfg_msg->queue = NFD_VID_MAXQS(vid) - 1;
 
             /* Setup the remaining parse_msg info */
-            cfg_msg->vid = vid;
-            cfg_msg->interested = 1;
             cfg_msg->msg_valid = 1;
+            cfg_msg->interested = 1;
+            cfg_msg->vid = vid;
 
             cfg_ring_enables[0] = 0;
             cfg_ring_enables[1] = 0;
@@ -1052,10 +1054,11 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
             if (vf < NFD_MAX_VFS) {
                 /* Setup the parse_msg info */
+                cfg_msg->__raw = 0;
+                cfg_msg->msg_valid = 1;
+                cfg_msg->interested = 1;
                 cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;
                 cfg_msg->vid = vf;
-                cfg_msg->interested = 1;
-                cfg_msg->msg_valid = 1;
 
                 cfg_ring_enables[0] = 0;
                 cfg_ring_enables[1] = 0;
@@ -1091,10 +1094,11 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
             if (vf < NFD_MAX_VFS) {
                 /* Setup the parse_msg info */
+                cfg_msg->__raw = 0;
+                cfg_msg->msg_valid = 1;
+                cfg_msg->interested = 1;
                 cfg_msg->queue = NFD_MAX_VF_QUEUES - 1;
                 cfg_msg->vid = vf;
-                cfg_msg->interested = 1;
-                cfg_msg->msg_valid = 1;
 
                 cfg_ring_enables[0] = 0;
                 cfg_ring_enables[1] = 0;
