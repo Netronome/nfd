@@ -152,9 +152,9 @@ __shared __gpr struct qc_bitmask pending_bmsk;
 /*
  * Sequence numbers and update variables
  */
-__gpr unsigned int fl_cache_dma_seq_issued = 0;
-__gpr unsigned int fl_cache_dma_seq_compl = 0;
-__gpr unsigned int fl_cache_dma_seq_served = 0;
+__shared __gpr unsigned int fl_cache_dma_seq_issued = 0;
+__shared __gpr unsigned int fl_cache_dma_seq_compl = 0;
+__shared __gpr unsigned int fl_cache_dma_seq_served = 0;
 static volatile __xread unsigned int fl_cache_event_xfer;
 static SIGNAL fl_cache_event_sig;
 
