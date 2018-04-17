@@ -29,6 +29,12 @@
 #include <vnic/utils/dma_seqn.h>
 
 
+/* The maximum number of DMAs tracked by event completions
+ * is less than 64.  This define is used to identify stale
+ * events, where we have advanced the sequence number for
+ * example after receiving a PCIe reset. */
+#define DMA_SEQN_MAX_INC    64
+
 #define DMA_SEQN_EXT_TYPE_msk   0x3
 #define DMA_SEQN_EXT_TYPE_shf   14
 #define DMA_SEQN_SEQN_msk       0xff
@@ -97,6 +103,8 @@ dma_seqn_advance(volatile __xread unsigned int *xfer, __gpr unsigned int *compl)
 
     seqn_inc = *xfer >> DMA_SEQN_EXTRACT_shf;
     seqn_inc = (seqn_inc - *compl) & DMA_SEQN_SEQN_msk;
+    if (seqn_inc > DMA_SEQN_MAX_INC)
+        seqn_inc = 0;   /* Event seems to be stale */
     *compl += seqn_inc;
 }
 
@@ -109,6 +117,8 @@ dma_seqn_advance_save(volatile __xread unsigned int *xfer,
 {
     *seqn_inc = *xfer >> DMA_SEQN_EXTRACT_shf;
     *seqn_inc = (*seqn_inc - *compl) & DMA_SEQN_SEQN_msk;
+    if (*seqn_inc > DMA_SEQN_MAX_INC)
+        *seqn_inc = 0;  /* Event seems to be stale */
     *compl += *seqn_inc;
 }
 
