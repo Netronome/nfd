@@ -43,6 +43,93 @@ __shared __gpr unsigned int pci_out_isl_state = 0;
 NFD_USER_CTX_DECL(PCIE_ISL);
 #endif
 
+#ifndef NFD_OUT_PD_ME0
+#error "NFD_OUT_PD_ME0 is not defined."
+#endif
+
+#ifndef NFD_OUT_PD_ME1
+#error "NFD_OUT_PD_ME1 is not defined."
+#endif
+
+#ifdef NFD_OUT_3_PD_MES
+#ifndef NFD_OUT_PD_ME2
+#error "NFD_OUT_PD_ME2 is not defined."
+#endif
+#endif
+
+
+/**
+ * Define mask values to reflect requirements of the ct[nn_write] command
+ * Define macros to construct appropriate address
+ *
+ * address[29:24]  Island number of target XPB device
+ * address[20:17]  ME ID with the Island
+ * address[16:10]  Signal number within the ME to set on completion
+ * address[9]      Address mode
+ * address[8:2]    NN register number
+ */
+#define CT_REFLECT_ISL_MASK    ((1 << 6) - 1)
+#define CT_REFLECT_MASTER_MASK ((1 << 4) - 1)
+#define CT_REFLECT_SIGNAL_MASK ((1 << 7) - 1)
+#define CT_REFLECT_NNREG_MASK  ((1 << 7) - 1)
+
+#define PCI_OUT_PD_ADDR(_meid)                          \
+    ((((_meid >> 4) & CT_REFLECT_ISL_MASK) << 24) |     \
+    (((_meid & 0xf) & CT_REFLECT_MASTER_MASK) << 17))
+
+#define PCI_OUT_NN_ADDR(_sig, _abs, _addr)              \
+    (((_abs) & 1) << 9) |                               \
+    (((_sig) & CT_REFLECT_SIGNAL_MASK) << 10) |         \
+    (((_addr) & CT_REFLECT_NNREG_MASK) << 2)
+
+
+#define PCI_OUT_MSG_UP  0
+#define PCI_OUT_MSG_RST (1 << NFD_OUT_PD_RST_BIT)
+
+/**
+ * Message PD MEs with current island state (up / reset)
+ * @param isl_reset     True if island is reset
+ *
+ * This function swaps once for all NN reflects
+ */
+__intrinsic void
+pci_out_msg_pd(unsigned int isl_reset)
+{
+    unsigned int addr;
+    unsigned int addr_part;
+    unsigned int sig_no;
+    __xwrite unsigned int data;
+    SIGNAL nn_sig;
+
+    if (isl_reset) {
+        sig_no = (NFD_OUT_PD_RST_CTX << 4) | NFD_OUT_PD_RST_SIG_NO;
+        data = (1 << NFD_OUT_PD_RST_BIT);
+    } else {
+        sig_no = 0;
+        data = 0;
+    }
+
+    addr_part = PCI_OUT_NN_ADDR(sig_no, 1,
+                                ((NFD_OUT_PD_RST_CTX << 4) |
+                                 NFD_OUT_PD_RST_NN_OFF));
+
+    addr = PCI_OUT_PD_ADDR(NFD_OUT_PD_ME0) | addr_part;
+
+    __asm { ct[ctnn_write, data, 0, addr, 1] };
+
+    addr = PCI_OUT_PD_ADDR(NFD_OUT_PD_ME1) | addr_part;
+
+#ifndef NFD_OUT_PD_ME2
+    __asm { ct[ctnn_write, data, 0, addr, 1], ctx_swap[nn_sig] };
+#else
+    __asm { ct[ctnn_write, data, 0, addr, 1] };
+
+    addr = PCI_OUT_PD_ADDR(NFD_OUT_PD_ME2) | addr_part;
+
+    __asm { ct[ctnn_write, data, 0, addr, 1], ctx_swap[nn_sig] };
+#endif
+}
+
 
 int
 main(void)
