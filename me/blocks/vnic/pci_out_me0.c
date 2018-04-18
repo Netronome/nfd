@@ -185,16 +185,18 @@ main(void)
                 if (cfg_msg.msg_valid) {
                     if (cfg_msg.pci_reset) {
                         if (cfg_msg.vid == 0) {
+                            /* Set reset state and message PD */
                             pci_out_isl_state &=
                                 ~(1 << PCI_OUT_STATE_PCI_UP_shf);
-                            /* TEMP start of PCIe reset */
+                            pci_out_msg_pd(PCI_OUT_MSG_RST);
                         }
                     } else {
                         if (!(pci_out_isl_state &
                               (1 << PCI_OUT_STATE_PCI_UP_shf))) {
+                            /* Clear reset state and message PD */
                             pci_out_isl_state |=
                                 (1 << PCI_OUT_STATE_PCI_UP_shf);
-                            /* TEMP end of PCIe reset */
+                            pci_out_msg_pd(PCI_OUT_MSG_UP);
                         }
                     }
 
