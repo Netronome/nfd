@@ -68,8 +68,8 @@
  * simpler and more efficient throughout the system.
  */
 #define NFD_ATOMICS_ALLOC_IND(_isl, _off)                               \
-    _NFP_CHIPRES_ASM(.alloc_mem nfd_out_atomics##_isl pcie##_isl##.ctm+##_off global \
-                     (NFD_OUT_ATOMICS_SZ * NFD_OUT_MAX_QUEUES))
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_out_atomics##_isl pcie##_isl##.ctm+##_off \
+                     global (NFD_OUT_ATOMICS_SZ * NFD_OUT_MAX_QUEUES))
 #define NFD_ATOMICS_ALLOC(_isl, _off) NFD_ATOMICS_ALLOC_IND(_isl, _off)
 
 
