@@ -459,7 +459,7 @@ cache_desc_complete_reset()
  * queue is also cleared by this method.
  */
 __intrinsic int
-_fetch_fl(__gpr unsigned int *queue)
+_fetch_fl(__gpr unsigned int *queue, __shared __gpr unsigned int *isl_state)
 {
     unsigned int qc_queue;
     unsigned int pcie_addr_off;
@@ -514,7 +514,8 @@ _fetch_fl(__gpr unsigned int *queue)
      * space >= batch size. */
     space_chk = ((NFD_OUT_FL_BUFS_PER_QUEUE - NFD_OUT_FL_BATCH_SZ) +
                  queue_data[*queue].rx_w - queue_data[*queue].fl_s);
-    if (space_chk >= 0) {
+    if (space_chk >= 0 &&
+        (*isl_state & (1 << NFD_OUT_STATE_PCI_UP_shf))) {
         __xread unsigned int qc_xfer;
         unsigned int pending_slot;
         SIGNAL dma_sig;
@@ -667,11 +668,14 @@ cache_desc_complete_fetch()
  * attempt to work on that queue.  The "urgent" and "active"
  * bitmasks are updated as processing progresses.
  *
+ * isl_state is tested before sending a DMA to ensure that the
+ * PCIe island has not gone into reset.
+ *
  * This method may be called multiple separate times from the
  * dispatch loop for finer balance of FL DMAs with other tasks.
  */
 __forceinline void
-cache_desc_check_active()
+cache_desc_check_active(__shared __gpr unsigned int *isl_state)
 {
     __gpr unsigned int queue;
     int ret = 0;
@@ -688,7 +692,7 @@ cache_desc_check_active()
         }
 
         /* Try to work on that queue */
-        ret = _fetch_fl(&queue);
+        ret = _fetch_fl(&queue, isl_state);
     }
 }
 
@@ -698,11 +702,14 @@ cache_desc_check_active()
  * attempt to work on that queue.  The "urgent" and "active"
  * bitmasks are updated as processing progresses.
  *
+ * isl_state is tested before sending a DMA to ensure that the
+ * PCIe island has not gone into reset.
+ *
  * This method may be called multiple separate times from the
  * dispatch loop for finer balance of FL DMAs with other tasks.
  */
 __forceinline void
-cache_desc_check_urgent()
+cache_desc_check_urgent(__shared __gpr unsigned int *isl_state)
 {
     __gpr unsigned int queue;
     int ret = 0;
@@ -719,7 +726,7 @@ cache_desc_check_urgent()
         }
 
         /* Try to work on that queue */
-        ret = _fetch_fl(&queue);
+        ret = _fetch_fl(&queue, isl_state);
     }
 }
 
@@ -797,7 +804,7 @@ send_desc_setup_shared()
 
 
 __intrinsic void
-_start_send(__gpr unsigned int *queue)
+_start_send(__gpr unsigned int *queue, __shared __gpr unsigned int *isl_state)
 {
     __xread unsigned int dma_done;
     unsigned int atomic_addr;
@@ -818,7 +825,8 @@ _start_send(__gpr unsigned int *queue)
 
     /* Check that the queue is up and abort processing if down,
      * clearing state */
-    if (queue_data[*queue].up) {
+    if (queue_data[*queue].up &&
+        (*isl_state & (1 << NFD_OUT_STATE_PCI_UP_shf))) {
         /* Check whether rx_s can be advanced */
         rx_s = queue_data[*queue].rx_s;
         if (rx_s != dma_done) {
@@ -963,11 +971,14 @@ _start_send(__gpr unsigned int *queue)
  * bitmasks are updated as processing progresses.  The "urgent"
  * bitmask is also updated as feedback to cache_desc.
  *
+ * isl_state is tested before sending a DMA to ensure that the
+ * PCIe island has not gone into reset.
+ *
  * This method may be called multiple separate times from the
  * dispatch loop for finer balance of RX DMAs with other tasks.
  */
 __forceinline void
-send_desc_check_cached()
+send_desc_check_cached(__shared __gpr unsigned int *isl_state)
 {
     __gpr unsigned int queue;
     int ret = 0;
@@ -983,7 +994,7 @@ send_desc_check_cached()
         }
 
         /* Try to work on that queue */
-        _start_send(&queue);
+        _start_send(&queue, isl_state);
     }
 }
 
@@ -994,11 +1005,14 @@ send_desc_check_cached()
  * bitmasks are updated as processing progresses.  The "urgent"
  * bitmask is also updated as feedback to cache_desc.
  *
+ * isl_state is tested before sending a DMA to ensure that the
+ * PCIe island has not gone into reset.
+ *
  * This method may be called multiple separate times from the
  * dispatch loop for finer balance of RX DMAs with other tasks.
  */
 __forceinline void
-send_desc_check_pending()
+send_desc_check_pending(__shared __gpr unsigned int *isl_state)
 {
     __gpr unsigned int queue;
     int ret = 0;
@@ -1014,7 +1028,7 @@ send_desc_check_pending()
         }
 
         /* Try to work on that queue */
-        _start_send(&queue);
+        _start_send(&queue, isl_state);
     }
 }
 

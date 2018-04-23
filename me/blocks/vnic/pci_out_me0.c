@@ -168,12 +168,12 @@ main(void)
         for (;;) {
             cache_desc_complete_fetch(); /* Swaps once */
 
-            cache_desc_check_urgent(); /* Swaps at least once */
+            cache_desc_check_urgent(&pci_out_isl_state); /* Swaps min once */
 
             cache_desc_status();
             ctx_swap();
 
-            cache_desc_check_active(); /* Swaps at least once */
+            cache_desc_check_active(&pci_out_isl_state); /* Swaps min once */
 
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */
@@ -224,11 +224,11 @@ main(void)
             /* CTX1 main loop */
             send_desc_complete_send();  /* Swaps once */
 
-            send_desc_check_cached();   /* Swaps at least once */
+            send_desc_check_cached(&pci_out_isl_state); /* Swaps min once */
 
-            send_desc_check_cached();   /* Swaps at least once */
+            send_desc_check_cached(&pci_out_isl_state); /* Swaps min once */
 
-            send_desc_check_pending();   /* Swaps at least once */
+            send_desc_check_pending(&pci_out_isl_state);  /* Swaps min once */
 
             /* ctx_swap(); */
         }
