@@ -36,7 +36,6 @@ struct nfd_cfg_msg cfg_msg;
 
 /* State tracking for the state of PCI.OUT on this island  */
 __shared __gpr unsigned int pci_out_isl_state = 0;
-#define PCI_OUT_STATE_PCI_UP_shf    0
 
 
 #ifdef NFD_USER_CTX_DECL
@@ -187,15 +186,15 @@ main(void)
                         if (cfg_msg.vid == 0) {
                             /* Set reset state and message PD */
                             pci_out_isl_state &=
-                                ~(1 << PCI_OUT_STATE_PCI_UP_shf);
+                                ~(1 << NFD_OUT_STATE_PCI_UP_shf);
                             pci_out_msg_pd(PCI_OUT_MSG_RST);
                         }
                     } else {
                         if (!(pci_out_isl_state &
-                              (1 << PCI_OUT_STATE_PCI_UP_shf))) {
+                              (1 << NFD_OUT_STATE_PCI_UP_shf))) {
                             /* Clear reset state and message PD */
                             pci_out_isl_state |=
-                                (1 << PCI_OUT_STATE_PCI_UP_shf);
+                                (1 << NFD_OUT_STATE_PCI_UP_shf);
                             pci_out_msg_pd(PCI_OUT_MSG_UP);
                         }
                     }

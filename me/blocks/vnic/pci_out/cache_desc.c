@@ -58,6 +58,9 @@
 #define NFD_OUT_FL_SZ_PER_QUEUE   \
     (NFD_OUT_FL_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
 
+/* State bit for island up/reset */
+#define NFD_OUT_STATE_PCI_UP_shf    0
+
 
 /*
  * Allocate memory at offset 0 in CTM for atomics.
