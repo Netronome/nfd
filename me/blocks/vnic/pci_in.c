@@ -335,6 +335,7 @@ nfd_in_metadata_pop_cache(unsigned int *meta_val,
     #if NFD_IN_MAX_META_ITEM_LEN > 60
         #error "Maximum supported value of NFD_IN_MAX_META_ITEM_LEN is 60"
     #endif
+    __implicit_read(meta_cache);
 
 done:
 err:
