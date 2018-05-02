@@ -1428,6 +1428,63 @@ DECLARE_PROC_LSO(6);
 DECLARE_PROC_LSO(7);
 
 
+/* These functions handle down queues off the fast path.
+ * As all packets in a batch come from one queue and are
+ * processed without swapping, all the packets in the batch
+ * will receive the same treatment.  The batch will still
+ * use its slot in the DMA sequence numbers and the
+ * nfd_in_issued_ring.
+ */
+#define DECLARE_PROC_DOWN(_pkt)                                         \
+__noinline void issue_proc_down##_pkt(unsigned int pcie_hi_word_part,   \
+                                      unsigned int type,                \
+                                      unsigned int src)                 \
+{                                                                       \
+    unsigned int cpp_hi_word;                                           \
+                                                                        \
+    /* Flag the packet for notify. */                                   \
+    /* Zero EOP and num_batch so that the notify block will not */      \
+    /* produce output to the work queues, and will have no */           \
+    /* effect on the queue controller queue. */                         \
+    /* NB: the rest of the message will be stale. */                    \
+    issued_tmp.eop = 0;                                                 \
+    issued_tmp.offset = 0;                                              \
+    issued_tmp.lso_issued_cnt = 0;                                      \
+    issued_tmp.num_batch = 0;                                           \
+    issued_tmp.sp1 = 0;                                                 \
+    batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];               \
+                                                                        \
+    /* Handle the DMA sequence numbers for the batch */                 \
+    if (type == NFD_IN_DATA_EVENT_TYPE) {                               \
+        cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,       \
+                                          PCI_IN_ISSUE_DMA_IDX);        \
+        cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, src);              \
+        cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN); \
+        cpp_hi_word |=                                                  \
+            NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG_SIG_ONLY); \
+                                                                        \
+        dma_out.pkt##_pkt##.__raw[0] = 0;                               \
+        dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                     \
+        dma_out.pkt##_pkt##.__raw[2] = 0;                               \
+        dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |             \
+                                        NFP_PCIE_DMA_CMD_LENGTH(0));    \
+        cpp_hi_word |=                                                  \
+            NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);        \
+        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                    \
+                       NFD_IN_DATA_DMA_QUEUE,                           \
+                       sig_done, &last_of_batch_dma_sig);               \
+    }                                                                   \
+}
+DECLARE_PROC_DOWN(0);
+DECLARE_PROC_DOWN(1);
+DECLARE_PROC_DOWN(2);
+DECLARE_PROC_DOWN(3);
+DECLARE_PROC_DOWN(4);
+DECLARE_PROC_DOWN(5);
+DECLARE_PROC_DOWN(6);
+DECLARE_PROC_DOWN(7);
+
+
 #if __REVISION_MIN < __REVISION_B0
 #error "A0 chips not supported"
 #endif
@@ -1644,49 +1701,11 @@ do {                                                                    \
                                                                         \
     } else if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_UP_shf) \
                == 0) {                                                  \
-        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
-                             NFD_IN_LSO_CNTR_T_ISSUED_NOT_Q_UP_TX_DESC);\
-        /* Handle down queues off the fast path. */                     \
-        /* As all packets in a batch come from one queue and are */     \
-        /* processed without swapping, all the packets in the batch */  \
-        /* will receive the same treatment.  The batch will still */    \
-        /* use its slot in the DMA sequence numbers and the */          \
-        /* nfd_in_issued_ring. */                                       \
-                                                                        \
         /* Setting "cont" when the queue is down ensures */             \
         /* that this processing happens off the fast path. */           \
-                                                                        \
-        /* Flag the packet for notify. */                               \
-        /* Zero EOP and num_batch so that the notify block will not */  \
-        /* produce output to the work queues, and will have no */       \
-        /* effect on the queue controller queue. */                     \
-        /* NB: the rest of the message will be stale. */                \
-        issued_tmp.eop = 0;                                             \
-        issued_tmp.offset = 0;                                          \
-        issued_tmp.lso_issued_cnt = 0;                                  \
-        issued_tmp.num_batch = 0;                                       \
-        issued_tmp.sp1 = 0;                                             \
-        batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];           \
-                                                                        \
-        /* Handle the DMA sequence numbers for the batch */             \
-        if (_type == NFD_IN_DATA_EVENT_TYPE) {                          \
-            cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,   \
-                                              PCI_IN_ISSUE_DMA_IDX);    \
-            cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, _src);         \
-            cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN); \
-            cpp_hi_word |=                                              \
-                NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG_SIG_ONLY); \
-                                                                        \
-            dma_out.pkt##_pkt##.__raw[0] = 0;                           \
-            dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                 \
-            dma_out.pkt##_pkt##.__raw[2] = 0;                           \
-            dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |         \
-                                            NFP_PCIE_DMA_CMD_LENGTH(0)); \
-            cpp_hi_word |= NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG); \
-            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                \
-                           NFD_IN_DATA_DMA_QUEUE,                       \
-                           sig_done, &last_of_batch_dma_sig);           \
-        }                                                               \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                      \
+                             NFD_IN_LSO_CNTR_T_ISSUED_NOT_Q_UP_TX_DESC);\
+        issue_proc_down##_pkt(pcie_hi_word_part, _type, _src);          \
                                                                         \
     } else {                                                            \
         unsigned int data_len;                                          \
