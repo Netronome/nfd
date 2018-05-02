@@ -1274,6 +1274,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             issued_tmp.buf_addr = curr_buf;                                  \
             issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
             issued_tmp.lso_seq_cnt = lso_seq_cnt;                            \
+            issued_tmp.lso_end = 0;                                          \
             issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
             issued_tmp.data_len = lso_offhdr + lso_payload_len;              \
             /* if last of LSO segment set lso end flag and we have no */     \
@@ -1657,7 +1658,6 @@ do {                                                                    \
         issued_tmp.offset = 0;                                          \
         issued_tmp.lso_issued_cnt = 0;                                  \
         issued_tmp.num_batch = 0;                                       \
-        issued_tmp.lso_end = 0;                                         \
         issued_tmp.sp1 = 0;                                             \
         batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];           \
                                                                         \
@@ -2050,9 +2050,8 @@ issue_dma()
 
         local_csr_write(local_csr_active_lm_addr_2, &queue_data[queue]);
 
-        issued_tmp.lso_issued_cnt = 0;
+        issued_tmp.lso_issued_cnt = 0;  /* In issued_tmp.__raw[0] */
         issued_tmp.num_batch = num;   /* Only needed in pkt0 */
-        issued_tmp.lso_end = 0;
         issued_tmp.sp1 = 0;
         issued_tmp.q_num = queue;
         pcie_hi_word_part =
