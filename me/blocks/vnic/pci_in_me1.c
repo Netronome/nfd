@@ -27,6 +27,7 @@
 #include <vnic/pci_in/issue_dma_status.c>
 #include <vnic/pci_in/precache_bufs.c>
 #include <vnic/shared/nfd_cfg_internal.c>
+#include <vnic/shared/nfd_rst_state.h>
 
 /* Determine which configuration rings to use, and where to send the
  * next configuration message.  The choice depends on whether this is
@@ -120,6 +121,18 @@ main(void)
                                       NFD_CFG_RING_NUM(PCIE_ISL, CFG_RING_IN));
 
                 if (cfg_msg.msg_valid) {
+                    if (cfg_msg.pci_reset) {
+                        if (cfg_msg.vid == 0) {
+                            /* Set reset state */
+                            nfd_rst_state_set_rst(PCIE_ISL);
+                        }
+                    } else {
+                        if (NFD_RST_STATE_TEST_RST(PCIE_ISL)) {
+                            /* Clear reset state */
+                            nfd_rst_state_set_up(PCIE_ISL);
+                        }
+                    }
+
                     nfd_cfg_parse_msg((void *) &cfg_msg, NFD_CFG_PCI_IN1);
                 }
             } else {
