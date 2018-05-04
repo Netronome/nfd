@@ -125,6 +125,7 @@ main(void)
                         if (cfg_msg.vid == 0) {
                             /* Set reset state */
                             nfd_rst_state_set_rst(PCIE_ISL);
+                            issue_dma_start_rst();
                         }
                     } else {
                         if (NFD_RST_STATE_TEST_RST(PCIE_ISL)) {

@@ -36,6 +36,7 @@
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
+#include <vnic/shared/nfd_rst_state.h>
 
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/ctm_ring.h>
@@ -454,7 +455,8 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].__raw[6] = 0;
         queue_data[bmsk_queue].__raw[7] = 0;
 
-    } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
+    } else if ((!cfg_msg->up_bit && queue_data[bmsk_queue].up) ||
+               cfg_msg->pci_reset) {
         /* Free the MU buffer */
         if (queue_data[bmsk_queue].curr_buf != 0) {
             unsigned int blm_raddr;
@@ -495,6 +497,25 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
 
     }
 }
+
+
+/**
+ * Setup queue_data state for reset mode
+ *
+ * ISSUE_PROC will check NFD_RST_STATE_TEST_UP(_isl) if queues are flagged
+ * as "cont & !up".  This allows resets to be handled off the fast path.
+ */
+__intrinsic void
+issue_dma_start_rst()
+{
+    unsigned int bmsk_queue;
+
+    for (bmsk_queue = 0; bmsk_queue < NFD_IN_MAX_QUEUES; bmsk_queue++) {
+        queue_data[bmsk_queue].cont = 1;
+        queue_data[bmsk_queue].up = 0;
+    }
+}
+
 
 
 /**
@@ -1454,25 +1475,35 @@ __noinline void issue_proc_down##_pkt(unsigned int pcie_hi_word_part,   \
     issued_tmp.sp1 = 0;                                                 \
     batch_out.pkt##_pkt##.__raw[0] = issued_tmp.__raw[0];               \
                                                                         \
-    /* Handle the DMA sequence numbers for the batch */                 \
+    /* Handle the sequence numbers for the batch */                     \
     if (type == NFD_IN_DATA_EVENT_TYPE) {                               \
-        cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,       \
-                                          PCI_IN_ISSUE_DMA_IDX);        \
-        cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, src);              \
-        cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN); \
-        cpp_hi_word |=                                                  \
-            NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG_SIG_ONLY); \
+        if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                          \
+            /* Issue a signal only DMA to generate an event when */     \
+            /* the batch completes */                                   \
+            cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,   \
+                                              PCI_IN_ISSUE_DMA_IDX);    \
+            cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, src);          \
+            cpp_hi_word |=                                              \
+                NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);      \
+            cpp_hi_word |=                                              \
+                NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG_SIG_ONLY); \
                                                                         \
-        dma_out.pkt##_pkt##.__raw[0] = 0;                               \
-        dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                     \
-        dma_out.pkt##_pkt##.__raw[2] = 0;                               \
-        dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |             \
-                                        NFP_PCIE_DMA_CMD_LENGTH(0));    \
-        cpp_hi_word |=                                                  \
-            NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);        \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                    \
-                       NFD_IN_DATA_DMA_QUEUE,                           \
-                       sig_done, &last_of_batch_dma_sig);               \
+            dma_out.pkt##_pkt##.__raw[0] = 0;                           \
+            dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                 \
+            dma_out.pkt##_pkt##.__raw[2] = 0;                           \
+            dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |         \
+                                            NFP_PCIE_DMA_CMD_LENGTH(0)); \
+            cpp_hi_word |=                                              \
+                NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);    \
+            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                \
+                           NFD_IN_DATA_DMA_QUEUE,                       \
+                           sig_done, &last_of_batch_dma_sig);           \
+        } else {                                                        \
+            /* XXX when the island is in reset, sequence numbers are */ \
+            /* advanced within the ME, bypassing the DMA engine. */     \
+            /* remove last_of_batch_dma_sig from the wait mask */       \
+            wait_msk &= ~__signals(&last_of_batch_dma_sig);             \
+        }                                                               \
     }                                                                   \
 }
 DECLARE_PROC_DOWN(0);
