@@ -30,6 +30,7 @@
 #include <nfp6000/nfp_me.h>
 
 #include <vnic/shared/nfd_internal.h>
+#include <vnic/shared/nfd_rst_state.h>
 #include <vnic/utils/dma_seqn.h>
 
 #ifndef PCI_IN_ISSUE_DMA_IDX
@@ -566,6 +567,11 @@ distr_precache_bufs_setup_shared()
  * precache_bufs_jumbo() is called from the section of code that services
  * nfd_in_jumbo_event_sig.  This minimises the jumbo overhead when the
  * extra DMAs and packet buffers are not used.
+ *
+ * When the PCIe island is in reset, we ignore the DMA completion events
+ * and update xyz_dma_seq_compl to track xyz_dma_seq_issued.  We keep the
+ * event filters cleared so that stale events don't disturb the sequence
+ * numbers when we leave reset.
  */
 __intrinsic void
 distr_precache_bufs(__xwrite unsigned int *data_wr,
@@ -576,43 +582,98 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
         data_dma_seq_served = nfd_in_data_served_refl_in;
     }
 
-    if (signal_test(&nfd_in_data_event_sig)) {
-        __implicit_read(&nfd_in_data_compl_refl_out);
+    if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {
+        if (signal_test(&nfd_in_data_event_sig)) {
+            __implicit_read(&nfd_in_data_compl_refl_out);
 
-        dma_seqn_advance(&nfd_in_data_event_xfer, &data_dma_seq_compl);
+            dma_seqn_advance(&nfd_in_data_event_xfer, &data_dma_seq_compl);
 
-        /* Mirror to remote ME */
-        nfd_in_data_compl_refl_out = data_dma_seq_compl;
-        reflect_data(NFD_IN_NOTIFY_ME,
-                     __xfer_reg_number(&nfd_in_data_compl_refl_in,
-                                       NFD_IN_NOTIFY_ME),
-                     __signal_number(&nfd_in_data_compl_refl_sig,
-                                     NFD_IN_NOTIFY_ME),
-                     &nfd_in_data_compl_refl_out,
-                     sizeof nfd_in_data_compl_refl_out);
+            /* Mirror to remote ME */
+            nfd_in_data_compl_refl_out = data_dma_seq_compl;
+            reflect_data(NFD_IN_NOTIFY_ME,
+                         __xfer_reg_number(&nfd_in_data_compl_refl_in,
+                                           NFD_IN_NOTIFY_ME),
+                         __signal_number(&nfd_in_data_compl_refl_sig,
+                                         NFD_IN_NOTIFY_ME),
+                         &nfd_in_data_compl_refl_out,
+                         sizeof nfd_in_data_compl_refl_out);
 
-        __implicit_write(&nfd_in_data_event_sig);
-        __event_cls_autopush_filter_reset(
-            NFD_IN_DATA_EVENT_FILTER,
-            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            NFD_IN_DATA_EVENT_FILTER,
-            data_wr, sig_done, data_sig);
-        *wait_msk |= __signals(data_sig);
+            __implicit_write(&nfd_in_data_event_sig);
+            __event_cls_autopush_filter_reset(
+                NFD_IN_DATA_EVENT_FILTER,
+                NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+                NFD_IN_DATA_EVENT_FILTER,
+                sig_done, data_sig);
+            *wait_msk |= __signals(data_sig);
+        }
 
-    }
+        if (signal_test(&nfd_in_jumbo_event_sig)) {
+            dma_seqn_advance(&nfd_in_jumbo_event_xfer, &jumbo_dma_seq_compl);
 
-    if (signal_test(&nfd_in_jumbo_event_sig)) {
-        dma_seqn_advance(&nfd_in_jumbo_event_xfer, &jumbo_dma_seq_compl);
+            precache_bufs_jumbo();
 
-        precache_bufs_jumbo();
+            __implicit_write(&nfd_in_jumbo_event_sig);
+            __event_cls_autopush_filter_reset(
+                NFD_IN_JUMBO_EVENT_FILTER,
+                NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+                NFD_IN_JUMBO_EVENT_FILTER,
+                sig_done, jumbo_sig);
+            *wait_msk |= __signals(jumbo_sig);
+        }
+    } else {
+        /* PCIe island is in reset */
 
-        __implicit_write(&nfd_in_jumbo_event_sig);
-        __event_cls_autopush_filter_reset(
-            NFD_IN_JUMBO_EVENT_FILTER,
-            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
-            NFD_IN_JUMBO_EVENT_FILTER,
-            jumbo_wr, sig_done, jumbo_sig);
-        *wait_msk |= __signals(jumbo_sig);
+        /* Check whether data_dma_seq_issued has advanced, and
+         * if so, advance data_dma_seq_compl.  Reflect the new
+         * value to notify. */
+        if (data_dma_seq_compl != data_dma_seq_issued) {
+            __implicit_read(&nfd_in_data_compl_refl_out);
 
+            data_dma_seq_compl = data_dma_seq_issued;
+
+            /* Mirror to remote ME */
+            nfd_in_data_compl_refl_out = data_dma_seq_compl;
+            reflect_data(NFD_IN_NOTIFY_ME,
+                         __xfer_reg_number(&nfd_in_data_compl_refl_in,
+                                           NFD_IN_NOTIFY_ME),
+                         __signal_number(&nfd_in_data_compl_refl_sig,
+                                         NFD_IN_NOTIFY_ME),
+                         &nfd_in_data_compl_refl_out,
+                         sizeof nfd_in_data_compl_refl_out);
+        }
+
+        /* Advance jumbo_dma_seq_compl.  We don't need to reflect
+         * the value, so just copy it from jumbo_dma_seq_issued */
+        jumbo_dma_seq_compl = jumbo_dma_seq_issued;
+
+        /* Acknowledge any outstanding events data dma events
+         * so that we won't act on stale events later */
+        if (signal_test(&nfd_in_data_event_sig)) {
+            __implicit_write(&nfd_in_data_event_sig);
+            __event_cls_autopush_filter_reset(
+                NFD_IN_DATA_EVENT_FILTER,
+                NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+                NFD_IN_DATA_EVENT_FILTER,
+                sig_done, data_sig);
+            *wait_msk |= __signals(data_sig);
+        }
+
+        /* Acknowledge any outstanding events jumbo dma events
+         * so that we won't act on stale events later.
+         * nfd_in_jumbo_event_sig is overloaded to also signal
+         * that the jumbo_store is depleted, so run
+         * precache_bufs_jumbo() as well. */
+        if (signal_test(&nfd_in_jumbo_event_sig)) {
+            __implicit_write(&nfd_in_jumbo_event_sig);
+
+            precache_bufs_jumbo();
+
+            __event_cls_autopush_filter_reset(
+                NFD_IN_JUMBO_EVENT_FILTER,
+                NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+                NFD_IN_JUMBO_EVENT_FILTER,
+                sig_done, jumbo_sig);
+            *wait_msk |= __signals(jumbo_sig);
+        }
     }
 }
