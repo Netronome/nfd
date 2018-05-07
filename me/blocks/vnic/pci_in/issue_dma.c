@@ -799,8 +799,14 @@ do {                                                                         \
     dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                             \
     dma_out.pkt##_pkt##.__raw[3] =                                           \
         pcie_hi_word | NFP_PCIE_DMA_CMD_LENGTH(NFD_IN_DMA_SPLIT_LEN - 1);    \
-                                                                             \
-    pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, NFD_IN_DATA_DMA_QUEUE);       \
+    if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                                   \
+        pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt, NFD_IN_DATA_DMA_QUEUE);   \
+    } else {                                                                 \
+        /* Suppress the DMA and flag the packet as invalid */                \
+        /* Leave other processing untouched so the descriptor will */        \
+        /* complete as usual. */                                             \
+        _buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);                         \
+    }                                                                        \
                                                                              \
     _add_to_pcie_addr(&pcie_hi_word, &pcie_addr_lo, NFD_IN_DMA_SPLIT_LEN);   \
     cpp_addr_lo += NFD_IN_DMA_SPLIT_LEN;                                     \
@@ -1109,7 +1115,14 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         lso_dma_index += dma_length;                                         \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ);         \
-        __wait_for_all(&lso_hdr_enq_sig, &lso_hdr_dma_sig);                  \
+        __wait_for_all(&lso_hdr_enq_sig);                                    \
+                                                                             \
+        /* Wait on either the DMA completing or a reset */                   \
+        while (!signal_test(&lso_hdr_dma_sig) &&                             \
+               NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                            \
+            ctx_swap();                                                      \
+        }                                                                    \
+                                                                             \
         /* We need to optimize here and kick the first LSO packet's data */  \
         /* including the header directly to emem buffer.*/                   \
         /* For later parts of the LSO we will use the PE DMA to load the */  \
@@ -1151,6 +1164,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         nfd_in_lso_cntr_addr,                                \
                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED);  \
                     ctx_swap();                                              \
+                    /* XXX the queue could now be down, but */               \
+                    /* only if a PCIe reset occurred */                      \
                 }                                                            \
                 _ISSUE_PROC_MU_CHK(curr_buf);                                \
                 __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd], \
@@ -1177,6 +1192,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 /* The LSO descriptors have either generated too many */     \
                 /* segments or the queue has gone down while processing */   \
                 /* the descriptor.  Either could be malicious. */            \
+                /* PCIe resets might also get caught here. */                \
                 curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);             \
                                                                              \
             }                                                                \
@@ -1325,11 +1341,18 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word |                       \
                                         NFP_PCIE_DMA_CMD_LENGTH(             \
                                             dma_length - 1));                \
-        /* XXX Issue DMA with ctx_swap to ensure we can reuse the XFERs */   \
-        /* (dma_out.pkt##_pkt##) when we wake up again.  */                  \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                       \
-                       NFD_IN_DATA_DMA_QUEUE, sig_done, &lso_enq_sig);       \
-        lso_wait_msk = __signals(&lso_enq_sig);                              \
+        if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                               \
+            /* XXX Issue DMA with ctx_swap to ensure we can reuse the */     \
+            /* XFERs (dma_out.pkt##_pkt##) when we wake up again.  */        \
+            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                   \
+                           NFD_IN_DATA_DMA_QUEUE, sig_done, &lso_enq_sig);   \
+            lso_wait_msk = __signals(&lso_enq_sig);                          \
+        } else {                                                             \
+            /* Suppress the DMA and flag the packet as invalid */            \
+            /* Leave other processing untouched so the descriptor will */    \
+            /* complete as usual. */                                         \
+            curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);                 \
+        }                                                                    \
                                                                              \
         /* if we are at end of mu_buf, or the end of the LSO buffer */       \
         if ((lso_payload_len == mss) ||                                      \
@@ -1453,22 +1476,32 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     data_dma_seq_issued++;                                                   \
     /* Handle the DMA sequence numbers */                                    \
     if (type == NFD_IN_DATA_EVENT_TYPE) {                                    \
-        cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,            \
-                                          PCI_IN_ISSUE_DMA_IDX);             \
-        cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, data_dma_seq_issued);   \
-        cpp_hi_word |= NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);    \
-        cpp_hi_word |=                                                       \
+        if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                               \
+            cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,        \
+                                              PCI_IN_ISSUE_DMA_IDX);         \
+            cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word,                     \
+                                            data_dma_seq_issued);            \
+            cpp_hi_word |=                                                   \
+                NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);           \
+            cpp_hi_word |=                                                   \
             NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG_SIG_ONLY);    \
                                                                              \
-        dma_out.pkt##_pkt##.__raw[0] = 0;                                    \
-        dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                          \
-        dma_out.pkt##_pkt##.__raw[2] = 0;                                    \
-        dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |                  \
-                                        NFP_PCIE_DMA_CMD_LENGTH(0));         \
-        cpp_hi_word |= NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);  \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                         \
-                       NFD_IN_DATA_DMA_QUEUE,                                \
-                       sig_done, &last_of_batch_dma_sig);                    \
+            dma_out.pkt##_pkt##.__raw[0] = 0;                                \
+            dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                      \
+            dma_out.pkt##_pkt##.__raw[2] = 0;                                \
+            dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |              \
+                                            NFP_PCIE_DMA_CMD_LENGTH(0));     \
+            cpp_hi_word |=                                                   \
+                NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);         \
+            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                     \
+                           NFD_IN_DATA_DMA_QUEUE,                            \
+                           sig_done, &last_of_batch_dma_sig);                \
+        } else {                                                             \
+            /* XXX when the island is in reset, sequence numbers are */      \
+            /* advanced within the ME, bypassing the DMA engine. */          \
+            /* remove last_of_batch_dma_sig from the wait mask */            \
+            wait_msk &= ~__signals(&last_of_batch_dma_sig);                  \
+        }                                                                    \
     }                                                                        \
                                                                              \
     /* We're done with the descriptor so unlock the queue state */           \
