@@ -613,13 +613,21 @@ issue_dma_gather_seq_recv()
 
 
 /**
- * Clean up LM queue LSO state
- * If an LSO gather series is accidentally or maliciously truncated,
- * we may see the LSO state in the regular gather DMA branch.  If this
- * happens, we need to clean up the queue state.
+ * Clean up LM queue state
+ * @param check_buf True if we need to check the LM curr_buf state
+ *
+ * We may need to clean up queue state for various reasons:
+ * 1) an LSO gather series is accidentally or maliciously truncated,
+ *    in which case we may see the LSO state in the regular gather
+ *    DMA branch.
+ * 2) a PCIe reset occurs while handling (gather) jumbo frames.
  */
+
+#define _ISSUE_DMA_DO_BUF_CHECK 1
+#define _ISSUE_DMA_NO_BUF_CHECK 0
+
 __noinline void
-issue_dma_cleanup_lso_state()
+issue_dma_cleanup_state(const unsigned int check_buf)
 {
     unsigned int curr_buf;
     /* XXX leave CONT bit untouched, it gets cleared on EOP descriptors */
@@ -643,20 +651,22 @@ issue_dma_cleanup_lso_state()
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_OFFSET_wrd],        \
                 --, B, 0] }
 
-    /* ensure that we have a valid MU buffer */
-    /* XXX the gather code sends TX descriptors to the application
-     * with the invalid bit set on EOP, and the application frees the
-     * MU buffer. */
-    __asm { alu[curr_buf, --, B,                                        \
-                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd]] }
-    if ((curr_buf & NFD_IN_DMA_STATE_CURR_BUF_msk) == 0) {
-        /* We can use the regular buffer associated with
-         * this _pkt slot in the batch. */
-        curr_buf = precache_bufs_use();
+    if (check_buf) {
+        /* ensure that we have a valid MU buffer */
+        /* XXX we send TX descriptors to the application  with the
+         * invalid bit set on EOP, and the application frees the
+         * MU buffer. */
+        __asm { alu[curr_buf, --, B,                                    \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd]] }
+        if ((curr_buf & NFD_IN_DMA_STATE_CURR_BUF_msk) == 0) {
+            /* We can use the regular buffer associated with
+             * this _pkt slot in the batch. */
+            curr_buf = precache_bufs_use();
+        }
+        _ISSUE_PROC_MU_CHK(curr_buf);
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd],  \
+                    --, B, curr_buf] }
     }
-    _ISSUE_PROC_MU_CHK(curr_buf);
-    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd],      \
-                --, B, curr_buf] }
 }
 
 
@@ -688,7 +698,7 @@ do {                                                                \
  * DMAs are tracked from a separate sequence space (jumbo_dma_seq_issued
  * and jumbo_dma_seq_compl).
  */
-#define _ISSUE_PROC_JUMBO(_pkt, _buf)                                   \
+#define _ISSUE_PROC_JUMBO(_pkt, _type, _buf, _priority)                 \
 do {                                                                    \
     int jumbo_seq_test;                                                 \
                                                                         \
@@ -705,6 +715,33 @@ do {                                                                    \
         /* The queue state is locked so it is safe to simply swap */    \
         /* for CTX0 to advance jumbo_dma_seq_compl. */                  \
         ctx_swap();                                                     \
+    }                                                                   \
+                                                                        \
+    /* Check whether we went into reset during the swap */              \
+    if (NFD_RST_STATE_TEST_RST(PCIE_ISL)) {                             \
+        /* Clean up queue state and set invalid bit */                  \
+        issue_dma_cleanup_state(_ISSUE_DMA_NO_BUF_CHECK);               \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_CURR_BUF_wrd],  \
+                    --, B, 0] }                                         \
+        _buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);                    \
+                                                                        \
+        /* Write batch message */                                       \
+        issued_tmp.eop = tx_desc.pkt##_pkt##.eop;                       \
+        issued_tmp.offset = tx_desc.pkt##_pkt##.offset;                 \
+        batch_out.pkt##_pkt## = issued_tmp;                             \
+        batch_out.pkt##_pkt##.__raw[1] = _buf;                          \
+        batch_out.pkt##_pkt##.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];  \
+        batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
+                                                                        \
+        /* Handle last_of_batch_dma_sig */                              \
+        if (_type == NFD_IN_DATA_EVENT_TYPE)                            \
+            wait_msk &= ~__signals(&last_of_batch_dma_sig);             \
+                                                                        \
+        /* Unlock the queue */                                          \
+        _ISSUE_PROC_STATE_UNLOCK();                                     \
+                                                                        \
+        /* Abort the rest of the packet processing */                   \
+        goto issue_abort_rst##_pkt##_##_priority;                       \
     }                                                                   \
                                                                         \
     dma_out.pkt##_pkt##.__raw[0] = cpp_addr_lo + NFD_IN_DATA_OFFSET;    \
@@ -1653,7 +1690,7 @@ do {                                                                    \
             /* in precache_bufs_jumbo_use() above.  */                  \
             if (dma_len > NFD_IN_DMA_SPLIT_THRESH - 1) {                \
                 do {                                                    \
-                    _ISSUE_PROC_JUMBO(_pkt, buf_addr);                  \
+                    _ISSUE_PROC_JUMBO(_pkt, _type, buf_addr, _priority); \
                     NFD_IN_LSO_CNTR_INCR(                               \
                         nfd_in_lso_cntr_addr,                           \
                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_JUMBO_TX_DESC); \
@@ -1806,7 +1843,7 @@ do {                                                                    \
                 /* and set the invalid bit */                           \
                 /* XXX the helper function ensures we have a */         \
                 /* valid buffer available */                            \
-                issue_dma_cleanup_lso_state();                          \
+                issue_dma_cleanup_state(_ISSUE_DMA_DO_BUF_CHECK);       \
                 __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd], \
                             NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd], \
                             or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }    \
@@ -1872,7 +1909,7 @@ do {                                                                    \
             if (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                    \
                 _ISSUE_PROC_STATE_LOCK();                               \
                 do {                                                    \
-                    _ISSUE_PROC_JUMBO(_pkt, curr_buf);                  \
+                    _ISSUE_PROC_JUMBO(_pkt, _type, curr_buf, _priority); \
                     NFD_IN_LSO_CNTR_INCR(                               \
                         nfd_in_lso_cntr_addr,                           \
                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_JUMBO_TX_DESC); \
@@ -1989,6 +2026,14 @@ do {                                                                    \
                         --, B, 0] }                                     \
         }                                                               \
     }                                                                   \
+                                                                        \
+    /* issue_abort_rst target */                                        \
+    /* XXX we might swap for a while waiting for DMA resources */       \
+    /* when processing jumbo frames and a reset occurs. */              \
+    /* Under these circumstances, we don't want to issue any more */    \
+    /* DMAs, so can't exit the jumbo macros as normal.  Instead, */     \
+    /* clean up and jump here to leave the ISSUE_PROC() macro. */       \
+issue_abort_rst##_pkt##_##_priority:                                    \
                                                                         \
 } while (0)
 
