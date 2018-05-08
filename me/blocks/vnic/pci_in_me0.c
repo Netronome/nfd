@@ -31,6 +31,7 @@
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_cfg_internal.c>
+#include <vnic/shared/nfd_rst_state.h>
 
 #if NFD_CFG_CLASS != NFD_CFG_CLASS_DEFAULT
 #pragma message( "Non-zero (default) NFD_CFG_CLASS set!" )
@@ -176,6 +177,20 @@ main(void)
                 service_qc_vnic_setup(&cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
+                    if (cfg_msg.pci_reset) {
+                        if (cfg_msg.vid == 0) {
+                            /* Set reset state and message notify */
+                            nfd_rst_state_set_rst(PCIE_ISL);
+                            pci_in_msg_notify(NFD_IN_MSG_NOTIFY_RST);
+                        }
+                    } else {
+                        if (NFD_RST_STATE_TEST_RST(PCIE_ISL)) {
+                            /* Clear reset state */
+                            nfd_rst_state_set_up(PCIE_ISL);
+                            pci_in_msg_notify(NFD_IN_MSG_NOTIFY_UP);
+                        }
+                    }
+
                     nfd_cfg_start_cfg_msg(&cfg_msg,
                                           &nfd_cfg_sig_pci_in0,
                                           NFD_CFG_NEXT_ME(PCIE_ISL, 2),
