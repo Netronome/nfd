@@ -257,6 +257,11 @@ do {                                                                    \
 #endif /* (NFD_IN_NUM_WQS == 1) */
 
 
+/* Registers to receive and store reset state */
+__visible volatile __xread unsigned int gather_reset_state_xfer = 0;
+__shared __gpr unsigned int gather_reset_state_gpr = 0;
+
+
 /* XXX Move to some sort of CT reflect library */
 __intrinsic void
 reflect_data(unsigned int dst_me, unsigned int dst_xfer,
@@ -386,7 +391,8 @@ do {                                                                         \
         pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;                   \
         NFD_IN_ADD_SEQN_PROC;                                                \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];              \
-        batch_out.pkt##_pkt##.__raw[1] = batch_in.pkt##_pkt##.__raw[1];      \
+        batch_out.pkt##_pkt##.__raw[1] = (batch_in.pkt##_pkt##.__raw[1] |    \
+                                          gather_reset_state_gpr);           \
         batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2];      \
         batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3];      \
                                                                              \
@@ -414,7 +420,8 @@ do {                                                                         \
             pkt_desc_tmp.offset = lso_pkt.offset;                            \
             NFD_IN_ADD_SEQN_PROC;                                            \
             batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];          \
-            batch_out.pkt##_pkt##.__raw[1] = lso_pkt.__raw[1];               \
+            batch_out.pkt##_pkt##.__raw[1] = (lso_pkt.__raw[1] |             \
+                                              gather_reset_state_gpr);       \
             batch_out.pkt##_pkt##.__raw[2] = lso_pkt.__raw[2];               \
             batch_out.pkt##_pkt##.__raw[3] = lso_pkt.__raw[3];               \
             _SET_DST_Q(_pkt);                                                \
@@ -597,6 +604,9 @@ notify(int side)
 __intrinsic void
 distr_notify()
 {
+    /* Store reset state in absolute GPR */
+    gather_reset_state_gpr = gather_reset_state_xfer;
+
     if (signal_test(&nfd_in_data_compl_refl_sig)) {
 #ifdef NFD_IN_HAS_ISSUE0
         data_dma_seq_compl0 = nfd_in_data_compl_refl_in0;
