@@ -34,8 +34,9 @@
 #include <vnic/nfd_common.h>
 #include <vnic/pci_out.h>
 #include <vnic/shared/nfd.h>
-#include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_cfg.h>
+#include <vnic/shared/nfd_internal.h>
+#include <vnic/shared/nfd_rst_state.h>
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
@@ -57,9 +58,6 @@
 
 #define NFD_OUT_FL_SZ_PER_QUEUE   \
     (NFD_OUT_FL_BUFS_PER_QUEUE * sizeof(struct nfd_out_fl_desc))
-
-/* State bit for island up/reset */
-#define NFD_OUT_STATE_PCI_UP_shf    0
 
 
 /*
@@ -459,7 +457,7 @@ cache_desc_compl_rst()
  * queue is also cleared by this method.
  */
 __intrinsic int
-_fetch_fl(__gpr unsigned int *queue, __shared __gpr unsigned int *isl_state)
+_fetch_fl(__gpr unsigned int *queue)
 {
     unsigned int qc_queue;
     unsigned int pcie_addr_off;
@@ -514,8 +512,7 @@ _fetch_fl(__gpr unsigned int *queue, __shared __gpr unsigned int *isl_state)
      * space >= batch size. */
     space_chk = ((NFD_OUT_FL_BUFS_PER_QUEUE - NFD_OUT_FL_BATCH_SZ) +
                  queue_data[*queue].rx_w - queue_data[*queue].fl_s);
-    if (space_chk >= 0 &&
-        (*isl_state & (1 << NFD_OUT_STATE_PCI_UP_shf))) {
+    if (space_chk >= 0 && NFD_RST_STATE_TEST_UP(PCIE_ISL)) {
         __xread unsigned int qc_xfer;
         unsigned int pending_slot;
         SIGNAL dma_sig;
@@ -675,7 +672,7 @@ cache_desc_complete_fetch()
  * dispatch loop for finer balance of FL DMAs with other tasks.
  */
 __forceinline void
-cache_desc_check_active(__shared __gpr unsigned int *isl_state)
+cache_desc_check_active()
 {
     __gpr unsigned int queue;
     int ret = 0;
@@ -692,7 +689,7 @@ cache_desc_check_active(__shared __gpr unsigned int *isl_state)
         }
 
         /* Try to work on that queue */
-        ret = _fetch_fl(&queue, isl_state);
+        ret = _fetch_fl(&queue);
     }
 }
 
@@ -709,7 +706,7 @@ cache_desc_check_active(__shared __gpr unsigned int *isl_state)
  * dispatch loop for finer balance of FL DMAs with other tasks.
  */
 __forceinline void
-cache_desc_check_urgent(__shared __gpr unsigned int *isl_state)
+cache_desc_check_urgent()
 {
     __gpr unsigned int queue;
     int ret = 0;
@@ -726,7 +723,7 @@ cache_desc_check_urgent(__shared __gpr unsigned int *isl_state)
         }
 
         /* Try to work on that queue */
-        ret = _fetch_fl(&queue, isl_state);
+        ret = _fetch_fl(&queue);
     }
 }
 
@@ -804,7 +801,7 @@ send_desc_setup_shared()
 
 
 __intrinsic void
-_start_send(__gpr unsigned int *queue, __shared __gpr unsigned int *isl_state)
+_start_send(__gpr unsigned int *queue)
 {
     __xread unsigned int dma_done;
     unsigned int atomic_addr;
@@ -825,8 +822,7 @@ _start_send(__gpr unsigned int *queue, __shared __gpr unsigned int *isl_state)
 
     /* Check that the queue is up and abort processing if down,
      * clearing state */
-    if (queue_data[*queue].up &&
-        (*isl_state & (1 << NFD_OUT_STATE_PCI_UP_shf))) {
+    if (queue_data[*queue].up && NFD_RST_STATE_TEST_UP(PCIE_ISL)) {
         /* Check whether rx_s can be advanced */
         rx_s = queue_data[*queue].rx_s;
         if (rx_s != dma_done) {
@@ -978,7 +974,7 @@ _start_send(__gpr unsigned int *queue, __shared __gpr unsigned int *isl_state)
  * dispatch loop for finer balance of RX DMAs with other tasks.
  */
 __forceinline void
-send_desc_check_cached(__shared __gpr unsigned int *isl_state)
+send_desc_check_cached()
 {
     __gpr unsigned int queue;
     int ret = 0;
@@ -994,7 +990,7 @@ send_desc_check_cached(__shared __gpr unsigned int *isl_state)
         }
 
         /* Try to work on that queue */
-        _start_send(&queue, isl_state);
+        _start_send(&queue);
     }
 }
 
@@ -1012,7 +1008,7 @@ send_desc_check_cached(__shared __gpr unsigned int *isl_state)
  * dispatch loop for finer balance of RX DMAs with other tasks.
  */
 __forceinline void
-send_desc_check_pending(__shared __gpr unsigned int *isl_state)
+send_desc_check_pending()
 {
     __gpr unsigned int queue;
     int ret = 0;
@@ -1028,7 +1024,7 @@ send_desc_check_pending(__shared __gpr unsigned int *isl_state)
         }
 
         /* Try to work on that queue */
-        _start_send(&queue, isl_state);
+        _start_send(&queue);
     }
 }
 

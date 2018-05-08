@@ -28,14 +28,12 @@
 #include <vnic/pci_out/cache_desc_status.c>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_cfg_internal.c>
+#include <vnic/shared/nfd_rst_state.h>
 
 NFD_CFG_DECLARE(nfd_cfg_sig_pci_out, NFD_CFG_SIG_NEXT_ME);
 NFD_INIT_DONE_DECLARE;
 
 struct nfd_cfg_msg cfg_msg;
-
-/* State tracking for the state of PCI.OUT on this island  */
-__shared __gpr unsigned int pci_out_isl_state = 0;
 
 
 #ifdef NFD_USER_CTX_DECL
@@ -168,12 +166,12 @@ main(void)
         for (;;) {
             cache_desc_complete_fetch(); /* Swaps once */
 
-            cache_desc_check_urgent(&pci_out_isl_state); /* Swaps min once */
+            cache_desc_check_urgent(); /* Swaps min once */
 
             cache_desc_status();
             ctx_swap();
 
-            cache_desc_check_active(&pci_out_isl_state); /* Swaps min once */
+            cache_desc_check_active(); /* Swaps min once */
 
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */
@@ -185,16 +183,13 @@ main(void)
                     if (cfg_msg.pci_reset) {
                         if (cfg_msg.vid == 0) {
                             /* Set reset state and message PD */
-                            pci_out_isl_state &=
-                                ~(1 << NFD_OUT_STATE_PCI_UP_shf);
+                            nfd_rst_state_set_rst(PCIE_ISL);
                             pci_out_msg_pd(PCI_OUT_MSG_RST);
                         }
                     } else {
-                        if (!(pci_out_isl_state &
-                              (1 << NFD_OUT_STATE_PCI_UP_shf))) {
+                        if (NFD_RST_STATE_TEST_RST(PCIE_ISL)) {
                             /* Clear reset state and message PD */
-                            pci_out_isl_state |=
-                                (1 << NFD_OUT_STATE_PCI_UP_shf);
+                            nfd_rst_state_set_up(PCIE_ISL);
                             pci_out_msg_pd(PCI_OUT_MSG_UP);
                         }
                     }
@@ -224,11 +219,11 @@ main(void)
             /* CTX1 main loop */
             send_desc_complete_send();  /* Swaps once */
 
-            send_desc_check_cached(&pci_out_isl_state); /* Swaps min once */
+            send_desc_check_cached(); /* Swaps min once */
 
-            send_desc_check_cached(&pci_out_isl_state); /* Swaps min once */
+            send_desc_check_cached(); /* Swaps min once */
 
-            send_desc_check_pending(&pci_out_isl_state);  /* Swaps min once */
+            send_desc_check_pending();  /* Swaps min once */
 
             /* ctx_swap(); */
         }
