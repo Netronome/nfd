@@ -54,6 +54,8 @@ NFD_CFG_PF_DECLARE(PCIE_ISL);
 
 struct nfd_cfg_msg cfg_msg;
 
+/* Signal used to poll for PCIe reset ack */
+volatile SIGNAL nfd_in_gather_poll_rst_sig;
 
 /* Setup _pf%d_net_app_id */
 NFD_NET_APP_ID_DECLARE(PCIE_ISL);
@@ -181,6 +183,10 @@ main(void)
                         if (cfg_msg.vid == 0) {
                             /* Set reset state and message notify */
                             nfd_rst_state_set_rst(PCIE_ISL);
+                            /* Kick off PCIe reset ack polling */
+                            signal_ctx(
+                                NFD_IN_GATHER_CTX_RST_POLL,
+                                __signal_number(&nfd_in_gather_poll_rst_sig));
                             pci_in_msg_notify(NFD_IN_MSG_NOTIFY_RST);
                         }
                     } else {
@@ -204,6 +210,10 @@ main(void)
     } else if (ctx() == 1) {
         for (;;) {
             nfd_cfg_check_flr_ap();
+
+            /* When island in PCIe reset state, complete processing PCIe reset
+             * once app master acknowledges it; otherwise do nothing. */
+            gather_compl_rst(&nfd_in_gather_poll_rst_sig);
 
             ctx_swap();
         }

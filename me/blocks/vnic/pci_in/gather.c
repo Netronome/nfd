@@ -35,6 +35,9 @@
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/qc.h>
 
+#include <vnic/shared/nfd_cfg.h>
+#include <vnic/shared/nfd_rst_state.h>
+
 #ifndef NFD_IN_ISSUE_DMA_QSHIFT
 #define NFD_IN_ISSUE_DMA_QSHIFT 0
 #endif
@@ -46,6 +49,15 @@
 #ifndef _link_sym
 #define _link_sym(x) __link_sym(#x)
 #endif
+
+/*
+ * Gather ME PCIe reset definitions
+ */
+#define NFD_IN_GATHER_CTX_RST_POLL  1
+/* For a 10 us timeout:
+ *  val = t_req * f_clk / 16 = (10e-6 * 800e6) >> 4
+ *  where 16 is number of clk cycles per count in timestamp CSR */
+#define NFD_IN_GATHER_POLL_TIME     0x1f4
 
 /*
  * State variables for PCI.IN gather
@@ -115,13 +127,12 @@ PCIE_DMA_ALLOC(nfd_in_gather_dma, island, PCIE_ISL, frompci_hi,
 
 
 /* XXX Move to some sort of CT reflect library */
+
 __intrinsic void
 reflect_data(unsigned int dst_me, unsigned int dst_xfer,
              unsigned int sig_no, volatile __xwrite void *src_xfer,
              size_t size)
 {
-    #define OV_SIG_NUM 13
-
     unsigned int addr;
     unsigned int count = (size >> 2);
     struct nfp_mecsr_cmd_indirect_ref_0 indirect;
@@ -136,14 +147,50 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 
     indirect.__raw = 0;
     indirect.signal_num = sig_no;
+    indirect.signal_ctx = 0;    /* Be explicit that we're targeting ctx 0 */
     local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
 
     /* Currently just support reflect_write_sig_remote */
+    /* XXX NFP_MECSR_PREV_ALU_OV_SIG_CTX_bit is next to SIG_NUM */
     __asm {
-        alu[--, --, b, 1, <<OV_SIG_NUM];
+        alu[--, --, b, 3, <<NFP_MECSR_PREV_ALU_OV_SIG_NUM_bit];
         ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
            __ct_const_val(count)], indirect_ref;
     };
+}
+
+
+/**
+ * Complete processing of PCIe reset in GATHER ME.
+ *
+ * In case of PCIe reset, wait for ack of reset config message by APP
+ * master by polling appropriate atomic data before pushing updated gather
+ * descriptor sequence number to ISSUE DMA ME(s).
+ */
+__intrinsic void
+gather_compl_rst(volatile SIGNAL *poll_sig)
+{
+    __gpr unsigned int amt;
+    __mem40 char *rst_ack_addr;
+    __xread unsigned int rst_ack_xfer;
+
+    if (signal_test(poll_sig)) {
+        rst_ack_addr = (NFD_FLR_LINK(PCIE_ISL) +
+                          sizeof(int) * NFD_FLR_PF_ind);
+        mem_read_atomic(&rst_ack_xfer, rst_ack_addr,
+                        sizeof(rst_ack_xfer));
+
+        /* If PCIe reset not yet acknowledged, rearm alarm;
+         * otherwise complete processing of reset  by updating and
+         * distributing 'gather_dma_seq_compl'. */
+        if (bit_test(rst_ack_xfer, NFD_FLR_PCIE_RESET_shf)) {
+            set_alarm(NFD_IN_GATHER_POLL_TIME, poll_sig);
+        } else {
+            amt = dma_seq_issued - gather_dma_seq_compl;
+            gather_dma_seq_compl = dma_seq_issued;
+            distr_gather_seqn(amt);
+        }
+    }
 }
 
 
@@ -200,6 +247,78 @@ distr_gather_setup_shared()
 }
 
 
+/*
+ * Convenience function which pushes gather DMA sequence numbers to
+ * PCI.IN issue DMA MEs.
+ */
+__intrinsic void
+distr_gather_seqn(unsigned int amt)
+{
+    __gpr unsigned int mask;
+    __gpr unsigned int i0amt;
+    __gpr unsigned int i1amt;
+
+    mask = (1 << amt) - 1;
+    i0amt = mask & ~idma_list;
+    __asm {
+        pop_count1[i0amt]
+        pop_count2[i0amt]
+        pop_count3[i0amt, i0amt]
+    }
+    i1amt = mask & idma_list;
+    __asm {
+        pop_count1[i1amt]
+        pop_count2[i1amt]
+        pop_count3[i1amt, i1amt]
+    }
+    idma_list >>= amt;
+
+    if (i0amt) {
+#ifdef NFD_IN_HAS_ISSUE0
+        /* Mirror to Issue DMA 0 */
+        __implicit_read(&nfd_in_gather_compl_refl_out0);
+
+        dma_completed0 += i0amt;
+        nfd_in_gather_compl_refl_out0 = dma_completed0;
+        reflect_data(NFD_IN_DATA_DMA_ME0,
+                     __xfer_reg_number(&nfd_in_gather_compl_refl_in0,
+                                       NFD_IN_DATA_DMA_ME0),
+                     __signal_number(&nfd_in_gather_compl_refl_sig0,
+                                     NFD_IN_DATA_DMA_ME0),
+                     &nfd_in_gather_compl_refl_out0,
+                     sizeof nfd_in_gather_compl_refl_out0);
+#else
+        local_csr_write(local_csr_mailbox_0, NFD_IN_GATHER_INVALID_IDMA);
+        local_csr_write(local_csr_mailbox_1, 0);
+        halt();
+#endif
+
+    }
+
+    if (i1amt) {
+#ifdef NFD_IN_HAS_ISSUE1
+        /* Mirror to Issue DMA 1 */
+        __implicit_read(&nfd_in_gather_compl_refl_out1);
+
+        dma_completed1 += i1amt;
+        nfd_in_gather_compl_refl_out1 = dma_completed1;
+        reflect_data(NFD_IN_DATA_DMA_ME1,
+                     __xfer_reg_number(&nfd_in_gather_compl_refl_in1,
+                                       NFD_IN_DATA_DMA_ME1),
+                     __signal_number(&nfd_in_gather_compl_refl_sig1,
+                                     NFD_IN_DATA_DMA_ME1),
+                     &nfd_in_gather_compl_refl_out1,
+                     sizeof nfd_in_gather_compl_refl_out1);
+#else
+        local_csr_write(local_csr_mailbox_0, NFD_IN_GATHER_INVALID_IDMA);
+        local_csr_write(local_csr_mailbox_1, 1);
+        halt();
+#endif
+
+    }
+}
+
+
 /**
  * Check autopush, compute gather_dma_seq_compl, and reflect to issue_dma ME
  *
@@ -213,73 +332,16 @@ __intrinsic void
 distr_gather()
 {
     __gpr unsigned int amt;
-    __gpr unsigned int mask;
-    __gpr unsigned int i0amt;
-    __gpr unsigned int i1amt;
 
     if (signal_test(&nfd_in_gather_event_sig)) {
 
-        dma_seqn_advance_save(&nfd_in_gather_event_xfer, &gather_dma_seq_compl,
-                              &amt);
+        /* Simply acknowledge events when island in PCIe reset state. */
+        if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {
+            dma_seqn_advance_save(&nfd_in_gather_event_xfer,
+                                  &gather_dma_seq_compl,
+                                  &amt);
 
-        mask = (1 << amt) - 1;
-        i0amt = mask & ~idma_list;
-        __asm {
-            pop_count1[i0amt]
-            pop_count2[i0amt]
-            pop_count3[i0amt, i0amt]
-        }
-        i1amt = mask & idma_list;
-        __asm {
-            pop_count1[i1amt]
-            pop_count2[i1amt]
-            pop_count3[i1amt, i1amt]
-        }
-        idma_list >>= amt;
-
-
-        if (i0amt) {
-#ifdef NFD_IN_HAS_ISSUE0
-            /* Mirror to Issue DMA 0 */
-            __implicit_read(&nfd_in_gather_compl_refl_out0);
-
-            dma_completed0 += i0amt;
-            nfd_in_gather_compl_refl_out0 = dma_completed0;
-            reflect_data(NFD_IN_DATA_DMA_ME0,
-                         __xfer_reg_number(&nfd_in_gather_compl_refl_in0,
-                                           NFD_IN_DATA_DMA_ME0),
-                         __signal_number(&nfd_in_gather_compl_refl_sig0,
-                                         NFD_IN_DATA_DMA_ME0),
-                         &nfd_in_gather_compl_refl_out0,
-                         sizeof nfd_in_gather_compl_refl_out0);
-#else
-            local_csr_write(local_csr_mailbox_0, NFD_IN_GATHER_INVALID_IDMA);
-            local_csr_write(local_csr_mailbox_1, 0);
-            halt();
-#endif
-
-        }
-
-        if (i1amt) {
-#ifdef NFD_IN_HAS_ISSUE1
-            /* Mirror to Issue DMA 1 */
-            __implicit_read(&nfd_in_gather_compl_refl_out1);
-
-            dma_completed1 += i1amt;
-            nfd_in_gather_compl_refl_out1 = dma_completed1;
-            reflect_data(NFD_IN_DATA_DMA_ME1,
-                         __xfer_reg_number(&nfd_in_gather_compl_refl_in1,
-                                           NFD_IN_DATA_DMA_ME1),
-                         __signal_number(&nfd_in_gather_compl_refl_sig1,
-                                         NFD_IN_DATA_DMA_ME1),
-                         &nfd_in_gather_compl_refl_out1,
-                         sizeof nfd_in_gather_compl_refl_out1);
-#else
-            local_csr_write(local_csr_mailbox_0, NFD_IN_GATHER_INVALID_IDMA);
-            local_csr_write(local_csr_mailbox_1, 1);
-            halt();
-#endif
-
+            distr_gather_seqn(amt);
         }
 
         __implicit_write(&nfd_in_gather_event_sig);
@@ -335,6 +397,11 @@ gather()
     __gpr int tx_r_correction;
     __gpr int idma;
     __gpr int ring;
+
+    /* Stop enqueueing TX descriptor DMAs while PCIe reset state set. */
+    if (NFD_RST_STATE_TEST_RST(PCIE_ISL)) {
+        return 0;
+    }
 
     /*
      * Before looking for a batch of work, we need to be able to issue a DMA
