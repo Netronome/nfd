@@ -433,7 +433,7 @@ cache_desc_vnic_setup(struct nfd_cfg_msg *cfg_msg)
  * still up.
  */
 __intrinsic void
-cache_desc_complete_reset()
+cache_desc_compl_rst()
 {
     /* Advance DMA sequence numbers to account for DMAs
      * that won't complete due to the host going away */

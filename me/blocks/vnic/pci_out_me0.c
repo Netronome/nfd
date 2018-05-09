@@ -206,7 +206,7 @@ main(void)
 
                 if (!cfg_msg.msg_valid) {
                     if (cfg_msg.pci_reset && (cfg_msg.vid == NFD_LAST_PF)) {
-                        cache_desc_complete_reset();
+                        cache_desc_compl_rst();
                     }
 
                     nfd_cfg_complete_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_out,
