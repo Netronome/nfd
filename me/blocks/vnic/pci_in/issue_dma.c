@@ -639,6 +639,27 @@ issue_dma_cleanup_lso_state()
 }
 
 
+/* Helper macros to lock and unlock state before swapping
+ * Lock the queue itself, and also decrement data_dma_seq_issued
+ * before swapping so that precache_bufs doesn't see a partially
+ * issued batches as done */
+#define _ISSUE_PROC_STATE_LOCK()                                    \
+do {                                                                \
+    data_dma_seq_issued--;                                          \
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
+                OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }             \
+} while (0)
+
+#define _ISSUE_PROC_STATE_UNLOCK()                                  \
+    do {                                                            \
+    data_dma_seq_issued++;                                          \
+    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
+                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
+                AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }           \
+} while (0)
+
+
 /* This macro issues a DMA for a NFD_IN_DMA_SPLIT_LEN chunk of the
  * current packet. It updates the addresses and remaining dma_len before
  * exiting.
@@ -650,22 +671,14 @@ issue_dma_cleanup_lso_state()
 do {                                                                    \
     int jumbo_seq_test;                                                 \
                                                                         \
-    /* data_dma_seq_issued was pre-incremented once we could */         \
-    /* process batch.  Since we are going to swap, we */                \
-    /* decrement it temporarily to ensure */                            \
-    /* precache_bufs_compute_seq_safe will give a pessimistic */        \
-    /* safe count. */                                                   \
-    data_dma_seq_issued--;                                              \
+                                                                        \
+    /* XXX this macro swaps, so code that invokes it must */            \
+    /* ensure that the queue state is locked with */                    \
+    /* _ISSUE_PROC_STATE_LOCK() before it is invoked */                 \
                                                                         \
     /* Take a jumbo frame sequence number and */                        \
     /* check it is safe to use */                                       \
     jumbo_dma_seq_issued++;                                             \
-                                                                        \
-    /* Lock the queue state so we can swap freely */                    \
-    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],        \
-                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],        \
-                OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }                 \
-                                                                        \
     jumbo_seq_test = (NFD_IN_JUMBO_MAX_IN_FLIGHT - jumbo_dma_seq_issued); \
     while ((int) (jumbo_seq_test + jumbo_dma_seq_compl) <= 0) {         \
         /* The queue state is locked so it is safe to simply swap */    \
@@ -694,11 +707,7 @@ do {                                                                    \
     cpp_addr_lo += NFD_IN_DMA_SPLIT_LEN;                                \
     dma_len -= NFD_IN_DMA_SPLIT_LEN;                                    \
                                                                         \
-    /* Re-increment data_dma_seq_issued and unlock the queue state */   \
-    data_dma_seq_issued++;                                              \
-    __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],        \
-                NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],        \
-                AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }               \
+    /* XXX caller must unlock using  _ISSUE_PROC_STATE_UNLOCK() */      \
 } while (0)
 
 #define _ISSUE_PROC_LSO_JUMBO(_pkt, _buf)                                    \
@@ -1508,6 +1517,9 @@ do {                                                                    \
                                                                         \
         /* Check for and handle large (jumbo) packets  */               \
         if (dma_len > (_ISSUE_PROC_JUMBO_TEST - 1)) {                   \
+            /* Lock the state so we can swap freely */                  \
+            _ISSUE_PROC_STATE_LOCK();                                   \
+                                                                        \
             /* We may need to swap the buffer allocated from */         \
             /* buf_store for one allocated from jumbo_store. */         \
             /* This must be done before context swapping. */            \
@@ -1522,16 +1534,7 @@ do {                                                                    \
                 while (precache_bufs_jumbo_use(&buf_addr) != 0) {       \
                     /* Allow service context to run */                  \
                     /* to refill jumbo_store */                         \
-                    /* Lock the queue state while we're swapped */      \
-                    __asm {                                             \
-                        alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
-                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
-                            OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }     \
                     ctx_swap();                                         \
-                    __asm {                                             \
-                        alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
-                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
-                            AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }   \
                 }                                                       \
                 _ISSUE_PROC_MU_CHK(buf_addr);                           \
                                                                         \
@@ -1568,6 +1571,10 @@ do {                                                                    \
                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_EOP_JUMBO_TX_DESC); \
                 } while (dma_len > NFD_IN_DMA_SPLIT_LEN - 1);           \
             }                                                           \
+                                                                        \
+            /* We are finished the processing that can swap, unlock */  \
+            _ISSUE_PROC_STATE_UNLOCK();                                 \
+                                                                        \
         } else {                                                        \
             /* Tag the inner most branch of the critical path */        \
             /* Use a _priority tag to distinguish between full */       \
@@ -1708,16 +1715,9 @@ do {                                                                    \
                 while (precache_bufs_jumbo_use(&curr_buf) != 0) {       \
                     /* Allow service context to run */                  \
                     /* to refill jumbo_store */                         \
-                    /* Lock the queue state while we're swapped */      \
-                    __asm {                                             \
-                        alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
-                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
-                            OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }     \
+                    _ISSUE_PROC_STATE_LOCK();                           \
                     ctx_swap();                                         \
-                    __asm {                                             \
-                        alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
-                            NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd], \
-                            AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }   \
+                    _ISSUE_PROC_STATE_UNLOCK();                         \
                 }                                                       \
                                                                         \
                 /* Check that the packet will fit within */             \
@@ -1820,12 +1820,14 @@ do {                                                                    \
                                                                         \
             /* Check for and handle large (jumbo) packets  */           \
             if (dma_len > NFD_IN_DMA_SPLIT_THRESH) {                    \
+                _ISSUE_PROC_STATE_LOCK();                               \
                 do {                                                    \
                     _ISSUE_PROC_JUMBO(_pkt, curr_buf);                  \
                     NFD_IN_LSO_CNTR_INCR(                               \
                         nfd_in_lso_cntr_addr,                           \
                         NFD_IN_LSO_CNTR_T_ISSUED_NON_LSO_CONT_JUMBO_TX_DESC); \
                 } while (dma_len > NFD_IN_DMA_SPLIT_LEN);               \
+                _ISSUE_PROC_STATE_UNLOCK();                             \
             }                                                           \
                                                                         \
             /* Issue final DMA for the packet */                        \
