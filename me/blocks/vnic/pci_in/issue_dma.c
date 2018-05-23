@@ -1368,6 +1368,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* Leave other processing untouched so the descriptor will */    \
             /* complete as usual. */                                         \
             curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);                 \
+            lso_wait_msk = 0;                                                \
         }                                                                    \
                                                                              \
         /* if we are at end of mu_buf, or the end of the LSO buffer */       \
