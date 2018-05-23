@@ -131,6 +131,7 @@ main(void)
                         if (NFD_RST_STATE_TEST_RST(PCIE_ISL)) {
                             /* Clear reset state */
                             nfd_rst_state_set_up(PCIE_ISL);
+                            issue_dma_end_rst();
                         }
                     }
 

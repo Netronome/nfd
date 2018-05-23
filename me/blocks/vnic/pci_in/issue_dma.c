@@ -517,6 +517,22 @@ issue_dma_start_rst()
 }
 
 
+/**
+ * Exit reset mode
+ *
+ * Clear invalid bit in queue state.  It might have become set during PCIe
+ * reset handling, without the host having done anything malicious.
+ */
+__intrinsic void
+issue_dma_end_rst()
+{
+    unsigned int bmsk_queue;
+
+    for (bmsk_queue = 0; bmsk_queue < NFD_IN_MAX_QUEUES; bmsk_queue++) {
+        queue_data[bmsk_queue].invalid = 0;
+    }
+}
+
 
 /**
  * Perform per context initialisation (for CTX 1 to 7)
