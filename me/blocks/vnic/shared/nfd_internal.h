@@ -484,10 +484,9 @@ struct nfd_in_batch_desc {
  *    3  |            data_len           |              vlan             |
  *       +-------------------------------+-------------------------------+
  *
- *      sp0 - sp2 -> spare
  *      E -> End of packet
  *      L -> Last packet in a series of LSO packets
- *      S -> sp1
+ *      S -> sp2
  */
 struct nfd_in_issued_desc {
     union {
