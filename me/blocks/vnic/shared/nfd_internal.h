@@ -162,13 +162,13 @@ enum NFD_IN_LSO_CNTR_IDX {
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_EOP_TX_DESC,
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TX_DESC,
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_TX_DESC,
-    NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_DBL_DMA,
     NFD_IN_LSO_CNTR_T_ISSUED_NOT_Q_UP_TX_DESC,
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ,
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED,
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING,
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING,
     NFD_IN_LSO_CNTR_T_ISSUED_LSO_EXC_PKT_TO_NOTIFY_RING,
+    NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TO_NOTIFY_RING,
     NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS,
     NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_HDRLEN,
     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC,
@@ -179,7 +179,7 @@ enum NFD_IN_LSO_CNTR_IDX {
     NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING,
     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ,
     NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ,
-    NFD_IN_LSO_CNTR_T_NOTIFY_LSO_EOP_PKT_TO_ME_WQ,
+    NFD_IN_LSO_CNTR_T_NOTIFY_LSO_CONT_SKIP_ME_WQ,
     NFD_IN_LSO_CNTR_T_ME_ALL_HOST_PKTS,
     NFD_IN_LSO_CNTR_T_ME_NON_LSO_HOST_PKTS,
     NFD_IN_LSO_CNTR_T_ME_LSO_HOST_PKTS,
@@ -200,13 +200,13 @@ static const char *nfd_in_lso_cntr_names[] = {
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_EOP_TX_DESC",
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TX_DESC",
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_TX_DESC",
-    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_JUMBO_DBL_DMA",
     "NFD_IN_LSO_CNTR_T_ISSUED_NOT_Q_UP_TX_DESC",
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ",
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_BLM_BUF_ALLOC_FAILED",
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING",
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_END_PKT_TO_NOTIFY_RING",
     "NFD_IN_LSO_CNTR_T_ISSUED_LSO_EXC_PKT_TO_NOTIFY_RING",
+    "NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TO_NOTIFY_RING",
     "NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS",
     "NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_HDRLEN",
     "NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC",
@@ -217,7 +217,7 @@ static const char *nfd_in_lso_cntr_names[] = {
     "NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING",
     "NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ",
     "NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ",
-    "NFD_IN_LSO_CNTR_T_NOTIFY_LSO_EOP_PKT_TO_ME_WQ",
+    "NFD_IN_LSO_CNTR_T_NOTIFY_LSO_CONT_SKIP_ME_WQ",
     "NFD_IN_LSO_CNTR_T_ME_ALL_HOST_PKTS",
     "NFD_IN_LSO_CNTR_T_ME_NON_LSO_HOST_PKTS",
     "NFD_IN_LSO_CNTR_T_ME_LSO_HOST_PKTS",
@@ -475,7 +475,7 @@ struct nfd_in_batch_desc {
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+---------------+---------------+---+-----------+
- *    0  |E|    offset   | lso_issued_cnt|   num_batch   |sp1|   q_num   |
+ *    0  |E|    offset   | lso_issued_cnt|   num_batch   |lso|   q_num   |
  *       +-+-------------+---------------+---------------+---+-----------+
  *    1  |                           buf_addr                            |
  *       +---------------+---------------+-+-+---------------------------+
@@ -495,7 +495,7 @@ struct nfd_in_issued_desc {
             unsigned int offset:7;
             unsigned int lso_issued_cnt:8;
             unsigned int num_batch:8;
-            unsigned int sp1:2;
+            unsigned int lso:2;
             unsigned int q_num:6;
 
             unsigned int buf_addr:32;
@@ -512,6 +512,10 @@ struct nfd_in_issued_desc {
         unsigned int __raw[4];
     };
 };
+
+#define NFD_IN_ISSUED_DESC_LSO_NULL  0
+#define NFD_IN_ISSUED_DESC_LSO_START 1
+#define NFD_IN_ISSUED_DESC_LSO_RET   2
 
 
 /* nfd_out internal structures */
@@ -618,5 +622,6 @@ struct nfd_out_send_desc_msg {
 #define NFD_OUT_PD_UNMARKED_CTM_ONLY    0x807
 #define NFD_OUT_USER_CTX_ERROR          0x808
 #define NFD_CFG_BAR_BASE_ISL_INVALID    0x809
+#define NFD_IN_NOTIFY_LSO_DESC_INVALID  0x80a
 
 #endif /* !_BLOCKS__SHARED_NFD_INTERNAL_H_ */
