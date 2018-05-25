@@ -75,10 +75,12 @@ NFD_INIT_DONE_DECLARE;
 
 /* Shared by both issue DMA MEs */
 __visible volatile SIGNAL nfd_in_data_compl_refl_sig;
+__visible volatile SIGNAL nfd_in_jumbo_compl_refl_sig;
 
 /* Used for issue DMA 0 */
 __shared __gpr unsigned int data_dma_seq_served0 = 0;
 __shared __gpr unsigned int data_dma_seq_compl0 = 0;
+__shared __gpr unsigned int jumbo_dma_seq_compl0 = 0;
 static __gpr unsigned int data_dma_seq_sent0 = 0;
 static __xwrite unsigned int nfd_in_data_served_refl_out0 = 0;
 static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr0 = 0;
@@ -86,12 +88,14 @@ static __gpr unsigned int nfd_in_issued_lso_ring_num0 = 0;
 
 /* Shared with issue DMA 0 */
 __visible volatile __xread unsigned int nfd_in_data_compl_refl_in0 = 0;
+__visible volatile __xread unsigned int nfd_in_jumbo_compl_refl_in0 = 0;
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in0;
 __remote volatile SIGNAL nfd_in_data_served_refl_sig0;
 
 /* Used for issue DMA 1 */
 __shared __gpr unsigned int data_dma_seq_served1 = 0;
 __shared __gpr unsigned int data_dma_seq_compl1 = 0;
+__shared __gpr unsigned int jumbo_dma_seq_compl1 = 0;
 static __gpr unsigned int data_dma_seq_sent1 = 0;
 static __xwrite unsigned int nfd_in_data_served_refl_out1 = 0;
 static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr1 = 0;
@@ -99,9 +103,9 @@ static __gpr unsigned int nfd_in_issued_lso_ring_num1 = 0;
 
 /* Shared with issue DMA 1 */
 __visible volatile __xread unsigned int nfd_in_data_compl_refl_in1 = 0;
+__visible volatile __xread unsigned int nfd_in_jumbo_compl_refl_in1 = 0;
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in1;
 __remote volatile SIGNAL nfd_in_data_served_refl_sig1;
-
 
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
@@ -643,6 +647,16 @@ distr_notify()
 #endif
 #ifdef NFD_IN_HAS_ISSUE1
         data_dma_seq_compl1 = nfd_in_data_compl_refl_in1;
+#endif
+    }
+
+    /* XXX Is it necessary to use a signal for this? */
+    if (signal_test(&nfd_in_jumbo_compl_refl_sig)) {
+#ifdef NFD_IN_HAS_ISSUE0
+        jumbo_dma_seq_compl0 = nfd_in_jumbo_compl_refl_in0;
+#endif
+#ifdef NFD_IN_HAS_ISSUE1
+        jumbo_dma_seq_compl1 = nfd_in_jumbo_compl_refl_in1;
 #endif
     }
 

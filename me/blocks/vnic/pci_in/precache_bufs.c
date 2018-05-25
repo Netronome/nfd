@@ -93,13 +93,17 @@ static SIGNAL nfd_in_jumbo_event_sig;
 /* Signals and transfer registers for sequence number reflects */
 static __xwrite unsigned int nfd_in_data_compl_refl_out = 0;
 __remote volatile SIGNAL nfd_in_data_compl_refl_sig;
+static __xwrite unsigned int nfd_in_jumbo_compl_refl_out = 0;
+__remote volatile SIGNAL nfd_in_jumbo_compl_refl_sig;
 
 #if (PCI_IN_ISSUE_DMA_IDX == 0)
 
 __remote volatile __xread unsigned int nfd_in_data_compl_refl_in0;
+__remote volatile __xread unsigned int nfd_in_jumbo_compl_refl_in0;
 __visible volatile __xread unsigned int nfd_in_data_served_refl_in0;
 __visible volatile SIGNAL nfd_in_data_served_refl_sig0;
 #define nfd_in_data_compl_refl_in nfd_in_data_compl_refl_in0
+#define nfd_in_jumbo_compl_refl_in nfd_in_jumbo_compl_refl_in0
 #define nfd_in_data_served_refl_in nfd_in_data_served_refl_in0
 #define nfd_in_data_served_refl_sig nfd_in_data_served_refl_sig0
 #define NFD_IN_ISSUED_RING_SZ NFD_IN_ISSUED_RING0_SZ
@@ -108,9 +112,11 @@ __visible volatile SIGNAL nfd_in_data_served_refl_sig0;
 #elif (PCI_IN_ISSUE_DMA_IDX == 1)
 
 __remote volatile __xread unsigned int nfd_in_data_compl_refl_in1;
+__remote volatile __xread unsigned int nfd_in_jumbo_compl_refl_in1;
 __visible volatile __xread unsigned int nfd_in_data_served_refl_in1;
 __visible volatile SIGNAL nfd_in_data_served_refl_sig1;
 #define nfd_in_data_compl_refl_in nfd_in_data_compl_refl_in1
+#define nfd_in_jumbo_compl_refl_in nfd_in_jumbo_compl_refl_in1
 #define nfd_in_data_served_refl_in nfd_in_data_served_refl_in1
 #define nfd_in_data_served_refl_sig nfd_in_data_served_refl_sig1
 #define NFD_IN_ISSUED_RING_SZ NFD_IN_ISSUED_RING1_SZ
@@ -608,7 +614,19 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
         }
 
         if (signal_test(&nfd_in_jumbo_event_sig)) {
+             __implicit_read(&nfd_in_jumbo_compl_refl_out);
+
             dma_seqn_advance(&nfd_in_jumbo_event_xfer, &jumbo_dma_seq_compl);
+
+            /* Mirror to remote ME */
+            nfd_in_jumbo_compl_refl_out = jumbo_dma_seq_compl;
+            reflect_data(NFD_IN_NOTIFY_ME,
+                         __xfer_reg_number(&nfd_in_jumbo_compl_refl_in,
+                                           NFD_IN_NOTIFY_ME),
+                         __signal_number(&nfd_in_jumbo_compl_refl_sig,
+                                         NFD_IN_NOTIFY_ME),
+                         &nfd_in_jumbo_compl_refl_out,
+                         sizeof nfd_in_jumbo_compl_refl_out);
 
             precache_bufs_jumbo();
 
@@ -642,9 +660,24 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
                          sizeof nfd_in_data_compl_refl_out);
         }
 
-        /* Advance jumbo_dma_seq_compl.  We don't need to reflect
-         * the value, so just copy it from jumbo_dma_seq_issued */
-        jumbo_dma_seq_compl = jumbo_dma_seq_issued;
+        /* Check whether jumbo_dma_seq_issued has advanced, and
+         * if so, advance jumbo_dma_seq_compl.  Reflect the new
+         * value to notify. */
+        if (jumbo_dma_seq_compl != jumbo_dma_seq_issued) {
+             __implicit_read(&nfd_in_jumbo_compl_refl_out);
+
+            jumbo_dma_seq_compl = jumbo_dma_seq_issued;
+
+            /* Mirror to remote ME */
+            nfd_in_jumbo_compl_refl_out = jumbo_dma_seq_compl;
+            reflect_data(NFD_IN_NOTIFY_ME,
+                         __xfer_reg_number(&nfd_in_jumbo_compl_refl_in,
+                                           NFD_IN_NOTIFY_ME),
+                         __signal_number(&nfd_in_jumbo_compl_refl_sig,
+                                         NFD_IN_NOTIFY_ME),
+                         &nfd_in_jumbo_compl_refl_out,
+                         sizeof nfd_in_jumbo_compl_refl_out);
+        }
 
         /* Acknowledge any outstanding events data dma events
          * so that we won't act on stale events later */
