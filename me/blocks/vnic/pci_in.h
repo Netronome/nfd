@@ -424,7 +424,9 @@ __intrinsic int nfd_in_metadata_pop(void *meta_val,
  *
  * @note the user must subtract the data length of the meta type from "meta_len"
  * and must add the data length to "meta_cache_ptr" before invoking this
- * function again.
+ * function again.  The user must also call "__implicit_read(meta_cache);"
+ * once their code has finished parsing the meta data, to notify the compiler
+ * that the transfer registers are no longer busy.
  */
 __intrinsic int nfd_in_metadata_pop_cache(unsigned int *meta_val,
                                           unsigned int *meta_len,
