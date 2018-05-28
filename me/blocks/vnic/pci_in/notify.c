@@ -375,7 +375,7 @@ notify_setup()
 do {                                                                         \
     unsigned int i;                                                          \
     unsigned int num_lso_to_read;                                            \
-    __xread struct nfd_in_pkt_desc lso_pkt;                                  \
+    __xread struct nfd_in_issued_desc lso_pkt;                               \
     SIGNAL lso_sig;                                                          \
     SIGNAL_PAIR lso_sig_pair;                                                \
     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                               \
