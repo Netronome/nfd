@@ -102,7 +102,6 @@ __remote volatile SIGNAL nfd_in_data_served_refl_sig1;
 static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr1 = 0;
 static __gpr unsigned int nfd_in_issued_lso_ring_num1 = 0;
 
-static unsigned int nfd_in_lso_cntr_addr = 0;
 
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
@@ -117,6 +116,10 @@ __xwrite struct _pkt_desc_batch batch_out;
 __xread unsigned int qc_xfer;
 
 /* XXX declare dst_q counters in LM */
+#ifdef NFD_IN_LSO_CNTR_ENABLE
+static unsigned int nfd_in_lso_cntr_addr = 0;
+#endif
+
 
 #ifdef NFD_IN_WQ_SHARED
 

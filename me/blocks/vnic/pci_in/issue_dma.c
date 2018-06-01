@@ -109,7 +109,9 @@ __gpr struct nfd_in_issued_desc issued_tmp;
 /* Storage declarations */
 __shared __lmem struct nfd_in_dma_state queue_data[NFD_IN_MAX_QUEUES];
 
+#ifdef NFD_IN_LSO_CNTR_ENABLE
 static unsigned int nfd_in_lso_cntr_addr = 0;
+#endif
 /* storage for LSO header on a per queue basis */
 __export __shared __ctm40 __align(NFD_IN_MAX_LSO_HDR_SZ) unsigned char
     lso_hdr_data[NFD_IN_MAX_LSO_HDR_SZ * NFD_IN_MAX_QUEUES];
