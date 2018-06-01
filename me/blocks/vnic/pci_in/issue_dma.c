@@ -1201,34 +1201,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         /* header followed by a data DMA for the payload*/                   \
     }                                                                        \
                                                                              \
-    /* TODO review handling of dma_len == 0 and descriptors that */          \
-    /* only contain header data */                                           \
-    if (lso_dma_index == dma_len) {                                          \
-            /* Build the ring message more or less as normal, so that */     \
-            /* whatever debugging info may be available is preserved. */     \
-            /* Clear EOP to ensures that the message doesn't go to the app. */ \
-            issued_tmp.eop = 0;                                              \
-            issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_RET;                     \
-            issued_tmp.offset = offset;                                      \
-            issued_tmp.buf_addr = curr_buf;                                  \
-            issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
-            issued_tmp.lso_seq_cnt = lso_seq_cnt;                            \
-            issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
-            /* send the lso pkt desc to the lso ring */                      \
-            batch_out.pkt##_pkt## = issued_tmp;                              \
-            __mem_ring_journal(nfd_in_issued_lso_ring_num,                   \
-                               nfd_in_issued_lso_ring_addr,                  \
-                               &batch_out.pkt##_pkt##,                       \
-                               sizeof(struct nfd_in_issued_desc),            \
-                               sizeof(struct nfd_in_issued_desc),            \
-                               ctx_swap, &lso_journal_sig);                  \
-                                                                             \
-            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
-                        NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING); \
-            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
-                        NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TO_NOTIFY_RING);   \
-    }                                                                        \
-                                                                             \
     /* Load running variables from LM */                                     \
     /* get queue_data[queue].lso_seq_cnt */                                  \
     __asm { alu[lso_seq_cnt, NFD_IN_DMA_STATE_LSO_SEQ_CNT_msk, and,          \
@@ -1238,6 +1210,34 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     __asm { alu[lso_payload_len, --, B,                                      \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd]] }      \
                                                                              \
+    /* Build a message for the regular ring to notify */                     \
+    /* Include some context from the TX descriptor and LSO state */          \
+    /* as implicit debugging info */                                         \
+    issued_tmp.eop = 0;                                                      \
+    issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_START;                           \
+    issued_tmp.offset = offset;                                              \
+    issued_tmp.buf_addr = curr_buf;                                          \
+    issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];                      \
+    issued_tmp.lso_seq_cnt = lso_seq_cnt;                                    \
+    issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];                      \
+                                                                             \
+    if (lso_dma_index >= dma_len) {                                          \
+        /* We won't actually generate segments from this TX desc */          \
+        /* so just let notify ignore the regular ring msg */                 \
+        issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_NULL;                        \
+                                                                             \
+        /* Count this as a "header only" TX descriptor, but note that */     \
+        /* TX descriptors with dma_len == 0 will also get counted here. */   \
+        NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
+                             NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_ONLY_TX_DESC); \
+    }                                                                        \
+    batch_out.pkt##_pkt## = issued_tmp;                                      \
+                                                                             \
+    /* Now that the batch_out is prepped we can write out pending descs */   \
+    batch_desc_cnt = issue_dma_write_pend(batch_desc_cnt, _pkt);             \
+    wait_for_all(&msg_sig0);                                                 \
+                                                                             \
+    /* Generate the LSO segments from this TX descriptor */                  \
     while (lso_dma_index < dma_len) {                                        \
         SIGNAL_MASK lso_wait_msk;                                            \
                                                                              \
@@ -1575,16 +1575,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 --, B, lso_payload_len] }                                    \
                                                                              \
                                                                              \
-    /* prep batch_out for LSO segment info */                                \
-    issued_tmp.eop = 0;                                                      \
-    issued_tmp.offset = 0;                                                   \
-    issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_START;                           \
-    batch_out.pkt##_pkt## = issued_tmp;                                      \
-                                                                             \
-    /* Now that the batch_out is prepped we can write out pending descs */   \
-    batch_desc_cnt = issue_dma_write_pend(batch_desc_cnt, _pkt);             \
-    wait_for_all(&msg_sig0);                                                 \
-                                                                             \
     /* Re-increment data_dma_seq_issued */                                   \
     data_dma_seq_issued++;                                                   \
     /* Handle the DMA sequence numbers */                                    \
@@ -1617,9 +1607,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         }                                                                    \
     }                                                                        \
                                                                              \
-    /* Clear LSO bits */                                                     \
+    /* Restore LSO bits for following descriptors */                         \
     issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_NULL;                            \
-                                                                             \
                                                                              \
     /* We're done with the descriptor so unlock the queue state */           \
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],             \
