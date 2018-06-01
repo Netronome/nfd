@@ -1109,9 +1109,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     }                                                                        \
                                                                              \
     if (dma_len == 0) {                                                      \
-        /* Flag the packet as invalid and set dma_len */                     \
-        /* to a harmless value. */                                           \
-        dma_len = NFD_IN_DMA_INVALID_LEN;                                    \
+        /* Flag the packet as invalid.  This will suppress header dma */     \
+        /* and abort the descriptor messaging notify to ignore it too. */    \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],        \
                     NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],        \
                     or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }                 \
