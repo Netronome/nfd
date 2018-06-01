@@ -130,6 +130,13 @@ __shared __gpr unsigned int jumbo_dma_seq_issued = 0;
 __shared __gpr unsigned int jumbo_dma_seq_compl = 0;
 
 
+/*
+ * Shared GPR used to track the number of packets that have had
+ * descriptors placed on the issued ring for the current batch
+ */
+__shared __gpr unsigned int batch_desc_cnt = 0;
+
+
 /* Ring declarations */
 /* TODO: use generic resource management to sanity check these rings */
 #if (PCI_IN_ISSUE_DMA_IDX == 0)
@@ -615,6 +622,61 @@ issue_dma_gather_seq_recv()
 
 
 /**
+ * Write pending messages in the batch
+ * @param start     next pkt index to go on issued ring
+ * @param end       last pkt index (inclusive) for ring
+ *
+ * Write out messages from batch_out.pktX where X is start to
+ * batch_out.pktY where Y is end (inclusive) using indirect
+ * references to specify the start register and length.
+ *
+ * msg_sig0 is used for the final ring put command.  The caller
+ * must wait on this signal before reusing the registers or signal.
+ */
+__noinline unsigned int
+issue_dma_write_pend(unsigned int start, unsigned int end)
+{
+    unsigned int num, ind, off, size, ring_addr;
+
+    num = end + 1 - start;
+    ring_addr = (0 << 24) | (NFD_IN_ISSUED_RING_NUM << 2);
+
+    off = (__xfer_reg_number(&batch_out.pkt0) * 4 +
+           start * sizeof(struct nfd_in_issued_desc));
+
+    if(num <= 4) {
+        size = (sizeof(struct nfd_in_issued_desc) * num) / 4;
+        ind = (NFP_MECSR_PREV_ALU_LENGTH(size - 1) |
+               NFP_MECSR_PREV_ALU_OV_LEN |
+               NFP_MECSR_PREV_ALU_OVE_DATA(5));
+        __asm { alu[--, ind, OR, off, <<16]
+                ct[ring_put, batch_out.pkt0, ring_addr, 0, 16], \
+                indirect_ref, sig_done[msg_sig0] }
+    } else {
+        size = (sizeof(struct nfd_in_issued_desc) * 4) / 4;
+        ind = (NFP_MECSR_PREV_ALU_LENGTH(size - 1) |
+               NFP_MECSR_PREV_ALU_OV_LEN |
+               NFP_MECSR_PREV_ALU_OVE_DATA(5));
+        __asm { alu[--, ind, OR, off, <<16]
+                ct[ring_put, batch_out.pkt0, ring_addr, 0, 16], \
+                indirect_ref }
+        num -= 4;
+        off += sizeof(struct nfd_in_issued_desc) * 4;
+        size = (sizeof(struct nfd_in_issued_desc) * num) / 4;
+        ind = (NFP_MECSR_PREV_ALU_LENGTH(size - 1) |
+               NFP_MECSR_PREV_ALU_OV_LEN |
+               NFP_MECSR_PREV_ALU_OVE_DATA(5));
+        __asm { alu[--, ind, OR, off, <<16]
+                ct[ring_put, batch_out.pkt0, ring_addr, 0, 16], \
+                indirect_ref, sig_done[msg_sig0] }
+    }
+
+    __implicit_read(&batch_out);
+    return end + 1;
+}
+
+
+/**
  * Clean up LM queue state
  * @param check_buf True if we need to check the LM curr_buf state
  *
@@ -864,7 +926,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_CONT_TX_DESC);     \
     }                                                                        \
-                                                                             \
                                                                              \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                                   \
                                                                              \
@@ -1519,6 +1580,11 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     issued_tmp.offset = 0;                                                   \
     issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_START;                           \
     batch_out.pkt##_pkt## = issued_tmp;                                      \
+                                                                             \
+    /* Now that the batch_out is prepped we can write out pending descs */   \
+    batch_desc_cnt = issue_dma_write_pend(batch_desc_cnt, _pkt);             \
+    wait_for_all(&msg_sig0);                                                 \
+                                                                             \
     /* Re-increment data_dma_seq_issued */                                   \
     data_dma_seq_issued++;                                                   \
     /* Handle the DMA sequence numbers */                                    \
@@ -2304,9 +2370,20 @@ issue_dma()
         /* We have finished processing the batch, let the next continue */
         reorder_done_opt(&next_ctx, &dma_order_sig);
 
-        ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt0,
-                     (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
-        ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt4,
-                     (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
+        /* Here we need to check how many descriptors we still need to write */
+        if (batch_desc_cnt == 0) {
+            ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt0,
+                         (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
+            ctm_ring_put(0, NFD_IN_ISSUED_RING_NUM, &batch_out.pkt4,
+                         (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
+        } else {
+            wait_msk &= ~__signals(&msg_sig0, &msg_sig1);
+            if (batch_desc_cnt < 8) {
+                /* Write out partial desc batch */
+                issue_dma_write_pend(batch_desc_cnt, NFD_IN_MAX_BATCH_SZ - 1);
+                wait_msk |= __signals(&msg_sig0);
+            }
+            batch_desc_cnt = 0;
+        }
     }
 }
