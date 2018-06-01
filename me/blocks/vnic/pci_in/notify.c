@@ -115,7 +115,6 @@ static unsigned int next_ctx;
 __xwrite struct _pkt_desc_batch batch_out;
 __xread unsigned int qc_xfer;
 
-/* XXX declare dst_q counters in LM */
 #ifdef NFD_IN_LSO_CNTR_ENABLE
 static unsigned int nfd_in_lso_cntr_addr = 0;
 #endif
