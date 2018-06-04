@@ -20,6 +20,7 @@
 #define _BLOCKS__SHARED_NFD_INTERNAL_H_
 
 #if (defined(NFD_IN_LSO_CNTR_ENABLE) && defined(__NFP_LANG_MICROC))
+#include <nfp6000/nfp_me.h>
 #include <std/cntrs.h>
 #endif
 
@@ -233,10 +234,28 @@ static const char *nfd_in_lso_cntr_names[] = {
     #define NFD_IN_LSO_CNTR_INCR(_addr, _idx) cntr64_incr(_addr, _idx)
     #define NFD_IN_LSO_CNTR_CLR(_addr, _idx) cntr64_clr(_addr, _idx)
     #define NFD_IN_LSO_CNTR_ADD(_addr, _idx, _val) cntr64_add(_addr, _idx, _val)
+    #define NFD_IN_LSO_CNTR_ADD_IMM(_addr, _idx, _val)              \
+        do {                                                        \
+            unsigned int byte_offset;                               \
+            unsigned int ind;                                       \
+            unsigned int base = (_addr);                            \
+                                                                    \
+            byte_offset = (_idx) << 3;                              \
+            ind = (NFP_MECSR_PREV_ALU_OVE_DATA(2) |                 \
+                   NFP_MECSR_PREV_ALU_OV_LEN |                      \
+                   NFP_MECSR_PREV_ALU_LENGTH(8));                   \
+            __asm {                                                 \
+                __asm { alu[--, ind, OR, (_val), <<16] }            \
+                __asm { mem[add64_imm, --, base, <<8, byte_offset], \
+                        indirect_ref }                              \
+            }                                                       \
+        } while (0)
+
 #else
     #define NFD_IN_LSO_CNTR_INCR(_addr, _idx)
     #define NFD_IN_LSO_CNTR_CLR(_addr, _idx)
     #define NFD_IN_LSO_CNTR_ADD(_addr, _idx, _val)
+    #define NFD_IN_LSO_CNTR_ADD_IMM(_addr, _idx, _val)
 #endif
 #endif
 

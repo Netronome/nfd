@@ -1552,14 +1552,14 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
     NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
                         NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS);              \
-    NFD_IN_LSO_CNTR_ADD(nfd_in_lso_cntr_addr,                                \
-                       NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS,                \
-                       mss);                                                 \
+    NFD_IN_LSO_CNTR_ADD_IMM(nfd_in_lso_cntr_addr,                            \
+                            NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_MSS,           \
+                            mss);                                            \
     NFD_IN_LSO_CNTR_CLR(nfd_in_lso_cntr_addr,                                \
                         NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_HDRLEN);           \
-    NFD_IN_LSO_CNTR_ADD(nfd_in_lso_cntr_addr,                                \
-                        NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_HDRLEN,            \
-                        lso_hdrlen);                                         \
+    NFD_IN_LSO_CNTR_ADD_IMM(nfd_in_lso_cntr_addr,                            \
+                            NFD_IN_LSO_CNTR_X_ISSUED_LAST_LSO_HDRLEN,        \
+                            lso_hdrlen);                                     \
                                                                              \
     /* Save running variables back to LM */                                  \
     /* set queue_data[queue].curr_buf */                                     \
