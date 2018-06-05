@@ -643,7 +643,7 @@ distr_notify()
 #endif
 #ifdef NFD_IN_HAS_ISSUE1
         data_dma_seq_compl1 = nfd_in_data_compl_refl_in1;
-#endif NFD_IN_HAS_ISSUE1
+#endif
     }
 
 #ifdef NFD_IN_HAS_ISSUE0
