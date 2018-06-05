@@ -899,6 +899,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     SIGNAL lso_enq_sig;                                                      \
     SIGNAL lso_hdr_sig;                                                      \
     SIGNAL lso_journal_sig;                                                  \
+    SIGNAL_MASK lso_wait_msk = 0;                                            \
     __mem40 void *hdr_pkt_ptr;                                               \
     unsigned int mu_buf_left;                                                \
     unsigned int dma_left;                                                   \
@@ -1239,7 +1240,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* Generate the LSO segments from this TX descriptor */                  \
     while (lso_dma_index < dma_len) {                                        \
         __xwrite struct nfd_in_lso_desc lso_pkt;                             \
-        SIGNAL_MASK lso_wait_msk;                                            \
                                                                              \
         /* We are starting to work on MU buffers, so lock the queue state */ \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],         \
@@ -1280,12 +1280,10 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                     (__ctm40 void *)&lso_hdr_data[                           \
                         (queue << __log2(NFD_IN_MAX_LSO_HDR_SZ))],           \
                     header_to_read, sig_done, &lso_hdr_sig);                 \
+                lso_wait_msk |= __signals(&lso_hdr_sig);                     \
                                                                              \
                 /* clear lso_payload_len */                                  \
                 lso_payload_len = 0;                                         \
-                                                                             \
-                /* wait for header copy to complete */                       \
-                __wait_for_all(&lso_hdr_sig);                                \
                                                                              \
             } else {                                                         \
                 /* The LSO descriptors have either generated too many */     \
@@ -1297,9 +1295,16 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             }                                                                \
         }                                                                    \
                                                                              \
+        /* Wait for IO to complete */                                        \
+        wait_sig_mask(lso_wait_msk);                                         \
+        lso_wait_msk = 0;                                                    \
+        __implicit_read(&lso_hdr_sig);                                       \
+        __implicit_read(&lso_journal_sig);                                   \
+        __implicit_read(&lso_enq_sig);                                       \
+                                                                             \
         /* Handle invalid at a single point */                               \
         if (curr_buf & (1 << NFD_IN_DMA_STATE_INVALID_shf)) {                \
-                                                                            \
+                                                                             \
             if ((curr_buf & NFD_IN_DMA_STATE_CURR_BUF_msk) == 0) {           \
                 /* We haven't yet allocated an MU buffer, but the issued */  \
                 /* ring must always hold legitimate MU buffers.   We can */  \
@@ -1327,7 +1332,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                &lso_pkt,                                     \
                                sizeof(struct nfd_in_lso_desc),               \
                                sizeof(struct nfd_in_lso_desc),               \
-                               ctx_swap, &lso_journal_sig);                  \
+                               sig_done, &lso_journal_sig);                  \
+            lso_wait_msk |= __signals(&lso_journal_sig);                     \
                                                                              \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                         NFD_IN_LSO_CNTR_T_ISSUED_LSO_ALL_PKT_TO_NOTIFY_RING); \
@@ -1444,13 +1450,12 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             /* XFERs (dma_out.pkt##_pkt##) when we wake up again.  */        \
             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                   \
                            NFD_IN_DATA_DMA_QUEUE, sig_done, &lso_enq_sig);   \
-            lso_wait_msk = __signals(&lso_enq_sig);                          \
+            lso_wait_msk |= __signals(&lso_enq_sig);                         \
         } else {                                                             \
             /* Suppress the DMA and flag the packet as invalid */            \
             /* Leave other processing untouched so the descriptor will */    \
             /* complete as usual. */                                         \
             curr_buf |= (1 << NFD_IN_DMA_STATE_INVALID_shf);                 \
-            lso_wait_msk = 0;                                                \
         }                                                                    \
                                                                              \
         /* if we are at end of mu_buf, or the end of the LSO buffer */       \
@@ -1545,10 +1550,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }            \
         } /* End of ring put if statement  */                                \
                                                                              \
-        /* Wait for IO to complete */                                        \
-        wait_sig_mask(lso_wait_msk);                                         \
-        __implicit_read(&lso_journal_sig);                                   \
-        __implicit_read(&lso_enq_sig);                                       \
                                                                              \
     } /* while */                                                            \
                                                                              \
@@ -1575,6 +1576,12 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* set lso_payload_len */                                                \
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd],        \
                 --, B, lso_payload_len] }                                    \
+                                                                             \
+    /* Wait for IO from final segment to complete */                         \
+    wait_sig_mask(lso_wait_msk);                                             \
+    __implicit_read(&lso_hdr_sig);                                           \
+    __implicit_read(&lso_journal_sig);                                       \
+    __implicit_read(&lso_enq_sig);                                           \
                                                                              \
     /* Flag that batch_out is free to be used before this point */           \
     __implicit_write(&batch_out);                                            \
