@@ -1215,10 +1215,12 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* as implicit debugging info */                                         \
     issued_tmp.eop = 0;                                                      \
     issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_START;                           \
-    issued_tmp.offset = offset;                                              \
     issued_tmp.buf_addr = curr_buf;                                          \
+    /* XXX these values are reused in the while loop, saving a few ops */    \
+    issued_tmp.offset = offset;                                              \
     issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];                      \
     issued_tmp.lso_seq_cnt = lso_seq_cnt;                                    \
+    issued_tmp.lso_end = 0;                                                  \
     issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];                      \
                                                                              \
     if (lso_dma_index >= dma_len) {                                          \
@@ -1236,6 +1238,10 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* Now that the batch_out is prepped we can write out pending descs */   \
     batch_desc_cnt = issue_dma_write_pend(batch_desc_cnt, _pkt);             \
     wait_for_all(&msg_sig0);                                                 \
+                                                                             \
+    /* XXX set issued_tmp.eop to 1 as this will be required on all but */    \
+    /* the last segment so we can save some cycles and code store. */        \
+    issued_tmp.eop = 1;                                                      \
                                                                              \
     /* Generate the LSO segments from this TX descriptor */                  \
     while (lso_dma_index < dma_len) {                                        \
@@ -1316,14 +1322,11 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             }                                                                \
             /* Build the ring message more or less as normal, so that */     \
             /* whatever debugging info may be available is preserved. */     \
-            /* Setting EOP ensures that the app gets this message. */        \
-            issued_tmp.eop = 1;                                              \
+            /* EOP was set previously and ensures that the app */            \
+            /* gets this message. */                                         \
             issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_RET;                     \
-            issued_tmp.offset = offset;                                      \
             issued_tmp.buf_addr = curr_buf;                                  \
-            issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
             issued_tmp.lso_seq_cnt = lso_seq_cnt;                            \
-            issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
             /* send the lso pkt desc to the lso ring */                      \
             lso_pkt.desc = issued_tmp;                                       \
             lso_pkt.jumbo_seq = jumbo_dma_seq_issued;                        \
@@ -1461,13 +1464,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         /* if we are at end of mu_buf, or the end of the LSO buffer */       \
         if ((lso_payload_len == mss) || (lso_dma_index == dma_len)) {        \
             /* put finished mu buffer on lso_ring to notify */               \
-            issued_tmp.eop = 1;                                              \
-            issued_tmp.offset = offset;                                      \
             issued_tmp.buf_addr = curr_buf;                                  \
-            issued_tmp.__raw[2] = tx_desc.pkt##_pkt##.__raw[2];              \
             issued_tmp.lso_seq_cnt = lso_seq_cnt;                            \
-            issued_tmp.lso_end = 0;                                          \
-            issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
             issued_tmp.data_len = lso_offhdr + lso_payload_len;              \
                                                                              \
             if (lso_dma_index == dma_len) {                                  \
