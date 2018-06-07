@@ -403,11 +403,21 @@ do {                                                                         \
         __xread struct nfd_in_lso_desc lso_pkt;                              \
         SIGNAL_PAIR lso_sig_pair;                                            \
         SIGNAL_MASK lso_wait_msk;                                            \
+        unsigned int jumbo_compl_seq;                                        \
+        int seqn_chk;                                                        \
                                                                              \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_NOTIFY_LSO_PKT_DESC);         \
         /* XXX __signals(&lso_sig_pair.even) lists both even and odd */      \
         lso_wait_msk = 1 << __signal_number(&lso_sig_pair.even);             \
+                                                                             \
+        /* Setup the T_INDEX to get the nfd_in_jumbo_compl_refl_inX val */   \
+        /* XXX other threads must not use the T_INDEX while we swap. */      \
+        /* This should be okay as we lock other contexts out of the */       \
+        /* LSO processing code. */                                           \
+        /* XXX assumes jumbo_compl_xnum is allocated from CTX 0 */           \
+        local_csr_write(local_csr_t_index,                                   \
+                        MECSR_XFER_INDEX(jumbo_compl_xnum));                 \
                                                                              \
          /* finished packet with LSO to handle */                            \
         for (;;) {                                                           \
@@ -429,9 +439,18 @@ do {                                                                         \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING);           \
                                                                              \
-            /* TODO wait until this value is in range */                     \
-            local_csr_write(local_csr_mailbox_1, lso_pkt.jumbo_seq);         \
+            /* Wait for the jumbo compl seq to catch up to the encoded seq */ \
+            /* Use inline ASM to access the T_INDEX */                       \
+            __asm { alu[jumbo_compl_seq, --, B, *$index] }                   \
+            seqn_chk = lso_pkt.jumbo_seq - jumbo_compl_seq;                  \
+            while (seqn_chk > 0) {                                           \
+                ctx_swap();                                                  \
+                __asm { alu[jumbo_compl_seq, --, B, *$index] }               \
+                seqn_chk = lso_pkt.jumbo_seq - jumbo_compl_seq;              \
+            }                                                                \
                                                                              \
+            /* We can carry on processing the descriptor */                  \
+            /* Check whether it should go to the app */                      \
             if (lso_pkt.desc.eop) {                                          \
                 _NOTIFY_MU_CHK(_pkt)                                         \
                     pkt_desc_tmp.sp0 = 0;                                    \
@@ -505,7 +524,7 @@ do {                                                                         \
 __forceinline void
 _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         int input_ring, __gpr unsigned int lso_ring_num,
-        __gpr mem_ring_addr_t lso_ring_addr)
+        __gpr mem_ring_addr_t lso_ring_addr, unsigned int jumbo_compl_xnum)
 {
 
     unsigned int n_batch;
@@ -614,11 +633,13 @@ notify(int side)
     if (side == 0) {
         _notify(&data_dma_seq_compl0, &data_dma_seq_served0,
                 NFD_IN_ISSUED_RING0_NUM, nfd_in_issued_lso_ring_num0,
-                nfd_in_issued_lso_ring_addr0);
+                nfd_in_issued_lso_ring_addr0,
+                __xfer_reg_number(&nfd_in_jumbo_compl_refl_in0));
     } else {
         _notify(&data_dma_seq_compl1, &data_dma_seq_served1,
                 NFD_IN_ISSUED_RING1_NUM, nfd_in_issued_lso_ring_num1,
-                nfd_in_issued_lso_ring_addr1);
+                nfd_in_issued_lso_ring_addr1,
+                __xfer_reg_number(&nfd_in_jumbo_compl_refl_in1));
     }
 }
 
