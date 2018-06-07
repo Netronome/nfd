@@ -90,11 +90,9 @@ static volatile __xread unsigned int nfd_in_jumbo_event_xfer = 0;
  * of precache_bufs_jumbo(). */
 static SIGNAL nfd_in_jumbo_event_sig;
 
-/* Signals and transfer registers for sequence number reflects */
+/* Transfer registers for sequence number reflects */
 static __xwrite unsigned int nfd_in_data_compl_refl_out = 0;
-__remote volatile SIGNAL nfd_in_data_compl_refl_sig;
 static __xwrite unsigned int nfd_in_jumbo_compl_refl_out = 0;
-__remote volatile SIGNAL nfd_in_jumbo_compl_refl_sig;
 
 #if (PCI_IN_ISSUE_DMA_IDX == 0)
 
@@ -597,9 +595,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
             reflect_data(NFD_IN_NOTIFY_ME,
                          __xfer_reg_number(&nfd_in_data_compl_refl_in,
                                            NFD_IN_NOTIFY_ME),
-                         __signal_number(&nfd_in_data_compl_refl_sig,
-                                         NFD_IN_NOTIFY_ME),
-                         &nfd_in_data_compl_refl_out,
+                         0, &nfd_in_data_compl_refl_out,
                          sizeof nfd_in_data_compl_refl_out);
 
             __implicit_write(&nfd_in_data_event_sig);
@@ -621,9 +617,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
             reflect_data(NFD_IN_NOTIFY_ME,
                          __xfer_reg_number(&nfd_in_jumbo_compl_refl_in,
                                            NFD_IN_NOTIFY_ME),
-                         __signal_number(&nfd_in_jumbo_compl_refl_sig,
-                                         NFD_IN_NOTIFY_ME),
-                         &nfd_in_jumbo_compl_refl_out,
+                         0, &nfd_in_jumbo_compl_refl_out,
                          sizeof nfd_in_jumbo_compl_refl_out);
 
             precache_bufs_jumbo();
@@ -652,9 +646,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
             reflect_data(NFD_IN_NOTIFY_ME,
                          __xfer_reg_number(&nfd_in_data_compl_refl_in,
                                            NFD_IN_NOTIFY_ME),
-                         __signal_number(&nfd_in_data_compl_refl_sig,
-                                         NFD_IN_NOTIFY_ME),
-                         &nfd_in_data_compl_refl_out,
+                         0, &nfd_in_data_compl_refl_out,
                          sizeof nfd_in_data_compl_refl_out);
         }
 
@@ -671,9 +663,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
             reflect_data(NFD_IN_NOTIFY_ME,
                          __xfer_reg_number(&nfd_in_jumbo_compl_refl_in,
                                            NFD_IN_NOTIFY_ME),
-                         __signal_number(&nfd_in_jumbo_compl_refl_sig,
-                                         NFD_IN_NOTIFY_ME),
-                         &nfd_in_jumbo_compl_refl_out,
+                         0, &nfd_in_jumbo_compl_refl_out,
                          sizeof nfd_in_jumbo_compl_refl_out);
         }
 

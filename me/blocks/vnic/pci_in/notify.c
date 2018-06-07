@@ -73,10 +73,6 @@ struct _pkt_desc_batch {
 NFD_INIT_DONE_DECLARE;
 
 
-/* Shared by both issue DMA MEs */
-__visible volatile SIGNAL nfd_in_data_compl_refl_sig;
-__visible volatile SIGNAL nfd_in_jumbo_compl_refl_sig;
-
 /* Used for issue DMA 0 */
 __shared __gpr unsigned int data_dma_seq_served0 = 0;
 __shared __gpr unsigned int data_dma_seq_compl0 = 0;
@@ -679,14 +675,12 @@ distr_notify()
     /* Store reset state in absolute GPR */
     gather_reset_state_gpr = gather_reset_state_xfer;
 
-    if (signal_test(&nfd_in_data_compl_refl_sig)) {
 #ifdef NFD_IN_HAS_ISSUE0
-        data_dma_seq_compl0 = nfd_in_data_compl_refl_in0;
+    data_dma_seq_compl0 = nfd_in_data_compl_refl_in0;
 #endif
 #ifdef NFD_IN_HAS_ISSUE1
-        data_dma_seq_compl1 = nfd_in_data_compl_refl_in1;
+    data_dma_seq_compl1 = nfd_in_data_compl_refl_in1;
 #endif
-    }
 
 #ifdef NFD_IN_HAS_ISSUE0
     if (data_dma_seq_served0 != data_dma_seq_sent0) {
