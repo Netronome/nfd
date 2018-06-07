@@ -83,7 +83,6 @@
 
 /* Additional check queue constants */
 #define NFD_IN_MAX_RETRIES      5
-#define NFD_IN_BATCH_SZ         4
 #define NFD_IN_PENDING_TEST     0
 
 /* DMAConfigReg index allocations */

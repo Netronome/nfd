@@ -214,7 +214,7 @@ service_qc()
     /* Check queues */
     c.pcie_isl =       PCIE_ISL;
     c.max_retries =    NFD_IN_MAX_RETRIES;
-    c.batch_sz =       NFD_IN_BATCH_SZ;
+    c.batch_sz =       NFD_IN_MAX_BATCH_SZ;
     c.queue_type =     NFD_IN_TX_QUEUE;
     c.pending_test =   NFD_IN_PENDING_TEST;
     c.event_data =     NFD_EVENT_DATA;
