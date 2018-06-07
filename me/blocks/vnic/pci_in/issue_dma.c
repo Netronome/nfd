@@ -734,13 +734,9 @@ issue_dma_cleanup_state(const unsigned int check_buf)
 }
 
 
-/* Helper macros to lock and unlock state before swapping
- * Lock the queue itself, and also decrement data_dma_seq_issued
- * before swapping so that precache_bufs doesn't see a partially
- * issued batches as done */
+/* Helper macros to lock and unlock state before swapping */
 #define _ISSUE_PROC_STATE_LOCK()                                    \
 do {                                                                \
-    data_dma_seq_issued -= NFD_IN_MAX_BATCH_SZ;                     \
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }             \
@@ -748,7 +744,6 @@ do {                                                                \
 
 #define _ISSUE_PROC_STATE_UNLOCK()                                  \
     do {                                                            \
-    data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                     \
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }           \
@@ -798,8 +793,11 @@ do {                                                                    \
         batch_out.pkt##_pkt##.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];  \
                                                                         \
         /* Handle last_of_batch_dma_sig */                              \
-        if (_type == NFD_IN_DATA_EVENT_TYPE)                            \
+        if (_type == NFD_IN_DATA_EVENT_TYPE) {                          \
             wait_msk &= ~__signals(&last_of_batch_dma_sig);             \
+            /* Increment data_dma_seq_issued */                         \
+            data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                 \
+        }                                                               \
                                                                         \
         /* Unlock the queue */                                          \
         _ISSUE_PROC_STATE_UNLOCK();                                     \
@@ -929,13 +927,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     }                                                                        \
                                                                              \
     dma_len = tx_desc.pkt##_pkt##.dma_len;                                   \
-                                                                             \
-    /* data_dma_seq_issued was pre-incremented once we could */              \
-    /* process batch.  Since we are going to swap, we */                     \
-    /* decrement it temporarily to ensure */                                 \
-    /* precache_bufs_compute_seq_safe will give a pessimistic */             \
-    /* safe count. */                                                        \
-    data_dma_seq_issued -= NFD_IN_MAX_BATCH_SZ;                              \
                                                                              \
     if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT_shf) == 0) { \
         unsigned int hdr_len_chk;                                            \
@@ -1584,10 +1575,12 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* Flag that batch_out is free to be used before this point */           \
     __implicit_write(&batch_out);                                            \
                                                                              \
-    /* Re-increment data_dma_seq_issued */                                   \
-    data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                              \
     /* Handle the DMA sequence numbers */                                    \
     if (type == NFD_IN_DATA_EVENT_TYPE) {                                    \
+                                                                             \
+        /* Increment data_dma_seq_issued */                                  \
+        data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                          \
+                                                                             \
         if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                               \
             cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,        \
                                               PCI_IN_ISSUE_DMA_IDX);         \
@@ -1666,6 +1659,10 @@ __noinline void issue_proc_down##_pkt(unsigned int pcie_hi_word_part,   \
                                                                         \
     /* Handle the sequence numbers for the batch */                     \
     if (type == NFD_IN_DATA_EVENT_TYPE) {                               \
+                                                                        \
+        /* Increment data_dma_seq_issued */                             \
+        data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                     \
+                                                                        \
         if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                          \
             /* Issue a signal only DMA to generate an event when */     \
             /* the batch completes */                                   \
@@ -1893,6 +1890,8 @@ do {                                                                    \
             pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
                                 NFD_IN_DATA_DMA_QUEUE);                 \
         } else {                                                        \
+            /* Increment data_dma_seq_issued */                         \
+            data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                 \
             cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src);   \
             dma_out.pkt##_pkt##.__raw[1] = cpp_hi_addr | cpp_hi_word;   \
             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,              \
@@ -2074,6 +2073,8 @@ do {                                                                    \
                 pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,     \
                                     NFD_IN_DATA_DMA_QUEUE);             \
             } else {                                                    \
+                /* Increment data_dma_seq_issued */                     \
+                data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;             \
                 cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src); \
                 dma_out.pkt##_pkt##.__raw[1] = (                        \
                     cpp_hi_word |                                       \
@@ -2086,6 +2087,8 @@ do {                                                                    \
             /* Suppress segment DMA */                                  \
             /* Handle the DMA sequence numbers for the batch */         \
             if (_type == NFD_IN_DATA_EVENT_TYPE) {                      \
+                /* Increment data_dma_seq_issued */                     \
+                data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;             \
                 cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE, \
                                                   PCI_IN_ISSUE_DMA_IDX); \
                 cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, _src);     \
@@ -2292,7 +2295,6 @@ issue_dma()
 
         queue = batch.queue;
         num = batch.num;
-        data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;
 
         local_csr_write(local_csr_active_lm_addr_2, &queue_data[queue]);
 
