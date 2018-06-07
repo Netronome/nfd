@@ -519,7 +519,7 @@ do {                                                                         \
  * batches are processed in order.  If there is no batch of messages to fetch,
  * we must still participate in the "msg_order_sig" ordering.
  */
-__forceinline void
+__intrinsic void
 _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         int input_ring, __gpr unsigned int lso_ring_num,
         __gpr mem_ring_addr_t lso_ring_addr, unsigned int jumbo_compl_xnum)
@@ -557,10 +557,8 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         __asm {
             ctx_arb[--], defer[2];
             local_csr_wr[local_csr_active_ctx_wakeup_events, wait_msk];
+            alu[*served, *served, +, NFD_IN_MAX_BATCH_SZ];
         }
-        /* Increment data_dma_seq_served before swapping. Should fall in defer
-         * shadow. */
-        *served += NFD_IN_MAX_BATCH_SZ;
 
         wait_msk = __signals(&wq_sig0, &wq_sig1, &wq_sig2, &wq_sig3,
                              &wq_sig4, &wq_sig5, &wq_sig6, &wq_sig7,
