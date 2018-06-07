@@ -376,20 +376,18 @@ precache_bufs_avail()
  * buffers in the cache, the number of batches in "tx_issued_ring" and the
  * number of DMA batches in flight.
  *
- * Note that DMAs are only tracked per batch, with each batch assumed to be
- * filled.  This makes the DMA batches count slightly pessimistic if a few
- * batches are not full.
+ * Each batch assumed to be filled.  This makes the DMA batches count slightly
+ * pessimistic if a few batches are not full.
  */
 __intrinsic void
 precache_bufs_compute_seq_safe()
 {
     unsigned int min_bat, buf_bat, dma_bat, ring_bat;
 
-    buf_bat = precache_bufs_avail() / NFD_IN_MAX_BATCH_SZ;
-    dma_bat = (NFD_IN_DATA_MAX_IN_FLIGHT / NFD_IN_MAX_BATCH_SZ -
+    buf_bat = precache_bufs_avail();
+    dma_bat = (NFD_IN_DATA_MAX_IN_FLIGHT -
                data_dma_seq_issued + data_dma_seq_compl);
-    ring_bat = ((NFD_IN_ISSUED_RING_SZ - NFD_IN_ISSUED_RING_RES) /
-                NFD_IN_MAX_BATCH_SZ);
+    ring_bat = (NFD_IN_ISSUED_RING_SZ - NFD_IN_ISSUED_RING_RES);
     ring_bat = ring_bat - data_dma_seq_issued + data_dma_seq_served;
 
     /* Perform min(buf_bat, dma_bat, ring_bat) */

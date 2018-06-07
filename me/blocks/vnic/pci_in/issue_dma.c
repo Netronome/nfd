@@ -740,7 +740,7 @@ issue_dma_cleanup_state(const unsigned int check_buf)
  * issued batches as done */
 #define _ISSUE_PROC_STATE_LOCK()                                    \
 do {                                                                \
-    data_dma_seq_issued--;                                          \
+    data_dma_seq_issued -= NFD_IN_MAX_BATCH_SZ;                     \
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 OR, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }             \
@@ -748,7 +748,7 @@ do {                                                                \
 
 #define _ISSUE_PROC_STATE_UNLOCK()                                  \
     do {                                                            \
-    data_dma_seq_issued++;                                          \
+    data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                     \
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }           \
@@ -935,7 +935,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* decrement it temporarily to ensure */                                 \
     /* precache_bufs_compute_seq_safe will give a pessimistic */             \
     /* safe count. */                                                        \
-    data_dma_seq_issued--;                                                   \
+    data_dma_seq_issued -= NFD_IN_MAX_BATCH_SZ;                              \
                                                                              \
     if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_CONT_shf) == 0) { \
         unsigned int hdr_len_chk;                                            \
@@ -1585,7 +1585,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     __implicit_write(&batch_out);                                            \
                                                                              \
     /* Re-increment data_dma_seq_issued */                                   \
-    data_dma_seq_issued++;                                                   \
+    data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                              \
     /* Handle the DMA sequence numbers */                                    \
     if (type == NFD_IN_DATA_EVENT_TYPE) {                                    \
         if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                               \
@@ -2277,7 +2277,8 @@ issue_dma()
         __implicit_read(&dma_order_sig);
         __implicit_read(&dma_out, sizeof dma_out);
 
-        while ((int)(data_dma_seq_issued - data_dma_seq_safe) >= 0) {
+        while ((data_dma_seq_safe - data_dma_seq_issued) <
+               NFD_IN_MAX_BATCH_SZ) {
             /* We can't process this batch yet.
              * Swap then recompute seq_safe.
              * NB: only one ctx can execute this at any given time */
@@ -2291,7 +2292,7 @@ issue_dma()
 
         queue = batch.queue;
         num = batch.num;
-        data_dma_seq_issued++;
+        data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;
 
         local_csr_write(local_csr_active_lm_addr_2, &queue_data[queue]);
 

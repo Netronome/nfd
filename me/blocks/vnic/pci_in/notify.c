@@ -528,6 +528,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
     unsigned int n_batch;
     unsigned int q_batch;
     unsigned int qc_queue;
+    unsigned int num_avail;
 
     unsigned int out_msg_sz = sizeof(struct nfd_in_pkt_desc);
 
@@ -539,15 +540,14 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
     wait_for_all(&get_order_sig);
     reorder_done_opt(&next_ctx, &get_order_sig);
 
-    /* Is there a batch to process
-     * XXX assume that issue_dma only inc's dma seq for final dma in batch */
-    if (*complete != *served)
+    /* There is a FULL batch to process
+     * XXX assume that issue_dma inc's dma seq for each nfd_in_issued_desc in
+     * batch. */
+    num_avail = *complete - *served;
+    if (num_avail >= NFD_IN_MAX_BATCH_SZ)
     {
         /* Process whole batch */
         __critical_path();
-
-        /* Increment data_dma_seq_served before swapping */
-        *served += 1;
 
         ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt0,
                      (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
@@ -555,9 +555,12 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
                      (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig1);
 
         __asm {
-            ctx_arb[--], defer[1];
+            ctx_arb[--], defer[2];
             local_csr_wr[local_csr_active_ctx_wakeup_events, wait_msk];
         }
+        /* Increment data_dma_seq_served before swapping. Should fall in defer
+         * shadow. */
+        *served += NFD_IN_MAX_BATCH_SZ;
 
         wait_msk = __signals(&wq_sig0, &wq_sig1, &wq_sig2, &wq_sig3,
                              &wq_sig4, &wq_sig5, &wq_sig6, &wq_sig7,
@@ -616,6 +619,9 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(q_batch), NFD_IN_TX_QUEUE);
         __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
                         sig_done, &qc_sig);
+    } else if (num_avail > 0) {
+        /* There is a partial batch to process */
+        halt(); // for now
     } else {
         /* Participate in msg ordering */
         wait_for_all(&msg_order_sig);
