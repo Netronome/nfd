@@ -168,6 +168,7 @@ PCIE_DMA_ALLOC(nfd_in_data_dma, me, PCIE_ISL, frompci_lo,
                NFD_IN_DATA_MAX_IN_FLIGHT);
 PCIE_DMA_ALLOC(nfd_in_data_jumbo_dma, me, PCIE_ISL, frompci_lo,
                NFD_IN_JUMBO_MAX_IN_FLIGHT);
+PCIE_DMA_ALLOC(nfd_in_lso_hdr_dma, me, PCIE_ISL, frompci_med, 1);
 
 #elif (PCI_IN_ISSUE_DMA_IDX == 1)
 
@@ -198,6 +199,7 @@ PCIE_DMA_ALLOC(nfd_in_data_dma, me, PCIE_ISL, frompci_lo,
                NFD_IN_DATA_MAX_IN_FLIGHT);
 PCIE_DMA_ALLOC(nfd_in_data_jumbo_dma, me, PCIE_ISL, frompci_lo,
                NFD_IN_JUMBO_MAX_IN_FLIGHT);
+PCIE_DMA_ALLOC(nfd_in_lso_hdr_dma, me, PCIE_ISL, frompci_med, 1);
 
 #else /* invalid PCI_IN_ISSUE_DMA_IDX */
 
@@ -1165,8 +1167,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                          \
         dma_out.pkt##_pkt##.__raw[2] = pcie_addr_lo;                         \
         dma_out.pkt##_pkt##.__raw[3] = pcie_hi_word;                         \
-        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##, NFD_IN_DATA_DMA_QUEUE,\
-                       sig_done, &lso_hdr_enq_sig);                          \
+        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                       \
+                       NFP_PCIE_DMA_FROMPCI_MED, sig_done, &lso_hdr_enq_sig); \
         lso_offhdr += dma_length;                                            \
         /* set queue_data[queue].lso_offhdr */                               \
         ctassert(NFD_IN_DMA_STATE_LSO_OFFHDR_shf == 16);                     \
