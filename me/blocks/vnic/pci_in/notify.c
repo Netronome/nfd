@@ -81,6 +81,8 @@ __shared __gpr unsigned int data_dma_seq_served0 = 0;
 __shared __gpr unsigned int data_dma_seq_compl0 = 0;
 static __gpr unsigned int data_dma_seq_sent0 = 0;
 static __xwrite unsigned int nfd_in_data_served_refl_out0 = 0;
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr0 = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num0 = 0;
 
 /* Shared with issue DMA 0 */
 __visible volatile __xread unsigned int nfd_in_data_compl_refl_in0 = 0;
@@ -92,15 +94,13 @@ __shared __gpr unsigned int data_dma_seq_served1 = 0;
 __shared __gpr unsigned int data_dma_seq_compl1 = 0;
 static __gpr unsigned int data_dma_seq_sent1 = 0;
 static __xwrite unsigned int nfd_in_data_served_refl_out1 = 0;
-static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr0 = 0;
-static __gpr unsigned int nfd_in_issued_lso_ring_num0 = 0;
+static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr1 = 0;
+static __gpr unsigned int nfd_in_issued_lso_ring_num1 = 0;
 
 /* Shared with issue DMA 1 */
 __visible volatile __xread unsigned int nfd_in_data_compl_refl_in1 = 0;
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in1;
 __remote volatile SIGNAL nfd_in_data_served_refl_sig1;
-static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr1 = 0;
-static __gpr unsigned int nfd_in_issued_lso_ring_num1 = 0;
 
 
 
