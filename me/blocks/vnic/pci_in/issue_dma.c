@@ -1238,6 +1238,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
     /* Generate the LSO segments from this TX descriptor */                  \
     while (lso_dma_index < dma_len) {                                        \
+        __xwrite struct nfd_in_lso_desc lso_pkt;                             \
         SIGNAL_MASK lso_wait_msk;                                            \
                                                                              \
         /* We are starting to work on MU buffers, so lock the queue state */ \
@@ -1319,12 +1320,13 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             issued_tmp.lso_seq_cnt = lso_seq_cnt;                            \
             issued_tmp.__raw[3] = tx_desc.pkt##_pkt##.__raw[3];              \
             /* send the lso pkt desc to the lso ring */                      \
-            batch_out.pkt##_pkt## = issued_tmp;                              \
+            lso_pkt.desc = issued_tmp;                                       \
+            lso_pkt.jumbo_seq = jumbo_dma_seq_issued;                        \
             __mem_ring_journal(nfd_in_issued_lso_ring_num,                   \
                                nfd_in_issued_lso_ring_addr,                  \
-                               &batch_out.pkt##_pkt##,                       \
-                               sizeof(struct nfd_in_issued_desc),            \
-                               sizeof(struct nfd_in_issued_desc),            \
+                               &lso_pkt,                                     \
+                               sizeof(struct nfd_in_lso_desc),               \
+                               sizeof(struct nfd_in_lso_desc),               \
                                ctx_swap, &lso_journal_sig);                  \
                                                                              \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
@@ -1512,13 +1514,14 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
             }                                                                \
                                                                              \
             /* send the lso pkt desc to the lso ring */                      \
-            batch_out.pkt##_pkt## = issued_tmp;                              \
+            lso_pkt.desc = issued_tmp;                                       \
+            lso_pkt.jumbo_seq = jumbo_dma_seq_issued;                        \
             __mem_ring_journal(nfd_in_issued_lso_ring_num,                   \
-                            nfd_in_issued_lso_ring_addr,                     \
-                            &batch_out.pkt##_pkt##,                          \
-                            sizeof(struct nfd_in_issued_desc),               \
-                            sizeof(struct nfd_in_issued_desc), sig_done,     \
-                            &lso_journal_sig);                               \
+                               nfd_in_issued_lso_ring_addr,                  \
+                               &lso_pkt,                                     \
+                               sizeof(struct nfd_in_lso_desc),               \
+                               sizeof(struct nfd_in_lso_desc),               \
+                               sig_done, &lso_journal_sig);                  \
             lso_wait_msk |= __signals(&lso_journal_sig);                     \
                                                                              \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
@@ -1573,6 +1576,8 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LSO_PAYLOAD_wrd],        \
                 --, B, lso_payload_len] }                                    \
                                                                              \
+    /* Flag that batch_out is free to be used before this point */           \
+    __implicit_write(&batch_out);                                            \
                                                                              \
     /* Re-increment data_dma_seq_issued */                                   \
     data_dma_seq_issued++;                                                   \

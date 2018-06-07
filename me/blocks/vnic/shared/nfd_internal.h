@@ -538,6 +538,11 @@ struct nfd_in_issued_desc {
 #define NFD_IN_ISSUED_DESC_LSO_START 1
 #define NFD_IN_ISSUED_DESC_LSO_RET   2
 
+struct nfd_in_lso_desc {
+    struct nfd_in_issued_desc desc;
+    unsigned int jumbo_seq;
+};
+
 
 /* nfd_out internal structures */
 struct nfd_out_queue_info {

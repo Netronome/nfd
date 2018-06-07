@@ -400,7 +400,7 @@ do {                                                                         \
                              &wq_sig##_pkt);                                 \
     } else if (batch_in.pkt##_pkt##.lso != NFD_IN_ISSUED_DESC_LSO_NULL) {    \
         /* else LSO packets */                                               \
-        __xread struct nfd_in_issued_desc lso_pkt;                           \
+        __xread struct nfd_in_lso_desc lso_pkt;                              \
         SIGNAL_PAIR lso_sig_pair;                                            \
         SIGNAL_MASK lso_wait_msk;                                            \
                                                                              \
@@ -429,16 +429,19 @@ do {                                                                         \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING);           \
                                                                              \
-            if (lso_pkt.eop) {                                               \
+            /* TODO wait until this value is in range */                     \
+            local_csr_write(local_csr_mailbox_1, lso_pkt.jumbo_seq);         \
+                                                                             \
+            if (lso_pkt.desc.eop) {                                          \
                 _NOTIFY_MU_CHK(_pkt)                                         \
                     pkt_desc_tmp.sp0 = 0;                                    \
-                pkt_desc_tmp.offset = lso_pkt.offset;                        \
+                pkt_desc_tmp.offset = lso_pkt.desc.offset;                   \
                 NFD_IN_ADD_SEQN_PROC;                                        \
                 batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];      \
-                batch_out.pkt##_pkt##.__raw[1] = (lso_pkt.__raw[1] |         \
+                batch_out.pkt##_pkt##.__raw[1] = (lso_pkt.desc.__raw[1] |    \
                                                   gather_reset_state_gpr);   \
-                batch_out.pkt##_pkt##.__raw[2] = lso_pkt.__raw[2];           \
-                batch_out.pkt##_pkt##.__raw[3] = lso_pkt.__raw[3];           \
+                batch_out.pkt##_pkt##.__raw[2] = lso_pkt.desc.__raw[2];      \
+                batch_out.pkt##_pkt##.__raw[3] = lso_pkt.desc.__raw[3];      \
                 _SET_DST_Q(_pkt);                                            \
                                                                              \
                 __mem_workq_add_work(dst_q, wq_raddr, &batch_out.pkt##_pkt,  \
@@ -448,7 +451,7 @@ do {                                                                         \
                                                                              \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                         NFD_IN_LSO_CNTR_T_NOTIFY_ALL_LSO_PKTS_TO_ME_WQ);     \
-                if (lso_pkt.lso_end) {                                       \
+                if (lso_pkt.desc.lso_end) {                                  \
                     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,               \
                             NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ); \
                 }                                                            \
@@ -456,13 +459,13 @@ do {                                                                         \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                         NFD_IN_LSO_CNTR_T_NOTIFY_LSO_CONT_SKIP_ME_WQ);       \
                                                                              \
-                /* XXX lso_pkt.lso must be  NFD_IN_ISSUED_DESC_LSO_RET */    \
+                /* XXX lso_pkt.desc.lso must be NFD_IN_ISSUED_DESC_LSO_RET */ \
                 /* else we have a logic bug or ring corruption */            \
-                if (lso_pkt.lso != NFD_IN_ISSUED_DESC_LSO_RET) {             \
+                if (lso_pkt.desc.lso != NFD_IN_ISSUED_DESC_LSO_RET) {        \
                     local_csr_write(local_csr_mailbox_0,                     \
                                     NFD_IN_NOTIFY_LSO_DESC_INVALID);         \
                     local_csr_write(local_csr_mailbox_1,                     \
-                                    lso_pkt.__raw[0]);                       \
+                                    lso_pkt.desc.__raw[0]);                  \
                     halt();                                                  \
                 }                                                            \
                                                                              \
@@ -471,7 +474,7 @@ do {                                                                         \
             }                                                                \
                                                                              \
             /* if it is last LSO being read from ring */                     \
-            if (lso_pkt.lso == NFD_IN_ISSUED_DESC_LSO_RET) {                 \
+            if (lso_pkt.desc.lso == NFD_IN_ISSUED_DESC_LSO_RET) {            \
                 /* XXX this may be a msg rather than a pkt, if cont */       \
                 NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
                         NFD_IN_LSO_CNTR_T_NOTIFY_LAST_PKT_FM_LSO_RING);      \
