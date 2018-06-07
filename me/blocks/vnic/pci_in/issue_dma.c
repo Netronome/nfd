@@ -795,8 +795,10 @@ do {                                                                    \
         /* Handle last_of_batch_dma_sig */                              \
         if (_type == NFD_IN_DATA_EVENT_TYPE) {                          \
             wait_msk &= ~__signals(&last_of_batch_dma_sig);             \
-            /* Increment data_dma_seq_issued */                         \
+            /* Increment data_dma_seq_issued to next */                 \
+            /* NFD_IN_MAX_BATCH_SZ multiple */                          \
             data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                 \
+            data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);          \
         }                                                               \
                                                                         \
         /* Unlock the queue */                                          \
@@ -1578,8 +1580,10 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     /* Handle the DMA sequence numbers */                                    \
     if (type == NFD_IN_DATA_EVENT_TYPE) {                                    \
                                                                              \
-        /* Increment data_dma_seq_issued */                                  \
+        /* Increment data_dma_seq_issued to next */                          \
+        /* NFD_IN_MAX_BATCH_SZ multiple */                                   \
         data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                          \
+        data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);                   \
                                                                              \
         if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                               \
             cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,        \
@@ -1660,8 +1664,10 @@ __noinline void issue_proc_down##_pkt(unsigned int pcie_hi_word_part,   \
     /* Handle the sequence numbers for the batch */                     \
     if (type == NFD_IN_DATA_EVENT_TYPE) {                               \
                                                                         \
-        /* Increment data_dma_seq_issued */                             \
+        /* Increment data_dma_seq_issued to next */                     \
+        /* NFD_IN_MAX_BATCH_SZ multiple */                              \
         data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                     \
+        data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);              \
                                                                         \
         if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                          \
             /* Issue a signal only DMA to generate an event when */     \
@@ -1890,8 +1896,11 @@ do {                                                                    \
             pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,         \
                                 NFD_IN_DATA_DMA_QUEUE);                 \
         } else {                                                        \
-            /* Increment data_dma_seq_issued */                         \
+            /* Increment data_dma_seq_issued to next */                 \
+            /* NFD_IN_MAX_BATCH_SZ multiple */                          \
             data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                 \
+            data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);          \
+                                                                        \
             cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src);   \
             dma_out.pkt##_pkt##.__raw[1] = cpp_hi_addr | cpp_hi_word;   \
             __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,              \
@@ -2073,8 +2082,11 @@ do {                                                                    \
                 pcie_dma_enq_no_sig(PCIE_ISL, &dma_out.pkt##_pkt##,     \
                                     NFD_IN_DATA_DMA_QUEUE);             \
             } else {                                                    \
-                /* Increment data_dma_seq_issued */                     \
+                /* Increment data_dma_seq_issued to next */             \
+                /* NFD_IN_MAX_BATCH_SZ multiple */                      \
                 data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;             \
+                data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);      \
+                                                                        \
                 cpp_hi_word = dma_seqn_set_seqn(cpp_hi_event_part, _src); \
                 dma_out.pkt##_pkt##.__raw[1] = (                        \
                     cpp_hi_word |                                       \
@@ -2087,8 +2099,11 @@ do {                                                                    \
             /* Suppress segment DMA */                                  \
             /* Handle the DMA sequence numbers for the batch */         \
             if (_type == NFD_IN_DATA_EVENT_TYPE) {                      \
-                /* Increment data_dma_seq_issued */                     \
+                /* Increment data_dma_seq_issued to next */             \
+                /* NFD_IN_MAX_BATCH_SZ multiple */                      \
                 data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;             \
+                data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);      \
+                                                                        \
                 cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE, \
                                                   PCI_IN_ISSUE_DMA_IDX); \
                 cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word, _src);     \
