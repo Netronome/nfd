@@ -619,7 +619,14 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
                         sig_done, &qc_sig);
     } else if (num_avail > 0) {
         /* There is a partial batch to process */
-        halt(); // for now
+        /* Log some debugging data for now */
+        local_csr_write(local_csr_mailbox_2, *complete);
+        local_csr_write(local_csr_mailbox_3, num_avail);
+
+        /* Participate in msg ordering */
+        wait_for_all(&msg_order_sig);
+        reorder_done_opt(&next_ctx, &msg_order_sig);
+        return;
     } else {
         /* Participate in msg ordering */
         wait_for_all(&msg_order_sig);

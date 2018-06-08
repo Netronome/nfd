@@ -635,7 +635,7 @@ issue_dma_gather_seq_recv()
  * msg_sig0 is used for the final ring put command.  The caller
  * must wait on this signal before reusing the registers or signal.
  */
-__noinline unsigned int
+__noinline void
 issue_dma_write_pend(unsigned int start, unsigned int end)
 {
     unsigned int num, ind, off, size, ring_addr;
@@ -674,7 +674,6 @@ issue_dma_write_pend(unsigned int start, unsigned int end)
     }
 
     __implicit_read(&batch_out);
-    return end + 1;
 }
 
 
@@ -749,6 +748,14 @@ do {                                                                \
     __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_LOCKED_wrd],    \
                 AND~, 1, <<NFD_IN_DMA_STATE_LOCKED_shf] }           \
+} while (0)
+
+
+#define _ISSUE_CLR(_pkt)                                                \
+do {                                                                    \
+    /* Do minimal clean up so local signalling works and */             \
+    /* notify block ignores the message */                              \
+    batch_out.pkt##_pkt##.__raw[0] = 0;                                 \
 } while (0)
 
 
@@ -901,7 +908,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     SIGNAL lso_enq_sig;                                                      \
     SIGNAL lso_hdr_sig;                                                      \
     SIGNAL lso_journal_sig;                                                  \
-    SIGNAL_MASK lso_wait_msk = 0;                                            \
+    SIGNAL_MASK lso_wait_msk;                                                \
     __mem40 void *hdr_pkt_ptr;                                               \
     unsigned int mu_buf_left;                                                \
     unsigned int dma_left;                                                   \
@@ -1229,14 +1236,85 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_ONLY_TX_DESC); \
     }                                                                        \
     batch_out.pkt##_pkt## = issued_tmp;                                      \
-                                                                             \
-    /* Now that the batch_out is prepped we can write out pending descs */   \
-    batch_desc_cnt = issue_dma_write_pend(batch_desc_cnt, _pkt);             \
-    wait_for_all(&msg_sig0);                                                 \
-                                                                             \
     /* XXX set issued_tmp.eop to 1 as this will be required on all but */    \
     /* the last segment so we can save some cycles and code store. */        \
     issued_tmp.eop = 1;                                                      \
+                                                                             \
+    /* Now that the batch_out is prepped we can write out pending descs */   \
+                                                                             \
+    /* Calculate the new data_dma_seq_issued, write out the descs and */     \
+    /* update batch_desc_cnt */                                              \
+    if (type == NFD_IN_DATA_EVENT_TYPE) {                                    \
+        /* This is the last valid packet in the batch.  We must advance */   \
+        /* data_dma_seq_issued to the next batch size multiple, fill the */  \
+        /* batch and put a whole batch message onto the ring. */             \
+        data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                          \
+        data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);                   \
+                                                                             \
+        /* Clear unused descs  */                                            \
+        /* XXX batch can have 1, 2, 3, 4, or 8 descs */                      \
+        switch (_pkt) {                                                      \
+        case 0:                                                              \
+            _ISSUE_CLR(1);                                                   \
+        case 1:                                                              \
+            _ISSUE_CLR(2);                                                   \
+        case 2:                                                              \
+            _ISSUE_CLR(3);                                                   \
+        case 3:                                                              \
+            _ISSUE_CLR(4);                                                   \
+            _ISSUE_CLR(5);                                                   \
+            _ISSUE_CLR(6);                                                   \
+            _ISSUE_CLR(7);                                                   \
+        case 7:                                                              \
+        default:                                                             \
+            break;                                                           \
+        }                                                                    \
+                                                                             \
+        issue_dma_write_pend(batch_desc_cnt, NFD_IN_MAX_BATCH_SZ - 1);       \
+        batch_desc_cnt = NFD_IN_MAX_BATCH_SZ;                                \
+                                                                             \
+        /* We also remove last_of_batch_dma_sig from wait_msk */             \
+        /* because we wait on it locally. */                                 \
+        wait_msk &= ~__signals(&last_of_batch_dma_sig);                      \
+    } else {                                                                 \
+        /* This is a partial batch */                                        \
+        issue_dma_write_pend(batch_desc_cnt, _pkt);                          \
+        batch_desc_cnt = _pkt + 1;                                           \
+        data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);                   \
+        data_dma_seq_issued += _pkt + 1;                                     \
+    }                                                                        \
+    lso_wait_msk = __signals(&msg_sig0);                                     \
+                                                                             \
+    /* Send a signal only DMA with the partial batch number */               \
+    /* We can use the last_of_batch_dma_sig, because we wait on it */        \
+    if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                                   \
+        cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,            \
+                                          PCI_IN_ISSUE_DMA_IDX);             \
+        cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word,                         \
+                                        data_dma_seq_issued);                \
+        cpp_hi_word |=                                                       \
+            NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);               \
+        cpp_hi_word |=                                                       \
+            NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG_SIG_ONLY);    \
+                                                                             \
+        dma_out.pkt##_pkt##.__raw[0] = 0;                                    \
+        dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                          \
+        dma_out.pkt##_pkt##.__raw[2] = 0;                                    \
+        dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |                  \
+                                        NFP_PCIE_DMA_CMD_LENGTH(0));         \
+        cpp_hi_word |=                                                       \
+            NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);             \
+        __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                         \
+                       NFD_IN_DATA_DMA_QUEUE,                                \
+                       sig_done, &last_of_batch_dma_sig);                    \
+        lso_wait_msk |= __signals(&last_of_batch_dma_sig);                   \
+    }                                                                        \
+                                                                             \
+    /* Wait for IO to complete */                                            \
+    wait_sig_mask(lso_wait_msk);                                             \
+    __implicit_read(&msg_sig0);                                              \
+    __implicit_read(&last_of_batch_dma_sig);                                 \
+    lso_wait_msk = 0;                                                        \
                                                                              \
     /* Generate the LSO segments from this TX descriptor */                  \
     while (lso_dma_index < dma_len) {                                        \
@@ -1578,42 +1656,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
     /* Flag that batch_out is free to be used before this point */           \
     __implicit_write(&batch_out);                                            \
-                                                                             \
-    /* Handle the DMA sequence numbers */                                    \
-    if (type == NFD_IN_DATA_EVENT_TYPE) {                                    \
-                                                                             \
-        /* Increment data_dma_seq_issued to next */                          \
-        /* NFD_IN_MAX_BATCH_SZ multiple */                                   \
-        data_dma_seq_issued += NFD_IN_MAX_BATCH_SZ;                          \
-        data_dma_seq_issued &= ~(NFD_IN_MAX_BATCH_SZ - 1);                   \
-                                                                             \
-        if (NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                               \
-            cpp_hi_word = dma_seqn_init_event(NFD_IN_DATA_EVENT_TYPE,        \
-                                              PCI_IN_ISSUE_DMA_IDX);         \
-            cpp_hi_word = dma_seqn_set_seqn(cpp_hi_word,                     \
-                                            data_dma_seq_issued);            \
-            cpp_hi_word |=                                                   \
-                NFP_PCIE_DMA_CMD_CPP_TOKEN(NFD_IN_DATA_DMA_TOKEN);           \
-            cpp_hi_word |=                                                   \
-            NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG_SIG_ONLY);    \
-                                                                             \
-            dma_out.pkt##_pkt##.__raw[0] = 0;                                \
-            dma_out.pkt##_pkt##.__raw[1] = cpp_hi_word;                      \
-            dma_out.pkt##_pkt##.__raw[2] = 0;                                \
-            dma_out.pkt##_pkt##.__raw[3] = (pcie_hi_word_part |              \
-                                            NFP_PCIE_DMA_CMD_LENGTH(0));     \
-            cpp_hi_word |=                                                   \
-                NFP_PCIE_DMA_CMD_DMA_CFG_INDEX(NFD_IN_DATA_CFG_REG);         \
-            __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt,                     \
-                           NFD_IN_DATA_DMA_QUEUE,                            \
-                           sig_done, &last_of_batch_dma_sig);                \
-        } else {                                                             \
-            /* XXX when the island is in reset, sequence numbers are */      \
-            /* advanced within the ME, bypassing the DMA engine. */          \
-            /* remove last_of_batch_dma_sig from the wait mask */            \
-            wait_msk &= ~__signals(&last_of_batch_dma_sig);                  \
-        }                                                                    \
-    }                                                                        \
                                                                              \
     /* Restore LSO bits for following descriptors */                         \
     issued_tmp.lso = NFD_IN_ISSUED_DESC_LSO_NULL;                            \
@@ -2203,14 +2245,6 @@ do {                                                                    \
     /* clean up and jump here to leave the ISSUE_PROC() macro. */       \
 issue_abort_rst##_pkt##_##_priority:                                    \
                                                                         \
-} while (0)
-
-
-#define _ISSUE_CLR(_pkt)                                                \
-do {                                                                    \
-    /* Do minimal clean up so local signalling works and */             \
-    /* notify block ignores the message */                              \
-    batch_out.pkt##_pkt##.__raw[0] = 0;                                 \
 } while (0)
 
 
