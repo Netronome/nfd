@@ -488,7 +488,9 @@ do {                                                                         \
                 }                                                            \
                                                                              \
                 /* Remove the wq signal from the wait mask */                \
+                /* XXX flag the wq_sig as written for live range tracking */ \
                 wait_msk &= ~__signals(&wq_sig##_pkt);                       \
+                __implicit_write(&wq_sig##_pkt);                             \
             }                                                                \
                                                                              \
             /* if it is last LSO being read from ring */                     \
@@ -504,7 +506,9 @@ do {                                                                         \
         }                                                                    \
     } else {                                                                 \
         /* Remove the wq signal from the wait mask */                        \
+        /* XXX flag the wq_sig as written for live range tracking */         \
         wait_msk &= ~__signals(&wq_sig##_pkt);                               \
+        __implicit_write(&wq_sig##_pkt);                                     \
     }                                                                        \
 } while (0)
 
@@ -644,6 +648,20 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
 
         wait_msk &= ~__signals(&msg_sig1);
 
+        /* XXX we actually wait on these in the first iteration
+         * of the while loop */
+        __implicit_read(&wq_sig1);
+        __implicit_read(&wq_sig2);
+        __implicit_read(&wq_sig3);
+        __implicit_read(&wq_sig4);
+        __implicit_read(&wq_sig5);
+        __implicit_read(&wq_sig6);
+        __implicit_read(&wq_sig7);
+        __implicit_read(&qc_sig);
+        __implicit_read(&msg_sig1);
+        __implicit_read(&msg_order_sig);
+        __implicit_read(&qc_xfer);
+
         /* Interface is the same for all packets in batch */
         pkt_desc_tmp.intf = PCIE_ISL;
 #ifndef NFD_IN_ADD_SEQN
@@ -659,18 +677,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
 
             wait_sig_mask(wait_msk);
             __implicit_read(&wq_sig0);
-            __implicit_read(&wq_sig1);
-            __implicit_read(&wq_sig2);
-            __implicit_read(&wq_sig3);
-            __implicit_read(&wq_sig4);
-            __implicit_read(&wq_sig5);
-            __implicit_read(&wq_sig6);
-            __implicit_read(&wq_sig7);
-            __implicit_read(&qc_sig);
             __implicit_read(&msg_sig0);
-            __implicit_read(&msg_sig1);
-            __implicit_read(&msg_order_sig);
-            __implicit_read(&qc_xfer);
 
             if (partial_served == NFD_IN_MAX_BATCH_SZ) {
                 /* This is the last message in the batch. Update served;
@@ -691,6 +698,9 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
                                        &msg_order_sig);
                 /* Queue info is the same for all packets in batch */
                 pkt_desc_tmp.q_num = q_batch;
+
+                /* XXX Flag a new live range in both branches */
+                __implicit_write(&get_order_sig);
             }
 
             wait_msk |= __signals(&wq_sig0);
