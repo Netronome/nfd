@@ -509,6 +509,24 @@ do {                                                                         \
 } while (0)
 
 
+__intrinsic void
+copy_absolute_xfer(__shared __gpr unsigned int *dst, unsigned int src_xnum)
+{
+    unsigned int src_index;
+
+    /* XXX assumes src_xnum is allocated from CTX 0 */
+    src_index = MECSR_XFER_INDEX(src_xnum);
+
+    __asm /*__attribute(LITERAL_ASM)*/ {
+        local_csr_wr[t_index, __ct_const_val(src_index)];
+        nop;
+        nop;
+        nop;
+        alu[*dst, --, B, *$index];
+    }
+}
+
+
 /**
  * Dequeue a batch of "issue_dma" messages and process that batch, incrementing
  * TX.R for the queue and adding an output message to one of the PCI.IN work
@@ -539,7 +557,6 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
 
     /* Reorder before potentially issuing a ring get */
     wait_for_all(&get_order_sig);
-    reorder_done_opt(&next_ctx, &get_order_sig);
 
     /* There is a FULL batch to process
      * XXX assume that issue_dma inc's dma seq for each nfd_in_issued_desc in
@@ -549,6 +566,9 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
     {
         /* Process whole batch */
         __critical_path();
+
+        /* Participate in ctm_ring_get ordering */
+        reorder_done_opt(&next_ctx, &get_order_sig);
 
         ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt0,
                      (sizeof(struct nfd_in_issued_desc) * 4), &msg_sig0);
@@ -619,16 +639,102 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
                         sig_done, &qc_sig);
     } else if (num_avail > 0) {
-        /* There is a partial batch to process */
-        /* Log some debugging data for now */
-        local_csr_write(local_csr_mailbox_2, *complete);
-        local_csr_write(local_csr_mailbox_3, num_avail);
+        /* There is a partial batch - process messages one at a time. */
+        unsigned int partial_served = 0;
 
-        /* Participate in msg ordering */
-        wait_for_all(&msg_order_sig);
+        wait_msk &= ~__signals(&msg_sig1);
+
+        /* Interface is the same for all packets in batch */
+        pkt_desc_tmp.intf = PCIE_ISL;
+#ifndef NFD_IN_ADD_SEQN
+        pkt_desc_tmp.seq_num = 0;
+#endif
+
+        while (partial_served < NFD_IN_MAX_BATCH_SZ) {
+            /* ctm_ring_get() uses sig_done */
+            ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt0,
+                         sizeof(struct nfd_in_issued_desc), &msg_sig0);
+
+            partial_served++;
+
+            wait_sig_mask(wait_msk);
+            __implicit_read(&wq_sig0);
+            __implicit_read(&wq_sig1);
+            __implicit_read(&wq_sig2);
+            __implicit_read(&wq_sig3);
+            __implicit_read(&wq_sig4);
+            __implicit_read(&wq_sig5);
+            __implicit_read(&wq_sig6);
+            __implicit_read(&wq_sig7);
+            __implicit_read(&qc_sig);
+            __implicit_read(&msg_sig0);
+            __implicit_read(&msg_sig1);
+            __implicit_read(&msg_order_sig);
+            __implicit_read(&qc_xfer);
+
+            if (partial_served == NFD_IN_MAX_BATCH_SZ) {
+                /* This is the last message in the batch. Update served;
+                 * allow other contexts to get messages from ctm ring; and
+                 * set up wait_msk to process a full batch. */
+                *served += NFD_IN_MAX_BATCH_SZ;
+                /** @todo can place this before wait_sig_mask() */
+                reorder_done_opt(&next_ctx, &get_order_sig);
+                wait_msk |= __signals(&msg_sig1, &qc_sig, &msg_order_sig);
+            } else if (partial_served == 1) {
+                /* This is the first message in the batch. Do not wait for
+                 * signals that will not be set while processing a partial
+                 * batch and store batch info. */
+                q_batch = batch_in.pkt0.q_num;
+                n_batch = batch_in.pkt0.num_batch;
+                wait_msk &= ~__signals(&wq_sig1, &wq_sig2, &wq_sig3, &wq_sig4,
+                                       &wq_sig5, &wq_sig6, &wq_sig7, &qc_sig,
+                                       &msg_order_sig);
+                /* Queue info is the same for all packets in batch */
+                pkt_desc_tmp.q_num = q_batch;
+            }
+
+            wait_msk |= __signals(&wq_sig0);
+
+            _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);
+
+            /* Wait for new messages in ctm ring.
+             * Note: other contexts should not fetch new messages or update
+             *       'served' until this one has fetched BATCH_SZ messages. */
+            while (num_avail <= partial_served &&
+                   num_avail < NFD_IN_MAX_BATCH_SZ) {
+                ctx_wait(voluntary);
+                /* Copy in reflected data without checking signals */
+                copy_absolute_xfer(&gather_reset_state_gpr,
+                                   __xfer_reg_number(&gather_reset_state_xfer));
+#ifdef NFD_IN_HAS_ISSUE0
+                copy_absolute_xfer(
+                    &data_dma_seq_compl0,
+                    __xfer_reg_number(&nfd_in_data_compl_refl_in0));
+#endif
+#ifdef NFD_IN_HAS_ISSUE1
+                copy_absolute_xfer(
+                    &data_dma_seq_compl1,
+                    __xfer_reg_number(&nfd_in_data_compl_refl_in1));
+#endif
+                num_avail = *complete - *served;
+            }
+        }
+
+        /* Participate in msg ordering here since one context at a time should
+         * read from lso ring to ensure that one lso_ret flag in lso ring (emem)
+         * is read per lso_start flag in batch msg ring (ctm). */
         reorder_done_opt(&next_ctx, &msg_order_sig);
-        return;
+
+        /* Map batch.queue to a QC queue and increment the TX_R pointer
+         * for that queue by n_batch */
+        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(q_batch), NFD_IN_TX_QUEUE);
+        __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
+                        sig_done, &qc_sig);
+
     } else {
+        /* Participate in ctm_ring_get ordering */
+        reorder_done_opt(&next_ctx, &get_order_sig);
+
         /* Participate in msg ordering */
         wait_for_all(&msg_order_sig);
         reorder_done_opt(&next_ctx, &msg_order_sig);
