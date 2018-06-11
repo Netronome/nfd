@@ -521,7 +521,7 @@ copy_absolute_xfer(__shared __gpr unsigned int *dst, unsigned int src_xnum)
     /* XXX assumes src_xnum is allocated from CTX 0 */
     src_index = MECSR_XFER_INDEX(src_xnum);
 
-    __asm /*__attribute(LITERAL_ASM)*/ {
+    __asm {
         local_csr_wr[t_index, __ct_const_val(src_index)];
         nop;
         nop;
@@ -642,14 +642,19 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(q_batch), NFD_IN_TX_QUEUE);
         __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
                         sig_done, &qc_sig);
+
     } else if (num_avail > 0) {
         /* There is a partial batch - process messages one at a time. */
         unsigned int partial_served = 0;
 
         wait_msk &= ~__signals(&msg_sig1);
 
-        /* XXX we actually wait on these in the first iteration
-         * of the while loop */
+        /* ctm_ring_get() uses sig_done */
+        ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt0,
+                     sizeof(struct nfd_in_issued_desc), &msg_sig0);
+
+        wait_sig_mask(wait_msk);
+        __implicit_read(&wq_sig0);
         __implicit_read(&wq_sig1);
         __implicit_read(&wq_sig2);
         __implicit_read(&wq_sig3);
@@ -658,60 +663,34 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         __implicit_read(&wq_sig6);
         __implicit_read(&wq_sig7);
         __implicit_read(&qc_sig);
-        __implicit_read(&msg_sig1);
+        __implicit_read(&msg_sig0);
         __implicit_read(&msg_order_sig);
         __implicit_read(&qc_xfer);
 
-        /* Interface is the same for all packets in batch */
+
+        /* This is the first message in the batch. Do not wait for
+         * signals that will not be set while processing a partial
+         * batch and store batch info. */
+        q_batch = batch_in.pkt0.q_num;
+        n_batch = batch_in.pkt0.num_batch;
+        wait_msk = __signals(&msg_sig0, &wq_sig0);
+
+        /* Interface and queue info is the same for all packets in batch */
         pkt_desc_tmp.intf = PCIE_ISL;
+        pkt_desc_tmp.q_num = q_batch;
 #ifndef NFD_IN_ADD_SEQN
         pkt_desc_tmp.seq_num = 0;
 #endif
 
-        while (partial_served < NFD_IN_MAX_BATCH_SZ) {
-            /* ctm_ring_get() uses sig_done */
-            ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt0,
-                         sizeof(struct nfd_in_issued_desc), &msg_sig0);
-
+        for (;;) {
+            /* Count the message and service it */
             partial_served++;
-
-            wait_sig_mask(wait_msk);
-            __implicit_read(&wq_sig0);
-            __implicit_read(&msg_sig0);
-
-            if (partial_served == NFD_IN_MAX_BATCH_SZ) {
-                /* This is the last message in the batch. Update served;
-                 * allow other contexts to get messages from ctm ring; and
-                 * set up wait_msk to process a full batch. */
-                *served += NFD_IN_MAX_BATCH_SZ;
-                /** @todo can place this before wait_sig_mask() */
-                reorder_done_opt(&next_ctx, &get_order_sig);
-                wait_msk |= __signals(&msg_sig1, &qc_sig, &msg_order_sig);
-            } else if (partial_served == 1) {
-                /* This is the first message in the batch. Do not wait for
-                 * signals that will not be set while processing a partial
-                 * batch and store batch info. */
-                q_batch = batch_in.pkt0.q_num;
-                n_batch = batch_in.pkt0.num_batch;
-                wait_msk &= ~__signals(&wq_sig1, &wq_sig2, &wq_sig3, &wq_sig4,
-                                       &wq_sig5, &wq_sig6, &wq_sig7, &qc_sig,
-                                       &msg_order_sig);
-                /* Queue info is the same for all packets in batch */
-                pkt_desc_tmp.q_num = q_batch;
-
-                /* XXX Flag a new live range in both branches */
-                __implicit_write(&get_order_sig);
-            }
-
-            wait_msk |= __signals(&wq_sig0);
-
             _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);
 
             /* Wait for new messages in ctm ring.
              * Note: other contexts should not fetch new messages or update
              *       'served' until this one has fetched BATCH_SZ messages. */
-            while (num_avail <= partial_served &&
-                   num_avail < NFD_IN_MAX_BATCH_SZ) {
+            while (num_avail <= partial_served) {
                 ctx_wait(voluntary);
                 /* Copy in reflected data without checking signals */
                 copy_absolute_xfer(&gather_reset_state_gpr,
@@ -728,11 +707,45 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
 #endif
                 num_avail = *complete - *served;
             }
+
+            /* ctm_ring_get() uses sig_done */
+            ctm_ring_get(NOTIFY_RING_ISL, input_ring, &batch_in.pkt0,
+                         sizeof(struct nfd_in_issued_desc), &msg_sig0);
+
+            /* We always service NFD_IN_MAX_BATCH_SZ messages */
+            if (partial_served == (NFD_IN_MAX_BATCH_SZ - 1)) {
+                break;
+            }
+
+            wait_sig_mask(wait_msk);
+            __implicit_read(&wq_sig0);
+            __implicit_read(&msg_sig0);
+            wait_msk |= __signals(&wq_sig0);
         }
 
-        /* Participate in msg ordering here since one context at a time should
-         * read from lso ring to ensure that one lso_ret flag in lso ring (emem)
-         * is read per lso_start flag in batch msg ring (ctm). */
+        /* We have finished fetching the messages from the ring.
+         * Update served and allow other contexts to get messages
+         * from ctm ring */
+        *served += NFD_IN_MAX_BATCH_SZ;
+        reorder_done_opt(&next_ctx, &get_order_sig);
+
+        /* Wait for the last get to complete */
+        wait_sig_mask(wait_msk);
+        __implicit_read(&wq_sig0);
+        __implicit_read(&msg_sig0);
+
+        /* Set up wait_msk to process a full batch next */
+        /* XXX Assume we will do a WQ put, _NOTIFY_PROC will clear
+           wq_sig0 if necessary */
+        wait_msk = __signals(&wq_sig0, &msg_sig0, &msg_sig1, &qc_sig,
+                             &msg_order_sig);
+
+        /* Process the final descriptor from the batch */
+        _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);
+
+        /* Allow the next context taking a message to go.
+         * We have finished _NOTIFY_PROC() where we need to
+         * lock out other threads. */
         reorder_done_opt(&next_ctx, &msg_order_sig);
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
@@ -748,7 +761,6 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         /* Participate in msg ordering */
         wait_for_all(&msg_order_sig);
         reorder_done_opt(&next_ctx, &msg_order_sig);
-        return;
     }
 }
 
