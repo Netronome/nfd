@@ -912,7 +912,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     __mem40 void *hdr_pkt_ptr;                                               \
     unsigned int mu_buf_left;                                                \
     unsigned int dma_left;                                                   \
-    unsigned int dma_length;                                                 \
+    unsigned int dma_length = 0; /* XXX also used to indicate hdr dma */     \
     unsigned int mode;                                                       \
     unsigned int header_to_read;                                             \
     unsigned int hdr_remainder;                                              \
@@ -1191,12 +1191,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                              NFD_IN_LSO_CNTR_T_ISSUED_LSO_HDR_READ);         \
         __wait_for_all(&lso_hdr_enq_sig);                                    \
                                                                              \
-        /* Wait on either the DMA completing or a reset */                   \
-        while (!signal_test(&lso_hdr_dma_sig) &&                             \
-               NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                            \
-            ctx_swap();                                                      \
-        }                                                                    \
-                                                                             \
         /* We need to optimize here and kick the first LSO packet's data */  \
         /* including the header directly to emem buffer.*/                   \
         /* For later parts of the LSO we will use the PE DMA to load the */  \
@@ -1315,6 +1309,14 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     __implicit_read(&msg_sig0);                                              \
     __implicit_read(&last_of_batch_dma_sig);                                 \
     lso_wait_msk = 0;                                                        \
+    if (dma_length != 0) {                                                   \
+        /* We issued a packet header DMA. */                                 \
+        /* Wait on either the DMA completing or a reset */                   \
+        while (!signal_test(&lso_hdr_dma_sig) &&                             \
+               NFD_RST_STATE_TEST_UP(PCIE_ISL)) {                            \
+            ctx_swap();                                                      \
+        }                                                                    \
+    }                                                                        \
                                                                              \
     /* Generate the LSO segments from this TX descriptor */                  \
     while (lso_dma_index < dma_len) {                                        \
