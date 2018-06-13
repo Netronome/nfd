@@ -453,7 +453,18 @@ do {                                                                         \
             /* We can carry on processing the descriptor */                  \
             /* Check whether it should go to the app */                      \
             if (lso_pkt.desc.eop) {                                          \
-                _NOTIFY_MU_CHK(_pkt);                                        \
+                /* XXX always check the MU pointer in LSO handling. */       \
+                if ((lso_pkt.desc.__raw[1] & NFD_MU_PTR_DBG_MSK) == 0) {     \
+                    /* Write the error we read to Mailboxes */               \
+                    /* for debug purposes */                                 \
+                    local_csr_write(local_csr_mailbox_0,                     \
+                                    NFD_IN_NOTIFY_MU_PTR_INVALID);           \
+                    local_csr_write(local_csr_mailbox_1,                     \
+                                    lso_pkt.desc.__raw[1]);                  \
+                                                                             \
+                    halt();                                                  \
+                }                                                            \
+                                                                             \
                 pkt_desc_tmp.sp0 = 0;                                        \
                 pkt_desc_tmp.offset = lso_pkt.desc.offset;                   \
                 NFD_IN_ADD_SEQN_PROC;                                        \
