@@ -1377,11 +1377,17 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         }                                                                    \
                                                                              \
         /* Wait for IO to complete */                                        \
-        wait_sig_mask(lso_wait_msk);                                         \
-        lso_wait_msk = 0;                                                    \
-        __implicit_read(&lso_hdr_sig);                                       \
-        __implicit_read(&lso_journal_sig);                                   \
-        __implicit_read(&lso_enq_sig);                                       \
+        /* XXX lso_wait_msk could be zero at this point, e.g. for the */     \
+        /* first pass of the loop for this desc, when the previous */        \
+        /* desc left the queue with a partially completed packet */          \
+        /* Don't issue wait_sig_mask(0) as its behaviour is undefined */     \
+        if (lso_wait_msk != 0) {                                             \
+            wait_sig_mask(lso_wait_msk);                                     \
+            lso_wait_msk = 0;                                                \
+            __implicit_read(&lso_hdr_sig);                                   \
+            __implicit_read(&lso_journal_sig);                               \
+            __implicit_read(&lso_enq_sig);                                   \
+        }                                                                    \
                                                                              \
         /* Handle invalid at a single point */                               \
         if (curr_buf & (1 << NFD_IN_DMA_STATE_INVALID_shf)) {                \
