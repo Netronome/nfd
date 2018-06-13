@@ -366,15 +366,6 @@ do {                                                                    \
 do {} while (0)
 #endif
 
-#ifdef NFD_IN_LSO_CNTR_ENABLE
-#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_lso_end)                            \
-        if (_lso_end) {                                                  \
-            NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                   \
-                         NFD_IN_LSO_CNTR_T_NOTIFY_LSO_END_PKTS_TO_ME_WQ);\
-        }
-#else
-#define _LSO_END_PKTS_TO_ME_WQ_CNTR(_lso_end)
-#endif
 
 #define _NOTIFY_PROC(_pkt, _lso_ring_num, _lso_ring_addr)                    \
 do {                                                                         \
