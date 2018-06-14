@@ -610,6 +610,7 @@ issue_dma_gather_seq_recv()
  * check. */
 #ifdef NFD_IN_ISSUE_DMA_DBG_CHKS
 #define _ISSUE_PROC_MU_CHK(_val)                                        \
+do {                                                                    \
     if ((_val & NFD_MU_PTR_DBG_MSK) == 0) {                             \
         /* Write the error we read to Mailboxes for debug purposes */   \
         local_csr_write(local_csr_mailbox_0,                            \
@@ -617,9 +618,11 @@ issue_dma_gather_seq_recv()
         local_csr_write(local_csr_mailbox_1, _val);                     \
                                                                         \
         halt();                                                         \
-    }
+    }                                                                   \
+} while (0)
 #else
-#define _ISSUE_PROC_MU_CHK(_val)
+#define _ISSUE_PROC_MU_CHK(_val)                \
+do {} while (0)
 #endif
 
 

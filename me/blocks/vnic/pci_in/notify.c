@@ -350,6 +350,7 @@ notify_setup()
 
 #ifdef NFD_IN_NOTIFY_DBG_CHKS
 #define _NOTIFY_MU_CHK(_pkt)                                            \
+do {                                                                    \
     if ((batch_in.pkt##_pkt##.__raw[1] & NFD_MU_PTR_DBG_MSK) == 0) {    \
         /* Write the error we read to Mailboxes for debug purposes */   \
         local_csr_write(local_csr_mailbox_0,                            \
@@ -358,9 +359,11 @@ notify_setup()
                         batch_in.pkt##_pkt##.__raw[1]);                 \
                                                                         \
         halt();                                                         \
-    }
+    }                                                                   \
+} while (0)
 #else
-#define _NOTIFY_MU_CHK(_pkt)
+#define _NOTIFY_MU_CHK(_pkt)                    \
+do {} while (0)
 #endif
 
 #ifdef NFD_IN_LSO_CNTR_ENABLE
@@ -382,7 +385,7 @@ do {                                                                         \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
                              NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC);     \
         __critical_path();                                                   \
-        _NOTIFY_MU_CHK(_pkt)                                                 \
+        _NOTIFY_MU_CHK(_pkt);                                                \
         pkt_desc_tmp.sp0 = 0;                                                \
         pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;                   \
         NFD_IN_ADD_SEQN_PROC;                                                \
@@ -450,8 +453,8 @@ do {                                                                         \
             /* We can carry on processing the descriptor */                  \
             /* Check whether it should go to the app */                      \
             if (lso_pkt.desc.eop) {                                          \
-                _NOTIFY_MU_CHK(_pkt)                                         \
-                    pkt_desc_tmp.sp0 = 0;                                    \
+                _NOTIFY_MU_CHK(_pkt);                                        \
+                pkt_desc_tmp.sp0 = 0;                                        \
                 pkt_desc_tmp.offset = lso_pkt.desc.offset;                   \
                 NFD_IN_ADD_SEQN_PROC;                                        \
                 batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];      \
