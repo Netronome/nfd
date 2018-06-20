@@ -2342,7 +2342,10 @@ issue_dma()
         __implicit_read(&dma_order_sig);
         __implicit_read(&dma_out, sizeof dma_out);
 
-        while ((data_dma_seq_safe - data_dma_seq_issued) <
+        /* XXX recomputing seq_safe can cause it to decrease (we might
+         * have used MU buffers for a batch but not advanced issued).
+         * Hence cast to an int so we use a signed test. */
+        while ((int)(data_dma_seq_safe - data_dma_seq_issued) <
                NFD_IN_MAX_BATCH_SZ) {
             /* We can't process this batch yet.
              * Swap then recompute seq_safe.
