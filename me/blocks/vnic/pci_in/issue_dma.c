@@ -1179,6 +1179,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         dma_out.pkt##_pkt##.__raw[3] = pcie_hi_word;                         \
         __pcie_dma_enq(PCIE_ISL, &dma_out.pkt##_pkt##,                       \
                        NFP_PCIE_DMA_FROMPCI_MED, sig_done, &lso_hdr_enq_sig); \
+        __implicit_write(&lso_hdr_dma_sig);                                  \
         lso_offhdr += dma_length;                                            \
         /* set queue_data[queue].lso_offhdr */                               \
         ctassert(NFD_IN_DMA_STATE_LSO_OFFHDR_shf == 16);                     \
