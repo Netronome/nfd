@@ -602,7 +602,7 @@ issue_dma_gather_seq_recv()
  * This gives us extra protection of the CTM counters while PCI.OUT is not
  * double checking credits. */
 #ifndef NFD_MU_PTR_DBG_MSK
-#define NFD_MU_PTR_DBG_MSK 0x1f000000
+#define NFD_MU_PTR_DBG_MSK 0x0f000000
 #endif
 
 /* performance hit if NFD_IN_ISSUE_DMA_DBG_CHKS is enabled in makefile.

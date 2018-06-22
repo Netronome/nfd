@@ -341,7 +341,7 @@ notify_setup()
 }
 
 #ifndef NFD_MU_PTR_DBG_MSK
-#define NFD_MU_PTR_DBG_MSK 0x1f000000
+#define NFD_MU_PTR_DBG_MSK 0x0f000000
 #endif
 
 #ifdef NFD_IN_NOTIFY_DBG_CHKS

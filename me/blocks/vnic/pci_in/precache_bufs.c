@@ -46,6 +46,16 @@
 #define NFD_IN_JUMBO_EVENT_FILTER NFD_IN_JUMBO1_EVENT_FILTER
 #endif
 
+
+/* Allocate some memory to point our buf_store null pointer to */
+#define _PRECACHE_NULL_ALLOC_IND(_isl)                                  \
+__asm { .alloc_mem nfd_precache_null_buf pcie##_isl.ctm island 10240 2048 }
+
+#define _PRECACHE_NULL_ALLOC(_isl) _PRECACHE_NULL_ALLOC_IND(_isl)
+
+_PRECACHE_NULL_ALLOC(PCIE_ISL)
+
+
 /* Configure *l$index3 to be a global pointer, and
  * set up a convenience define */
 #define NFD_IN_BUF_STORE_PTR *l$index3
@@ -264,9 +274,9 @@ precache_bufs_setup()
     buf_store_start = (unsigned int) &buf_store;
     local_csr_write(local_csr_active_lm_addr_3, buf_store_start);
 
-    /* Write a magic value to buf_store[0]. This should never be
+    /* Write null pointer to buf_store[0]. This should never be
      * used and will help to identify buf_store underflows */
-    buf_store[0] = 0x195fde01; /* Magically becomes 0xcafef00800 */
+    buf_store[0] = (_link_sym(nfd_precache_null_buf) >> 11) & 0xffffffff;
 
     /* buf_addr_msk is used to mask buffers from the BLM to 29 bits.
      * The high 3 bits are used for other purposes so must be cleared. */
