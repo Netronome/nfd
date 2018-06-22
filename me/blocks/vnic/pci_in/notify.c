@@ -512,8 +512,6 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         __implicit_read(&msg_order_sig);
         __implicit_read(&qc_xfer);
 
-        reorder_done_opt(&next_ctx, &msg_order_sig);
-
         /* Batches have a least one packet, but n_batch may still be
          * zero, meaning that the queue is down.  In this case, EOP for
          * all the packets should also be zero, so that notify will
@@ -543,6 +541,11 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         _NOTIFY_PROC(5, lso_ring_num, lso_ring_addr);
         _NOTIFY_PROC(6, lso_ring_num, lso_ring_addr);
         _NOTIFY_PROC(7, lso_ring_num, lso_ring_addr);
+
+        /* Allow the next context taking a message to go.
+         * We have finished _NOTIFY_PROC() where we need to
+         * lock out other threads. */
+        reorder_done_opt(&next_ctx, &msg_order_sig);
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
