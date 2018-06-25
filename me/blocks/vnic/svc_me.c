@@ -116,103 +116,88 @@ PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar3, me, 3, PCIE_CPP2PCIE_QMON, 1);
 NFD_FLR_DECLARE;
 NFD_VF_CFG_MAX_VFS;
 
-#define CHECK_CFG_MSG(_isl)                                             \
-do {                                                                    \
-    nfd_cfg_check_cfg_msg(&cfg_msg##_isl, &nfd_cfg_sig_svc_me##_isl,    \
-                          NFD_CFG_RING_NUM(_isl, 4));                   \
-    if (cfg_msg##_isl.msg_valid) {                                      \
-        ncfg++;                                                         \
-        mem_read64(cfg_bar_data##_isl,                                  \
-                   NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),            \
-                   sizeof cfg_bar_data##_isl);                          \
-                                                                        \
-        /* TEMP journal cfg messages */                                 \
-        JDBG(dbg_cfg_msg_jrnl, (0x40 | _isl));                          \
-        JDBG(dbg_cfg_msg_jrnl, cfg_msg##_isl.__raw);                    \
-        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data##_isl[0]);                  \
-        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data##_isl[1]);                  \
-                                                                        \
-        msix_qmon_reconfig(_isl, cfg_msg##_isl.vid,                     \
-                           NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),    \
-                           cfg_bar_data##_isl);                         \
-                                                                        \
-        /* Handle FLRs */                                               \
-        if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_RESET) {         \
-                                                                        \
-            /* NB: This function writes ~8K of data */                  \
-            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid));  \
-            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vid,             \
-                                   PCIE_QC_EVENT_NOT_EMPTY);            \
-                                                                        \
-            if (NFD_VID_IS_PF(cfg_msg##_isl.vid)) {                     \
-                /* We have a PF FLR */                                  \
-                nfd_flr_init_pf_cfg_bar(_isl, cfg_msg##_isl.vid);       \
-                                                                        \
-            } else if (NFD_VID_IS_VF(cfg_msg##_isl.vid)) {              \
-                /* We have a VF FLR */                                  \
-                nfd_flr_init_vf_cfg_bar(NFD_VF_CFG_BASE_LINK(_isl),     \
-                                        _isl, cfg_msg##_isl.vid);	\
-                                                                        \
-            } else {                                                    \
-                /* We have a PF/CTRL FLR */                             \
-                nfd_flr_init_ctrl_cfg_bar(_isl, cfg_msg##_isl.vid);     \
-                                                                        \
-            }                                                           \
-        }                                                               \
-                                                                        \
-        /* Handle PCIe island resets */                                 \
-        /* XXX For now this largely replicates the FLR handling code */ \
-        /* In the future we can consider combining with FLR handling */ \
-        /* if that continues to be the case */                          \
-        if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_PCI_RST) {       \
-            /* NB: This function writes ~8K of data */                  \
-            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid));  \
-            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vid,             \
-                                   PCIE_QC_EVENT_NOT_EMPTY);            \
-                                                                        \
-            if (NFD_VID_IS_PF(cfg_msg##_isl.vid)) {                     \
-                /* We have a PF FLR */                                  \
-                nfd_flr_init_pf_cfg_bar(NFD_CFG_BASE_LINK(_isl),        \
-                                        cfg_msg##_isl.vid);             \
-                                                                        \
-            } else if (NFD_VID_IS_VF(cfg_msg##_isl.vid)) {              \
-                /* We have a VF FLR */                                  \
-                nfd_flr_init_vf_cfg_bar(NFD_CFG_BASE_LINK(_isl),        \
-                                        NFD_VF_CFG_BASE_LINK(_isl),     \
-                                        cfg_msg##_isl.vid);             \
-                                                                        \
-            } else {                                                    \
-                /* We have a PF/CTRL FLR */                             \
-                nfd_flr_init_ctrl_cfg_bar(NFD_CFG_BASE_LINK(_isl),      \
-                                          cfg_msg##_isl.vid);           \
-                                                                        \
-            }                                                           \
-                                                                        \
-            if (cfg_msg##_isl.vid == 0) {                               \
-                /* This is the start of PCIe island reset */            \
-                /* processing. */                                       \
-                                                                        \
-                /* Enable MasterDropIfDisabled to allow pcie[write] */  \
-                /* to complete while the island is in reset */          \
-                nfd_flr_update_mstr_drop_if_disabled(_isl, 1);          \
-            }                                                           \
-                                                                        \
-            if (cfg_msg##_isl.vid == NFD_LAST_PF) {                     \
-                /* This is the end of PCIe island reset */              \
-                /* processing. */                                       \
-                /* TODO implement! */                                   \
-            }                                                           \
-        }                                                               \
-                                                                        \
-                                                                        \
-        /* Complete the message */                                      \
-        cfg_msg##_isl.msg_valid = 0;                                    \
-        nfd_cfg_complete_cfg_msg(&cfg_msg##_isl,                        \
-                                 &nfd_cfg_sig_svc_me##_isl,             \
-                                 &NFD_CFG_SIG_NEXT_ME##_isl,            \
-                                 NFD_CFG_NEXT_ME##_isl,                 \
-                                 NFD_CFG_RING_NUM(_isl, 5));            \
-    }                                                                   \
+#define CHECK_CFG_MSG(_isl)                                                 \
+do {                                                                        \
+    nfd_cfg_check_cfg_msg(&cfg_msg##_isl, &nfd_cfg_sig_svc_me##_isl,        \
+                          NFD_CFG_RING_NUM(_isl, 4));                       \
+    if (cfg_msg##_isl.msg_valid) {                                          \
+        ncfg++;                                                             \
+        mem_read64(cfg_bar_data##_isl,                                      \
+                   NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),                \
+                   sizeof cfg_bar_data##_isl);                              \
+                                                                            \
+        /* TEMP journal cfg messages */                                     \
+        JDBG(dbg_cfg_msg_jrnl, (0x40 | _isl));                              \
+        JDBG(dbg_cfg_msg_jrnl, cfg_msg##_isl.__raw);                        \
+        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data##_isl[0]);                      \
+        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data##_isl[1]);                      \
+                                                                            \
+        msix_qmon_reconfig(_isl, cfg_msg##_isl.vid,                         \
+                           NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),        \
+                           cfg_bar_data##_isl);                             \
+                                                                            \
+        /* Handle FLRs */                                                   \
+        if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_RESET) {             \
+                                                                            \
+            /* NB: This function writes ~8K of data */                      \
+            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid));      \
+            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vid,                 \
+                                   PCIE_QC_EVENT_NOT_EMPTY);                \
+                                                                            \
+            if (NFD_VID_IS_PF(cfg_msg##_isl.vid)) {                         \
+                nfd_flr_init_pf_cfg_bar(_isl, cfg_msg##_isl.vid);           \
+            } else if (NFD_VID_IS_VF(cfg_msg##_isl.vid)) {                  \
+                nfd_flr_init_vf_cfg_bar(NFD_VF_CFG_BASE_LINK(_isl), _isl,   \
+                                        cfg_msg##_isl.vid);                 \
+            } else {                                                        \
+                nfd_flr_init_ctrl_cfg_bar(_isl, cfg_msg##_isl.vid);         \
+            }                                                               \
+        }                                                                   \
+                                                                            \
+        /* Handle PCIe island resets */                                     \
+        /* XXX For now this largely replicates the FLR handling code */     \
+        /* In the future we can consider combining with FLR handling */     \
+        /* if that continues to be the case */                              \
+        if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_PCI_RST) {           \
+            /* NB: This function writes ~8K of data */                      \
+            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid));      \
+            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vid,                 \
+                                   PCIE_QC_EVENT_NOT_EMPTY);                \
+                                                                            \
+            if (NFD_VID_IS_PF(cfg_msg##_isl.vid)) {                         \
+                nfd_flr_init_pf_cfg_bar(_isl, cfg_msg##_isl.vid);           \
+            } else if (NFD_VID_IS_VF(cfg_msg##_isl.vid)) {                  \
+                nfd_flr_init_vf_cfg_bar(NFD_VF_CFG_BASE_LINK(_isl), _isl,   \
+                                        cfg_msg##_isl.vid);                 \
+            } else {                                                        \
+                nfd_flr_init_ctrl_cfg_bar(_isl, cfg_msg##_isl.vid);         \
+            }                                                               \
+                                                                            \
+            if (cfg_msg##_isl.vid == 0) {                                   \
+                /* This is the start of PCIe island reset */                \
+                /* processing. */                                           \
+                                                                            \
+                /* Enable MasterDropIfDisabled to allow pcie[write] */      \
+                /* to complete while the island is in reset */              \
+                nfd_flr_update_mstr_drop_if_disabled(_isl, 1);              \
+            }                                                               \
+                                                                            \
+            if (cfg_msg##_isl.vid == NFD_LAST_PF) {                         \
+                /* This is the end of PCIe island reset */                  \
+                /* processing. */                                           \
+                /* TODO implement! */                                       \
+            }                                                               \
+        }                                                                   \
+                                                                            \
+                                                                            \
+        /* Complete the message */                                          \
+        cfg_msg##_isl.msg_valid = 0;                                        \
+        nfd_cfg_complete_cfg_msg(&cfg_msg##_isl,                            \
+                                 &nfd_cfg_sig_svc_me##_isl,                 \
+                                 &NFD_CFG_SIG_NEXT_ME##_isl,                \
+                                 NFD_CFG_NEXT_ME##_isl,                     \
+                                 NFD_CFG_RING_NUM(_isl, 5));                \
+    }                                                                       \
 } while (0)
 
 
