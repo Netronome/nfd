@@ -338,8 +338,12 @@ notify_setup()
 {
     dst_q = wq_num_base;
     wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
-    next_ctx = reorder_get_next_ctx(NFD_IN_NOTIFY_START_CTX,
-                                    NFD_IN_NOTIFY_END_CTX);
+
+    if (ctx() < 3) {
+        next_ctx = reorder_get_next_ctx(0, 2);
+    } else {
+        next_ctx = reorder_get_next_ctx(4, 6);
+    }
 #ifdef NFD_IN_LSO_CNTR_ENABLE
     /* get the location of LSO statistics */
     nfd_in_lso_cntr_addr =
@@ -852,27 +856,27 @@ main(void)
         /* NFD_INIT_DONE_SET(PCIE_ISL, 2);     /\* XXX Remove? *\/ */
 
     }
+    if (ctx() == 4) {
+        reorder_start(4, &msg_order_sig);
+        reorder_start(4, &get_order_sig);
+    }
 
     notify_setup();
 
-    if (ctx() == 0) {
+    if (ctx() < 3) {
 
         for (;;) {
-            distr_notify();
+            if (ctx() == 0) {
+                distr_notify();
+            }
 #ifdef NFD_IN_HAS_ISSUE0
             notify(0);
-#endif
-#ifdef NFD_IN_HAS_ISSUE1
-            notify(1);
 #endif
         }
 
     } else {
 
         for (;;) {
-#ifdef NFD_IN_HAS_ISSUE0
-            notify(0);
-#endif
 #ifdef NFD_IN_HAS_ISSUE1
             notify(1);
 #endif
