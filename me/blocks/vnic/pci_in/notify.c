@@ -399,13 +399,6 @@ do {                                                                         \
         /* XXX __signals(&lso_sig_pair.even) lists both even and odd */      \
         lso_wait_msk = 1 << __signal_number(&lso_sig_pair.even);             \
                                                                              \
-        /* Setup the T_INDEX to get the nfd_in_jumbo_compl_refl_inX val */   \
-        /* XXX other threads must not use the T_INDEX while we swap. */      \
-        /* This should be okay as we lock other contexts out of the */       \
-        /* LSO processing code. */                                           \
-        /* XXX assumes jumbo_compl_xnum is allocated from CTX 0 */           \
-        local_csr_write(local_csr_t_index,                                   \
-                        MECSR_XFER_INDEX(jumbo_compl_xnum));                 \
                                                                              \
          /* finished packet with LSO to handle */                            \
         for (;;) {                                                           \
@@ -429,10 +422,16 @@ do {                                                                         \
                                                                              \
             /* Wait for the jumbo compl seq to catch up to the encoded seq */ \
             /* Use inline ASM to access the T_INDEX */                       \
+            /* We can't assume we have sole access to the T_INDEX */         \
+            /* XXX assumes jumbo_compl_xnum is allocated from CTX 0 */       \
+            local_csr_write(local_csr_t_index,                               \
+                            MECSR_XFER_INDEX(jumbo_compl_xnum));             \
             __asm { alu[jumbo_compl_seq, --, B, *$index] }                   \
             seqn_chk = lso_pkt.jumbo_seq - jumbo_compl_seq;                  \
             while (seqn_chk > 0) {                                           \
                 ctx_swap();                                                  \
+                local_csr_write(local_csr_t_index,                           \
+                                MECSR_XFER_INDEX(jumbo_compl_xnum));         \
                 __asm { alu[jumbo_compl_seq, --, B, *$index] }               \
                 seqn_chk = lso_pkt.jumbo_seq - jumbo_compl_seq;              \
             }                                                                \
