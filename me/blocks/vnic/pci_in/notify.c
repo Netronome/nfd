@@ -292,6 +292,23 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 }
 
 
+__intrinsic void
+copy_absolute_xfer(__shared __gpr unsigned int *dst, unsigned int src_xnum)
+{
+    unsigned int src_index;
+
+    /* XXX assumes src_xnum is allocated from CTX 0 */
+    src_index = MECSR_XFER_INDEX(src_xnum);
+
+    __asm {
+        local_csr_wr[t_index, __ct_const_val(src_index)];
+        nop;
+        nop;
+        nop;
+        alu[*dst, --, B, *$index];
+    }
+}
+
 
 /**
  * Perform shared configuration for notify
@@ -391,7 +408,7 @@ do {                                                                         \
         __xread struct nfd_in_lso_desc lso_pkt;                              \
         SIGNAL_PAIR lso_sig_pair;                                            \
         SIGNAL_MASK lso_wait_msk;                                            \
-        unsigned int jumbo_compl_seq;                                        \
+        __shared __gpr unsigned int jumbo_compl_seq;                         \
         int seqn_chk;                                                        \
                                                                              \
         NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                           \
@@ -421,18 +438,12 @@ do {                                                                         \
                     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING);           \
                                                                              \
             /* Wait for the jumbo compl seq to catch up to the encoded seq */ \
-            /* Use inline ASM to access the T_INDEX */                       \
-            /* We can't assume we have sole access to the T_INDEX */         \
-            /* XXX assumes jumbo_compl_xnum is allocated from CTX 0 */       \
-            local_csr_write(local_csr_t_index,                               \
-                            MECSR_XFER_INDEX(jumbo_compl_xnum));             \
-            __asm { alu[jumbo_compl_seq, --, B, *$index] }                   \
+            copy_absolute_xfer(&jumbo_compl_seq, jumbo_compl_xnum);          \
             seqn_chk = lso_pkt.jumbo_seq - jumbo_compl_seq;                  \
             while (seqn_chk > 0) {                                           \
                 ctx_swap();                                                  \
-                local_csr_write(local_csr_t_index,                           \
-                                MECSR_XFER_INDEX(jumbo_compl_xnum));         \
-                __asm { alu[jumbo_compl_seq, --, B, *$index] }               \
+                                                                             \
+                copy_absolute_xfer(&jumbo_compl_seq, jumbo_compl_xnum);      \
                 seqn_chk = lso_pkt.jumbo_seq - jumbo_compl_seq;              \
             }                                                                \
                                                                              \
@@ -510,24 +521,6 @@ do {                                                                         \
         __implicit_write(&wq_sig##_pkt);                                     \
     }                                                                        \
 } while (0)
-
-
-__intrinsic void
-copy_absolute_xfer(__shared __gpr unsigned int *dst, unsigned int src_xnum)
-{
-    unsigned int src_index;
-
-    /* XXX assumes src_xnum is allocated from CTX 0 */
-    src_index = MECSR_XFER_INDEX(src_xnum);
-
-    __asm {
-        local_csr_wr[t_index, __ct_const_val(src_index)];
-        nop;
-        nop;
-        nop;
-        alu[*dst, --, B, *$index];
-    }
-}
 
 
 /**
