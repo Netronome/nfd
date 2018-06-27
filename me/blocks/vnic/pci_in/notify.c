@@ -339,11 +339,8 @@ notify_setup()
     dst_q = wq_num_base;
     wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
 
-    if (ctx() < 3) {
-        next_ctx = reorder_get_next_ctx(0, 2);
-    } else {
-        next_ctx = reorder_get_next_ctx(4, 6);
-    }
+    next_ctx = reorder_get_next_ctx_off(ctx(), 4);
+
 #ifdef NFD_IN_LSO_CNTR_ENABLE
     /* get the location of LSO statistics */
     nfd_in_lso_cntr_addr =
@@ -850,20 +847,25 @@ main(void)
 
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
+        /*
+         * This function will start ordering for CTX0,
+         * the manager for loop 0
+         */
         notify_setup_shared();
         notify_status_setup();
 
         /* NFD_INIT_DONE_SET(PCIE_ISL, 2);     /\* XXX Remove? *\/ */
 
     }
-    if (ctx() == 4) {
-        reorder_start(4, &msg_order_sig);
-        reorder_start(4, &get_order_sig);
+    if (ctx() == 2) {
+        /* Start ordering for CTX2, the manager for loop 1 */
+        reorder_start(2, &msg_order_sig);
+        reorder_start(2, &get_order_sig);
     }
 
     notify_setup();
 
-    if (ctx() < 3) {
+    if (ctx() == 0 || ctx() == 4) {
 
         for (;;) {
             if (ctx() == 0) {
