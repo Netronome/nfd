@@ -325,8 +325,10 @@ notify_setup_shared()
 #endif
 
     /* Kick off ordering */
-    reorder_start(NFD_IN_NOTIFY_START_CTX, &msg_order_sig);
-    reorder_start(NFD_IN_NOTIFY_START_CTX, &get_order_sig);
+    reorder_start(NFD_IN_NOTIFY_MANAGER0, &msg_order_sig);
+    reorder_start(NFD_IN_NOTIFY_MANAGER0, &get_order_sig);
+    reorder_start(NFD_IN_NOTIFY_MANAGER1, &msg_order_sig);
+    reorder_start(NFD_IN_NOTIFY_MANAGER1, &get_order_sig);
 }
 
 
@@ -339,7 +341,7 @@ notify_setup()
     dst_q = wq_num_base;
     wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
 
-    next_ctx = reorder_get_next_ctx_off(ctx(), 4);
+    next_ctx = reorder_get_next_ctx_off(ctx(), NFD_IN_NOTIFY_STRIDE);
 
 #ifdef NFD_IN_LSO_CNTR_ENABLE
     /* get the location of LSO statistics */
@@ -857,11 +859,6 @@ main(void)
         /* NFD_INIT_DONE_SET(PCIE_ISL, 2);     /\* XXX Remove? *\/ */
 
     }
-    if (ctx() == 2) {
-        /* Start ordering for CTX2, the manager for loop 1 */
-        reorder_start(2, &msg_order_sig);
-        reorder_start(2, &get_order_sig);
-    }
 
     notify_setup();
 
@@ -873,6 +870,7 @@ main(void)
             }
 #ifdef NFD_IN_HAS_ISSUE0
             notify(0);
+            notify(0);
 #endif
         }
 
@@ -880,6 +878,7 @@ main(void)
 
         for (;;) {
 #ifdef NFD_IN_HAS_ISSUE1
+            notify(1);
             notify(1);
 #endif
         }

@@ -76,8 +76,10 @@
 
 #define NFD_IN_ISSUE_START_CTX  2
 #define NFD_IN_ISSUE_END_CTX    6
-#define NFD_IN_NOTIFY_START_CTX 0
-#define NFD_IN_NOTIFY_END_CTX   6
+#define NFD_IN_NOTIFY_MANAGER0  0
+#define NFD_IN_NOTIFY_MANAGER1  2
+#define NFD_IN_NOTIFY_STRIDE    4
+
 
 #define NFD_IN_DSTQ_MSK         0x7
 
