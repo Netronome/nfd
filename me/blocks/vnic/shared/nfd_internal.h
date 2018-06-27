@@ -82,6 +82,11 @@
 #define NFD_IN_NOTIFY_STRIDE    4
 
 
+#define NFD_IN_NOTIFY_RESET_RD  0
+#define NFD_IN_NOTIFY_DATA_RD   1
+#define NFD_IN_NOTIFY_JUMBO_RD  2
+
+
 #define NFD_IN_DSTQ_MSK         0x7
 
 /* Additional check queue constants */

@@ -106,8 +106,6 @@ static SIGNAL nfd_in_jumbo_event_sig;
 static __xwrite unsigned int nfd_in_data_compl_refl_out = 0;
 static __xwrite unsigned int nfd_in_jumbo_compl_refl_out = 0;
 
-__remote volatile __xread unsigned int nfd_in_data_compl_refl_in;
-__remote volatile __xread unsigned int nfd_in_jumbo_compl_refl_in;
 __visible volatile __xread unsigned int nfd_in_data_served_refl_in;
 __visible volatile SIGNAL nfd_in_data_served_refl_sig;
 
@@ -595,9 +593,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
             /* Mirror to remote ME */
             nfd_in_data_compl_refl_out = data_dma_seq_compl;
             reflect_data(NFD_IN_NOTIFY_ME, NFD_IN_NOTIFY_MANAGER,
-                         __xfer_reg_number(&nfd_in_data_compl_refl_in,
-                                           NFD_IN_NOTIFY_ME),
-                         0, &nfd_in_data_compl_refl_out,
+                         NFD_IN_NOTIFY_DATA_RD, 0, &nfd_in_data_compl_refl_out,
                          sizeof nfd_in_data_compl_refl_out);
 
             __implicit_write(&nfd_in_data_event_sig);
@@ -617,9 +613,8 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
             /* Mirror to remote ME */
             nfd_in_jumbo_compl_refl_out = jumbo_dma_seq_compl;
             reflect_data(NFD_IN_NOTIFY_ME, NFD_IN_NOTIFY_MANAGER,
-                         __xfer_reg_number(&nfd_in_jumbo_compl_refl_in,
-                                           NFD_IN_NOTIFY_ME),
-                         0, &nfd_in_jumbo_compl_refl_out,
+                         NFD_IN_NOTIFY_JUMBO_RD, 0,
+                         &nfd_in_jumbo_compl_refl_out,
                          sizeof nfd_in_jumbo_compl_refl_out);
 
             precache_bufs_jumbo();
@@ -646,9 +641,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
             /* Mirror to remote ME */
             nfd_in_data_compl_refl_out = data_dma_seq_compl;
             reflect_data(NFD_IN_NOTIFY_ME, NFD_IN_NOTIFY_MANAGER,
-                         __xfer_reg_number(&nfd_in_data_compl_refl_in,
-                                           NFD_IN_NOTIFY_ME),
-                         0, &nfd_in_data_compl_refl_out,
+                         NFD_IN_NOTIFY_DATA_RD, 0, &nfd_in_data_compl_refl_out,
                          sizeof nfd_in_data_compl_refl_out);
         }
 
@@ -663,9 +656,8 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
             /* Mirror to remote ME */
             nfd_in_jumbo_compl_refl_out = jumbo_dma_seq_compl;
             reflect_data(NFD_IN_NOTIFY_ME, NFD_IN_NOTIFY_MANAGER,
-                         __xfer_reg_number(&nfd_in_jumbo_compl_refl_in,
-                                           NFD_IN_NOTIFY_ME),
-                         0, &nfd_in_jumbo_compl_refl_out,
+                         NFD_IN_NOTIFY_JUMBO_RD, 0,
+                         &nfd_in_jumbo_compl_refl_out,
                          sizeof nfd_in_jumbo_compl_refl_out);
         }
 

@@ -76,8 +76,6 @@ NFD_INIT_DONE_DECLARE;
 
 
 /* Shared with issue DMA */
-__visible __xread unsigned int nfd_in_data_compl_refl_in = 0;
-__visible __xread unsigned int nfd_in_jumbo_compl_refl_in = 0;
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in;
 __remote volatile SIGNAL nfd_in_data_served_refl_sig;
 
@@ -249,9 +247,8 @@ do {                                                                    \
 #endif /* (NFD_IN_NUM_WQS == 1) */
 
 
-/* Registers to receive and store reset state */
-__visible __xread unsigned int gather_reset_state_xfer = 0;
-__shared __gpr unsigned int gather_reset_state_gpr = 0;
+/* Registers to store reset state */
+__shared __gpr unsigned int notify_reset_state_gpr = 0;
 
 
 /* XXX Move to some sort of CT reflect library */
@@ -425,7 +422,7 @@ do {                                                                         \
         NFD_IN_ADD_SEQN_PROC;                                                \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];              \
         batch_out.pkt##_pkt##.__raw[1] = (batch_in.pkt##_pkt##.__raw[1] |    \
-                                          gather_reset_state_gpr);           \
+                                          notify_reset_state_gpr);           \
         batch_out.pkt##_pkt##.__raw[2] = batch_in.pkt##_pkt##.__raw[2];      \
         batch_out.pkt##_pkt##.__raw[3] = batch_in.pkt##_pkt##.__raw[3];      \
                                                                              \
@@ -496,7 +493,7 @@ do {                                                                         \
                 NFD_IN_ADD_SEQN_PROC;                                        \
                 batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];      \
                 batch_out.pkt##_pkt##.__raw[1] = (lso_pkt.desc.__raw[1] |    \
-                                                  gather_reset_state_gpr);   \
+                                                  notify_reset_state_gpr);   \
                 batch_out.pkt##_pkt##.__raw[2] = lso_pkt.desc.__raw[2];      \
                 batch_out.pkt##_pkt##.__raw[3] = lso_pkt.desc.__raw[3];      \
                 _SET_DST_Q(_pkt);                                            \
@@ -712,8 +709,8 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
             while (num_avail <= partial_served) {
                 ctx_wait(voluntary);
                 /* Copy in reflected data without checking signals */
-                copy_absolute_xfer(&gather_reset_state_gpr,
-                                   __xfer_reg_number(&gather_reset_state_xfer));
+                copy_absolute_xfer(&notify_reset_state_gpr,
+                                   NFD_IN_NOTIFY_RESET_RD);
                 copy_absolute_xfer(complete, data_compl_xnum);
 
                 num_avail = *complete - *served;
@@ -782,18 +779,14 @@ notify(int side)
     if (side == 0) {
         _notify(&data_dma_seq_compl0, &data_dma_seq_served0,
                 NFD_IN_ISSUED_RING0_NUM,
-                (NFD_IN_NOTIFY_MANAGER0 << 5 |
-                 __xfer_reg_number(&nfd_in_data_compl_refl_in)),
-                (NFD_IN_NOTIFY_MANAGER0 << 5 |
-                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in)),
+                NFD_IN_NOTIFY_MANAGER0 << 5 | NFD_IN_NOTIFY_DATA_RD,
+                NFD_IN_NOTIFY_MANAGER0 << 5 | NFD_IN_NOTIFY_JUMBO_RD,
                 LSO_PKT_XFER_START0);
     } else {
         _notify(&data_dma_seq_compl1, &data_dma_seq_served1,
                 NFD_IN_ISSUED_RING1_NUM,
-                (NFD_IN_NOTIFY_MANAGER1 << 5 |
-                 __xfer_reg_number(&nfd_in_data_compl_refl_in)),
-                (NFD_IN_NOTIFY_MANAGER1 << 5 |
-                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in)),
+                NFD_IN_NOTIFY_MANAGER1 << 5 | NFD_IN_NOTIFY_DATA_RD,
+                NFD_IN_NOTIFY_MANAGER1 << 5 | NFD_IN_NOTIFY_JUMBO_RD,
                 LSO_PKT_XFER_START1);
     }
 }
@@ -831,16 +824,26 @@ notify_manager_reorder()
 __intrinsic void
 distr_notify(int side)
 {
+    __xread unsigned int notify_reset_state_xfer;
+    __xread unsigned int nfd_in_data_compl_refl_in;
+    __xread unsigned int nfd_in_jumbo_compl_refl_in;
+
+    __assign_relative_register(&notify_reset_state_xfer,
+                               NFD_IN_NOTIFY_RESET_RD);
+    __assign_relative_register(&nfd_in_data_compl_refl_in,
+                               NFD_IN_NOTIFY_DATA_RD);
+    __assign_relative_register(&nfd_in_jumbo_compl_refl_in,
+                               NFD_IN_NOTIFY_JUMBO_RD);
+
+    __implicit_read(&nfd_in_jumbo_compl_refl_in);
+
     /* Store reset state in absolute GPR */
-    copy_absolute_xfer(&gather_reset_state_gpr,
-                       __xfer_reg_number(&gather_reset_state_xfer));
-    __implicit_read(&gather_reset_state_xfer);
+    copy_absolute_xfer(&notify_reset_state_gpr, NFD_IN_NOTIFY_RESET_RD);
+    __implicit_read(&notify_reset_state_xfer);
 
     if (side == 0) {
 #ifdef NFD_IN_HAS_ISSUE0
         data_dma_seq_compl0 = nfd_in_data_compl_refl_in;
-        __implicit_write(&nfd_in_data_compl_refl_in);
-        __implicit_read(&nfd_in_jumbo_compl_refl_in);
 
         if (data_dma_seq_served0 != data_dma_seq_sent) {
             __implicit_read(&nfd_in_data_served_refl_out);
@@ -861,8 +864,6 @@ distr_notify(int side)
 
 #ifdef NFD_IN_HAS_ISSUE1
         data_dma_seq_compl1 = nfd_in_data_compl_refl_in;
-        __implicit_write(&nfd_in_data_compl_refl_in);
-        __implicit_read(&nfd_in_jumbo_compl_refl_in);
 
         if (data_dma_seq_served1 != data_dma_seq_sent) {
             __implicit_read(&nfd_in_data_served_refl_out);
@@ -909,6 +910,7 @@ main(void)
 
         for (;;) {
             if (ctx() == NFD_IN_NOTIFY_MANAGER0) {
+
                 __xread struct nfd_in_lso_desc lso_pkt0;
                 __xread struct nfd_in_lso_desc lso_pkt1;
 

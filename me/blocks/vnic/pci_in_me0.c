@@ -64,7 +64,6 @@ NFD_NET_APP_ID_DECLARE(PCIE_ISL);
 /* Data to reflect reset to Notify */
 #define NFD_IN_MSG_NOTIFY_RST   (1 << NFD_IN_DMA_STATE_INVALID_shf)
 #define NFD_IN_MSG_NOTIFY_UP    0
-__remote volatile __xread unsigned int gather_reset_state_xfer;
 __xwrite unsigned int notify_reset_state;
 
 __intrinsic void
@@ -78,8 +77,7 @@ pci_in_msg_notify(unsigned int isl_reset)
     remote_me_reg_write_signal_local(&notify_reset_state,
                                      ((NFD_IN_NOTIFY_ME & 0xFF0) >> 4),
                                      ((NFD_IN_NOTIFY_ME & 0xF) - 4), 0,
-                                     __xfer_reg_number(&gather_reset_state_xfer,
-                                                       NFD_IN_NOTIFY_ME),
+                                     NFD_IN_NOTIFY_RESET_RD,
                                      sizeof notify_reset_state);
 }
 
