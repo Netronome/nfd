@@ -760,6 +760,20 @@ notify(int side)
 
 
 /**
+ * Participate in reordering with the workers
+ */
+__intrinsic void
+notify_manager_reorder()
+{
+    /* Participate in ordering */
+    wait_for_all(&get_order_sig);
+    reorder_done_opt(&next_ctx, &get_order_sig);
+    wait_for_all(&msg_order_sig);
+    reorder_done_opt(&next_ctx, &msg_order_sig);
+}
+
+
+/**
  * Check autopush for seq_compl and reflect seq_served to issue_dma ME
  *
  * "data_dma_seq_compl" tracks the completed gather DMAs.  It is needed by
@@ -855,11 +869,12 @@ main(void)
 
         for (;;) {
             if (ctx() == NFD_IN_NOTIFY_MANAGER0) {
+                notify_manager_reorder();
+                notify_manager_reorder();
                 distr_notify(0);
+            } else {
+                notify(0);
             }
-
-            notify(0);
-            notify(0);
         }
 #else
         for (;;) {
@@ -875,11 +890,12 @@ main(void)
 
         for (;;) {
             if (ctx() == NFD_IN_NOTIFY_MANAGER1) {
+                notify_manager_reorder();
+                notify_manager_reorder();
                 distr_notify(1);
+            } else {
+                notify(1);
             }
-
-            notify(1);
-            notify(1);
         }
 #else
         for (;;) {
