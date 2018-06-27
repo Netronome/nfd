@@ -45,8 +45,8 @@
 #error "At least one of NFD_IN_HAS_ISSUE0 and NFD_IN_HAS_ISSUE1 must be defined"
 #endif
 
-#define LSO_PKT_XFER_START0     48
-#define LSO_PKT_XFER_START1     56
+#define LSO_PKT_XFER_START0     16
+#define LSO_PKT_XFER_START1     24
 
 
 struct _issued_pkt_batch {
