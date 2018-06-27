@@ -73,31 +73,25 @@ struct _pkt_desc_batch {
 NFD_INIT_DONE_DECLARE;
 
 
+/* Shared with issue DMA */
+__visible volatile __xread unsigned int nfd_in_data_compl_refl_in = 0;
+__visible volatile __xread unsigned int nfd_in_jumbo_compl_refl_in = 0;
+__remote volatile __xread unsigned int nfd_in_data_served_refl_in;
+__remote volatile SIGNAL nfd_in_data_served_refl_sig;
+
+
 /* Used for issue DMA 0 */
 __shared __gpr unsigned int data_dma_seq_served0 = 0;
 __shared __gpr unsigned int data_dma_seq_compl0 = 0;
-static __gpr unsigned int data_dma_seq_sent0 = 0;
-static __xwrite unsigned int nfd_in_data_served_refl_out0 = 0;
-
-/* Shared with issue DMA 0 */
-__visible volatile __xread unsigned int nfd_in_data_compl_refl_in0 = 0;
-__visible volatile __xread unsigned int nfd_in_jumbo_compl_refl_in0 = 0;
-__remote volatile __xread unsigned int nfd_in_data_served_refl_in0;
-__remote volatile SIGNAL nfd_in_data_served_refl_sig0;
 
 /* Used for issue DMA 1 */
 __shared __gpr unsigned int data_dma_seq_served1 = 0;
 __shared __gpr unsigned int data_dma_seq_compl1 = 0;
-static __gpr unsigned int data_dma_seq_sent1 = 0;
-static __xwrite unsigned int nfd_in_data_served_refl_out1 = 0;
-
-/* Shared with issue DMA 1 */
-__visible volatile __xread unsigned int nfd_in_data_compl_refl_in1 = 0;
-__visible volatile __xread unsigned int nfd_in_jumbo_compl_refl_in1 = 0;
-__remote volatile __xread unsigned int nfd_in_data_served_refl_in1;
-__remote volatile SIGNAL nfd_in_data_served_refl_sig1;
 
 
+/* Notify private variables */
+static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
+static __gpr unsigned int data_dma_seq_sent = 0;
 static __gpr mem_ring_addr_t lso_ring_addr;
 static __gpr unsigned int lso_ring_num;
 
@@ -261,12 +255,10 @@ __shared __gpr unsigned int gather_reset_state_gpr = 0;
 
 /* XXX Move to some sort of CT reflect library */
 __intrinsic void
-reflect_data(unsigned int dst_me, unsigned int dst_xfer,
-             unsigned int sig_no, volatile __xwrite void *src_xfer,
-             size_t size)
+reflect_data(unsigned int dst_me, unsigned int dst_ctx,
+             unsigned int dst_xfer, unsigned int sig_no,
+             volatile __xwrite void *src_xfer, size_t size)
 {
-    #define OV_SIG_NUM 13
-
     unsigned int addr;
     unsigned int count = (size >> 2);
     struct nfp_mecsr_cmd_indirect_ref_0 indirect;
@@ -277,15 +269,20 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
     /* Generic address computation.
      * Could be expensive if dst_me, or dst_xfer
      * not compile time constants */
-    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 0xF)<<10 | (dst_xfer & 0x3F)<<2));
+    addr = ((dst_me & 0xFF0)<<20 | (dst_me & 0xF)<<10 |
+            (dst_ctx & 7)<<7 | (dst_xfer & 0x3F)<<2);
 
     indirect.__raw = 0;
-    indirect.signal_num = sig_no;
+    if (sig_no != 0) {
+        indirect.signal_num = sig_no;
+        indirect.signal_ctx = dst_ctx;
+    }
     local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
 
     /* Currently just support reflect_write_sig_remote */
+    /* XXX NFP_MECSR_PREV_ALU_OV_SIG_CTX_bit is next to SIG_NUM */
     __asm {
-        alu[--, --, b, 1, <<OV_SIG_NUM];
+        alu[--, --, b, 3, <<NFP_MECSR_PREV_ALU_OV_SIG_NUM_bit];
         ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
            __ct_const_val(count)], indirect_ref;
     };
@@ -295,18 +292,9 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 __intrinsic void
 copy_absolute_xfer(__shared __gpr unsigned int *dst, unsigned int src_xnum)
 {
-    unsigned int src_index;
-
-    /* XXX assumes src_xnum is allocated from CTX 0 */
-    src_index = MECSR_XFER_INDEX(src_xnum);
-
-    __asm {
-        local_csr_wr[t_index, __ct_const_val(src_index)];
-        nop;
-        nop;
-        nop;
-        alu[*dst, --, B, *$index];
-    }
+    /* XXX assumes src_xnum already accounts for CTX */
+    local_csr_write(local_csr_t_index, MECSR_XFER_INDEX(src_xnum));
+    __asm alu[*dst, --, B, *$index];
 }
 
 
@@ -333,7 +321,7 @@ notify_setup_shared()
 
 
 /**
- * Perform per context initialization (for CTX 1 to 7)
+ * Perform per context initialization (for CTX 0 to 7)
  */
 void
 notify_setup(int side)
@@ -541,7 +529,8 @@ do {                                                                         \
  */
 __intrinsic void
 _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
-        int input_ring, unsigned int jumbo_compl_xnum)
+        int input_ring, unsigned int data_compl_xnum,
+        unsigned int jumbo_compl_xnum)
 {
 
     unsigned int n_batch;
@@ -691,16 +680,8 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
                 /* Copy in reflected data without checking signals */
                 copy_absolute_xfer(&gather_reset_state_gpr,
                                    __xfer_reg_number(&gather_reset_state_xfer));
-#ifdef NFD_IN_HAS_ISSUE0
-                copy_absolute_xfer(
-                    &data_dma_seq_compl0,
-                    __xfer_reg_number(&nfd_in_data_compl_refl_in0));
-#endif
-#ifdef NFD_IN_HAS_ISSUE1
-                copy_absolute_xfer(
-                    &data_dma_seq_compl1,
-                    __xfer_reg_number(&nfd_in_data_compl_refl_in1));
-#endif
+                copy_absolute_xfer(complete, data_compl_xnum);
+
                 num_avail = *complete - *served;
             }
 
@@ -767,11 +748,17 @@ notify(int side)
     if (side == 0) {
         _notify(&data_dma_seq_compl0, &data_dma_seq_served0,
                 NFD_IN_ISSUED_RING0_NUM,
-                __xfer_reg_number(&nfd_in_jumbo_compl_refl_in0));
+                (NFD_IN_NOTIFY_MANAGER0 << 5 |
+                 __xfer_reg_number(&nfd_in_data_compl_refl_in)),
+                (NFD_IN_NOTIFY_MANAGER0 << 5 |
+                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in)));
     } else {
         _notify(&data_dma_seq_compl1, &data_dma_seq_served1,
                 NFD_IN_ISSUED_RING1_NUM,
-                __xfer_reg_number(&nfd_in_jumbo_compl_refl_in1));
+                (NFD_IN_NOTIFY_MANAGER1 << 5 |
+                 __xfer_reg_number(&nfd_in_data_compl_refl_in)),
+                (NFD_IN_NOTIFY_MANAGER1 << 5 |
+                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in)));
     }
 }
 
@@ -792,51 +779,52 @@ notify(int side)
  * has been reflected, so that it is not resent.
  */
 __intrinsic void
-distr_notify()
+distr_notify(int side)
 {
     /* Store reset state in absolute GPR */
-    gather_reset_state_gpr = gather_reset_state_xfer;
+    copy_absolute_xfer(&gather_reset_state_gpr,
+                       __xfer_reg_number(&gather_reset_state_xfer));
 
+    if (side == 0) {
 #ifdef NFD_IN_HAS_ISSUE0
-    data_dma_seq_compl0 = nfd_in_data_compl_refl_in0;
-#endif
-#ifdef NFD_IN_HAS_ISSUE1
-    data_dma_seq_compl1 = nfd_in_data_compl_refl_in1;
-#endif
+        data_dma_seq_compl0 = nfd_in_data_compl_refl_in;
 
-#ifdef NFD_IN_HAS_ISSUE0
-    if (data_dma_seq_served0 != data_dma_seq_sent0) {
-        __implicit_read(&nfd_in_data_served_refl_out0);
+        if (data_dma_seq_served0 != data_dma_seq_sent) {
+            __implicit_read(&nfd_in_data_served_refl_out);
 
-        data_dma_seq_sent0 = data_dma_seq_served0;
+            data_dma_seq_sent = data_dma_seq_served0;
 
-        nfd_in_data_served_refl_out0 = data_dma_seq_sent0;
-        reflect_data(NFD_IN_DATA_DMA_ME0,
-                     __xfer_reg_number(&nfd_in_data_served_refl_in0,
-                                       NFD_IN_DATA_DMA_ME0),
-                     __signal_number(&nfd_in_data_served_refl_sig0,
-                                     NFD_IN_DATA_DMA_ME0),
-                     &nfd_in_data_served_refl_out0,
-                     sizeof nfd_in_data_served_refl_out0);
-    }
+            nfd_in_data_served_refl_out = data_dma_seq_sent;
+            reflect_data(NFD_IN_DATA_DMA_ME0, NFD_IN_ISSUE_MANAGER,
+                         __xfer_reg_number(&nfd_in_data_served_refl_in,
+                                           NFD_IN_DATA_DMA_ME0),
+                         __signal_number(&nfd_in_data_served_refl_sig,
+                                         NFD_IN_DATA_DMA_ME0),
+                         &nfd_in_data_served_refl_out,
+                         sizeof nfd_in_data_served_refl_out);
+        }
 #endif
+    } else {
 
 #ifdef NFD_IN_HAS_ISSUE1
-    if (data_dma_seq_served1 != data_dma_seq_sent1) {
-        __implicit_read(&nfd_in_data_served_refl_out1);
+        data_dma_seq_compl1 = nfd_in_data_compl_refl_in;
 
-        data_dma_seq_sent1 = data_dma_seq_served1;
+        if (data_dma_seq_served1 != data_dma_seq_sent) {
+            __implicit_read(&nfd_in_data_served_refl_out);
 
-        nfd_in_data_served_refl_out1 = data_dma_seq_sent1;
-        reflect_data(NFD_IN_DATA_DMA_ME1,
-                     __xfer_reg_number(&nfd_in_data_served_refl_in1,
-                                       NFD_IN_DATA_DMA_ME1),
-                     __signal_number(&nfd_in_data_served_refl_sig1,
-                                     NFD_IN_DATA_DMA_ME1),
-                     &nfd_in_data_served_refl_out1,
-                     sizeof nfd_in_data_served_refl_out1);
-    }
+            data_dma_seq_sent = data_dma_seq_served1;
+
+            nfd_in_data_served_refl_out = data_dma_seq_sent;
+            reflect_data(NFD_IN_DATA_DMA_ME1, NFD_IN_ISSUE_MANAGER,
+                         __xfer_reg_number(&nfd_in_data_served_refl_in,
+                                           NFD_IN_DATA_DMA_ME1),
+                         __signal_number(&nfd_in_data_served_refl_sig,
+                                         NFD_IN_DATA_DMA_ME1),
+                         &nfd_in_data_served_refl_out,
+                         sizeof nfd_in_data_served_refl_out);
+        }
 #endif
+    }
 }
 
 
@@ -859,21 +847,26 @@ main(void)
 
     }
 
-    if (ctx() == 0 || ctx() == 4) {
+    /* Test which side the context is servicing */
+    if ((ctx() & (NFD_IN_NOTIFY_STRIDE - 1)) == 0) {
 
 #ifdef NFD_IN_HAS_ISSUE0
         notify_setup(0);
-#endif
 
         for (;;) {
-            if (ctx() == 0) {
-                distr_notify();
+            if (ctx() == NFD_IN_NOTIFY_MANAGER0) {
+                distr_notify(0);
             }
-#ifdef NFD_IN_HAS_ISSUE0
+
             notify(0);
             notify(0);
-#endif
         }
+#else
+        for (;;) {
+            ctx_swap();
+        }
+#endif
+
 
     } else {
 
@@ -881,10 +874,18 @@ main(void)
         notify_setup(1);
 
         for (;;) {
+            if (ctx() == NFD_IN_NOTIFY_MANAGER1) {
+                distr_notify(1);
+            }
+
             notify(1);
             notify(1);
-#endif
         }
+#else
+        for (;;) {
+            ctx_swap();
+        }
+#endif
 
     }
 }

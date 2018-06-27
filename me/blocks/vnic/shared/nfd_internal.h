@@ -74,6 +74,7 @@
 #define NFD_IN_TX_QUEUE         1
 
 
+#define NFD_IN_ISSUE_MANAGER    0
 #define NFD_IN_ISSUE_START_CTX  2
 #define NFD_IN_ISSUE_END_CTX    6
 #define NFD_IN_NOTIFY_MANAGER0  0

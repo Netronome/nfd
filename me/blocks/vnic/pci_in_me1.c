@@ -75,7 +75,7 @@ int
 main(void)
 {
     /* Perform per ME initialisation  */
-    if (ctx() == 0) {
+    if (ctx() == NFD_IN_ISSUE_MANAGER) {
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
         nfd_cfg_init_cfg_msg(&CFG_SIG_IN, &cfg_msg);
@@ -101,7 +101,7 @@ main(void)
     /*
      * Work loop
      */
-    if (ctx() == 0) {
+    if (ctx() == NFD_IN_ISSUE_MANAGER) {
         __xwrite unsigned int distr_wr0, distr_wr1;
         SIGNAL distr_sig0, distr_sig1;
         SIGNAL_MASK distr_wait_msk = 0;

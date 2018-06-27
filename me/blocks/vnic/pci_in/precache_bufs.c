@@ -41,9 +41,11 @@
 #if (PCI_IN_ISSUE_DMA_IDX == 0)
 #define NFD_IN_DATA_EVENT_FILTER NFD_IN_DATA0_EVENT_FILTER
 #define NFD_IN_JUMBO_EVENT_FILTER NFD_IN_JUMBO0_EVENT_FILTER
+#define NFD_IN_NOTIFY_MANAGER NFD_IN_NOTIFY_MANAGER0
 #else
 #define NFD_IN_DATA_EVENT_FILTER NFD_IN_DATA1_EVENT_FILTER
 #define NFD_IN_JUMBO_EVENT_FILTER NFD_IN_JUMBO1_EVENT_FILTER
+#define NFD_IN_NOTIFY_MANAGER NFD_IN_NOTIFY_MANAGER1
 #endif
 
 
@@ -104,46 +106,31 @@ static SIGNAL nfd_in_jumbo_event_sig;
 static __xwrite unsigned int nfd_in_data_compl_refl_out = 0;
 static __xwrite unsigned int nfd_in_jumbo_compl_refl_out = 0;
 
-#if (PCI_IN_ISSUE_DMA_IDX == 0)
+__remote volatile __xread unsigned int nfd_in_data_compl_refl_in;
+__remote volatile __xread unsigned int nfd_in_jumbo_compl_refl_in;
+__visible volatile __xread unsigned int nfd_in_data_served_refl_in;
+__visible volatile SIGNAL nfd_in_data_served_refl_sig;
 
-__remote volatile __xread unsigned int nfd_in_data_compl_refl_in0;
-__remote volatile __xread unsigned int nfd_in_jumbo_compl_refl_in0;
-__visible volatile __xread unsigned int nfd_in_data_served_refl_in0;
-__visible volatile SIGNAL nfd_in_data_served_refl_sig0;
-#define nfd_in_data_compl_refl_in nfd_in_data_compl_refl_in0
-#define nfd_in_jumbo_compl_refl_in nfd_in_jumbo_compl_refl_in0
-#define nfd_in_data_served_refl_in nfd_in_data_served_refl_in0
-#define nfd_in_data_served_refl_sig nfd_in_data_served_refl_sig0
+
+#if (PCI_IN_ISSUE_DMA_IDX == 0)
 #define NFD_IN_ISSUED_RING_SZ NFD_IN_ISSUED_RING0_SZ
 #define NFD_IN_ISSUED_RING_RES NFD_IN_ISSUED_RING0_RES
 
 #elif (PCI_IN_ISSUE_DMA_IDX == 1)
-
-__remote volatile __xread unsigned int nfd_in_data_compl_refl_in1;
-__remote volatile __xread unsigned int nfd_in_jumbo_compl_refl_in1;
-__visible volatile __xread unsigned int nfd_in_data_served_refl_in1;
-__visible volatile SIGNAL nfd_in_data_served_refl_sig1;
-#define nfd_in_data_compl_refl_in nfd_in_data_compl_refl_in1
-#define nfd_in_jumbo_compl_refl_in nfd_in_jumbo_compl_refl_in1
-#define nfd_in_data_served_refl_in nfd_in_data_served_refl_in1
-#define nfd_in_data_served_refl_sig nfd_in_data_served_refl_sig1
 #define NFD_IN_ISSUED_RING_SZ NFD_IN_ISSUED_RING1_SZ
 #define NFD_IN_ISSUED_RING_RES NFD_IN_ISSUED_RING1_RES
+
 #else
-
 #error "Invalid PCI_IN_ISSUE_DMA_IDX.  Must be 0 or 1."
-
 #endif
 
 
 /* XXX Move to some sort of CT reflect library */
 __intrinsic void
-reflect_data(unsigned int dst_me, unsigned int dst_xfer,
-             unsigned int sig_no, volatile __xwrite void *src_xfer,
-             size_t size)
+reflect_data(unsigned int dst_me, unsigned int dst_ctx,
+             unsigned int dst_xfer, unsigned int sig_no,
+             volatile __xwrite void *src_xfer, size_t size)
 {
-    #define OV_SIG_NUM 13
-
     unsigned int addr;
     unsigned int count = (size >> 2);
     struct nfp_mecsr_cmd_indirect_ref_0 indirect;
@@ -154,15 +141,20 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
     /* Generic address computation.
      * Could be expensive if dst_me, or dst_xfer
      * not compile time constants */
-    addr = ((dst_me & 0xFF0)<<20 | ((dst_me & 0xF)<<10 | (dst_xfer & 0x3F)<<2));
+    addr = ((dst_me & 0xFF0)<<20 | (dst_me & 0xF)<<10 |
+            (dst_ctx & 7)<<7 | (dst_xfer & 0x3F)<<2);
 
     indirect.__raw = 0;
-    indirect.signal_num = sig_no;
+    if (sig_no != 0) {
+        indirect.signal_num = sig_no;
+        indirect.signal_ctx = dst_ctx;
+    }
     local_csr_write(local_csr_cmd_indirect_ref_0, indirect.__raw);
 
     /* Currently just support reflect_write_sig_remote */
+    /* XXX NFP_MECSR_PREV_ALU_OV_SIG_CTX_bit is next to SIG_NUM */
     __asm {
-        alu[--, --, b, 1, <<OV_SIG_NUM];
+        alu[--, --, b, 3, <<NFP_MECSR_PREV_ALU_OV_SIG_NUM_bit];
         ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
            __ct_const_val(count)], indirect_ref;
     };
@@ -602,7 +594,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
 
             /* Mirror to remote ME */
             nfd_in_data_compl_refl_out = data_dma_seq_compl;
-            reflect_data(NFD_IN_NOTIFY_ME,
+            reflect_data(NFD_IN_NOTIFY_ME, NFD_IN_NOTIFY_MANAGER,
                          __xfer_reg_number(&nfd_in_data_compl_refl_in,
                                            NFD_IN_NOTIFY_ME),
                          0, &nfd_in_data_compl_refl_out,
@@ -624,7 +616,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
 
             /* Mirror to remote ME */
             nfd_in_jumbo_compl_refl_out = jumbo_dma_seq_compl;
-            reflect_data(NFD_IN_NOTIFY_ME,
+            reflect_data(NFD_IN_NOTIFY_ME, NFD_IN_NOTIFY_MANAGER,
                          __xfer_reg_number(&nfd_in_jumbo_compl_refl_in,
                                            NFD_IN_NOTIFY_ME),
                          0, &nfd_in_jumbo_compl_refl_out,
@@ -653,7 +645,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
 
             /* Mirror to remote ME */
             nfd_in_data_compl_refl_out = data_dma_seq_compl;
-            reflect_data(NFD_IN_NOTIFY_ME,
+            reflect_data(NFD_IN_NOTIFY_ME, NFD_IN_NOTIFY_MANAGER,
                          __xfer_reg_number(&nfd_in_data_compl_refl_in,
                                            NFD_IN_NOTIFY_ME),
                          0, &nfd_in_data_compl_refl_out,
@@ -670,7 +662,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
 
             /* Mirror to remote ME */
             nfd_in_jumbo_compl_refl_out = jumbo_dma_seq_compl;
-            reflect_data(NFD_IN_NOTIFY_ME,
+            reflect_data(NFD_IN_NOTIFY_ME, NFD_IN_NOTIFY_MANAGER,
                          __xfer_reg_number(&nfd_in_jumbo_compl_refl_in,
                                            NFD_IN_NOTIFY_ME),
                          0, &nfd_in_jumbo_compl_refl_out,
