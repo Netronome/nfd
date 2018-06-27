@@ -30,7 +30,6 @@
 
 #include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
-#include <vnic/pci_in/notify_status.c>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg_internal.c>
 #include <vnic/shared/nfd_internal.h>
@@ -841,7 +840,6 @@ main(void)
          * the manager for loop 0
          */
         notify_setup_shared();
-        notify_status_setup();
 
         /* NFD_INIT_DONE_SET(PCIE_ISL, 2);     /\* XXX Remove? *\/ */
 
