@@ -78,8 +78,6 @@ __shared __gpr unsigned int data_dma_seq_served0 = 0;
 __shared __gpr unsigned int data_dma_seq_compl0 = 0;
 static __gpr unsigned int data_dma_seq_sent0 = 0;
 static __xwrite unsigned int nfd_in_data_served_refl_out0 = 0;
-static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr0 = 0;
-static __gpr unsigned int nfd_in_issued_lso_ring_num0 = 0;
 
 /* Shared with issue DMA 0 */
 __visible volatile __xread unsigned int nfd_in_data_compl_refl_in0 = 0;
@@ -92,14 +90,16 @@ __shared __gpr unsigned int data_dma_seq_served1 = 0;
 __shared __gpr unsigned int data_dma_seq_compl1 = 0;
 static __gpr unsigned int data_dma_seq_sent1 = 0;
 static __xwrite unsigned int nfd_in_data_served_refl_out1 = 0;
-static __gpr mem_ring_addr_t nfd_in_issued_lso_ring_addr1 = 0;
-static __gpr unsigned int nfd_in_issued_lso_ring_num1 = 0;
 
 /* Shared with issue DMA 1 */
 __visible volatile __xread unsigned int nfd_in_data_compl_refl_in1 = 0;
 __visible volatile __xread unsigned int nfd_in_jumbo_compl_refl_in1 = 0;
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in1;
 __remote volatile SIGNAL nfd_in_data_served_refl_sig1;
+
+
+static __gpr mem_ring_addr_t lso_ring_addr;
+static __gpr unsigned int lso_ring_num;
 
 
 static SIGNAL wq_sig0, wq_sig1, wq_sig2, wq_sig3;
@@ -336,7 +336,7 @@ notify_setup_shared()
  * Perform per context initialization (for CTX 1 to 7)
  */
 void
-notify_setup()
+notify_setup(int side)
 {
     dst_q = wq_num_base;
     wait_msk = __signals(&msg_sig0, &msg_sig1, &msg_order_sig);
@@ -348,16 +348,18 @@ notify_setup()
     nfd_in_lso_cntr_addr =
         cntr64_get_addr((__mem40 void *) nfd_in_lso_cntrs);
 #endif
-    nfd_in_issued_lso_ring_num0 = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
-                                                NFD_IN_ISSUED_LSO_RING0_NUM);
-    nfd_in_issued_lso_ring_addr0 = ((((unsigned long long)
-                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
 
-    nfd_in_issued_lso_ring_num1 = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
-                                                NFD_IN_ISSUED_LSO_RING1_NUM);
-    nfd_in_issued_lso_ring_addr1 = ((((unsigned long long)
-                                       NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
-
+    if (side == 0) {
+        lso_ring_num = NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                     NFD_IN_ISSUED_LSO_RING0_NUM);
+        lso_ring_addr = ((((unsigned long long)
+                           NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
+    } else {
+        lso_ring_num =  NFD_RING_LINK(PCIE_ISL, nfd_in_issued_lso,
+                                      NFD_IN_ISSUED_LSO_RING1_NUM);
+        lso_ring_addr = ((((unsigned long long)
+                           NFD_EMEM_LINK(PCIE_ISL)) >> 32) << 24);
+    }
 }
 
 #ifndef NFD_MU_PTR_DBG_MSK
@@ -383,7 +385,7 @@ do {} while (0)
 #endif
 
 
-#define _NOTIFY_PROC(_pkt, _lso_ring_num, _lso_ring_addr)                    \
+#define _NOTIFY_PROC(_pkt)                                                   \
 do {                                                                         \
     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                               \
                          NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC);             \
@@ -423,7 +425,7 @@ do {                                                                         \
          /* finished packet with LSO to handle */                            \
         for (;;) {                                                           \
             /* read packet from nfd_in_issued_lso_ring */                    \
-            __mem_ring_get(_lso_ring_num, _lso_ring_addr, &lso_pkt,          \
+            __mem_ring_get(lso_ring_num, lso_ring_addr, &lso_pkt,            \
                            sizeof(lso_pkt), sizeof(lso_pkt), sig_done,       \
                            &lso_sig_pair);                                   \
             wait_sig_mask(lso_wait_msk);                                     \
@@ -431,7 +433,7 @@ do {                                                                         \
             __implicit_read(&wq_sig##_pkt);                                  \
             while (signal_test(&lso_sig_pair.odd)) {                         \
                 /* Ring get failed, retry */                                 \
-                __mem_ring_get(_lso_ring_num, _lso_ring_addr, &lso_pkt,      \
+                __mem_ring_get(lso_ring_num, lso_ring_addr, &lso_pkt,        \
                                sizeof(lso_pkt), sizeof(lso_pkt), sig_done,   \
                                &lso_sig_pair);                               \
                 wait_for_all_single(&lso_sig_pair.even);                     \
@@ -539,8 +541,7 @@ do {                                                                         \
  */
 __intrinsic void
 _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
-        int input_ring, __gpr unsigned int lso_ring_num,
-        __gpr mem_ring_addr_t lso_ring_addr, unsigned int jumbo_compl_xnum)
+        int input_ring, unsigned int jumbo_compl_xnum)
 {
 
     unsigned int n_batch;
@@ -618,14 +619,14 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         pkt_desc_tmp.seq_num = 0;
 #endif
 
-        _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);
-        _NOTIFY_PROC(1, lso_ring_num, lso_ring_addr);
-        _NOTIFY_PROC(2, lso_ring_num, lso_ring_addr);
-        _NOTIFY_PROC(3, lso_ring_num, lso_ring_addr);
-        _NOTIFY_PROC(4, lso_ring_num, lso_ring_addr);
-        _NOTIFY_PROC(5, lso_ring_num, lso_ring_addr);
-        _NOTIFY_PROC(6, lso_ring_num, lso_ring_addr);
-        _NOTIFY_PROC(7, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(0);
+        _NOTIFY_PROC(1);
+        _NOTIFY_PROC(2);
+        _NOTIFY_PROC(3);
+        _NOTIFY_PROC(4);
+        _NOTIFY_PROC(5);
+        _NOTIFY_PROC(6);
+        _NOTIFY_PROC(7);
 
         /* Allow the next context taking a message to go.
          * We have finished _NOTIFY_PROC() where we need to
@@ -680,7 +681,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         for (;;) {
             /* Count the message and service it */
             partial_served++;
-            _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);
+            _NOTIFY_PROC(0);
 
             /* Wait for new messages in ctm ring.
              * Note: other contexts should not fetch new messages or update
@@ -736,7 +737,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
                              &msg_order_sig);
 
         /* Process the final descriptor from the batch */
-        _NOTIFY_PROC(0, lso_ring_num, lso_ring_addr);
+        _NOTIFY_PROC(0);
 
         /* Allow the next context taking a message to go.
          * We have finished _NOTIFY_PROC() where we need to
@@ -765,13 +766,11 @@ notify(int side)
 {
     if (side == 0) {
         _notify(&data_dma_seq_compl0, &data_dma_seq_served0,
-                NFD_IN_ISSUED_RING0_NUM, nfd_in_issued_lso_ring_num0,
-                nfd_in_issued_lso_ring_addr0,
+                NFD_IN_ISSUED_RING0_NUM,
                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in0));
     } else {
         _notify(&data_dma_seq_compl1, &data_dma_seq_served1,
-                NFD_IN_ISSUED_RING1_NUM, nfd_in_issued_lso_ring_num1,
-                nfd_in_issued_lso_ring_addr1,
+                NFD_IN_ISSUED_RING1_NUM,
                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in1));
     }
 }
@@ -860,9 +859,11 @@ main(void)
 
     }
 
-    notify_setup();
-
     if (ctx() == 0 || ctx() == 4) {
+
+#ifdef NFD_IN_HAS_ISSUE0
+        notify_setup(0);
+#endif
 
         for (;;) {
             if (ctx() == 0) {
@@ -876,8 +877,10 @@ main(void)
 
     } else {
 
-        for (;;) {
 #ifdef NFD_IN_HAS_ISSUE1
+        notify_setup(1);
+
+        for (;;) {
             notify(1);
             notify(1);
 #endif
