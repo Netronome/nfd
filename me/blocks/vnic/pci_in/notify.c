@@ -104,7 +104,6 @@ static SIGNAL_MASK wait_msk;
 static unsigned int next_ctx;
 
 __xwrite struct _pkt_desc_batch batch_out;
-__xread unsigned int qc_xfer;
 
 #ifdef NFD_IN_LSO_CNTR_ENABLE
 static unsigned int nfd_in_lso_cntr_addr = 0;
@@ -584,7 +583,6 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         __implicit_read(&msg_sig0);
         __implicit_read(&msg_sig1);
         __implicit_read(&msg_order_sig);
-        __implicit_read(&qc_xfer);
 
         /* Batches have a least one packet, but n_batch may still be
          * zero, meaning that the queue is down.  In this case, EOP for
@@ -624,8 +622,8 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
         qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(q_batch), NFD_IN_TX_QUEUE);
-        __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
-                        sig_done, &qc_sig);
+        __qc_add_to_ptr_wr(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
+                           &batch_out.pkt0.__raw[0], sig_done, &qc_sig);
 
     } else if (num_avail > 0) {
         /* There is a partial batch - process messages one at a time. */
@@ -649,7 +647,6 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         __implicit_read(&qc_sig);
         __implicit_read(&msg_sig0);
         __implicit_read(&msg_order_sig);
-        __implicit_read(&qc_xfer);
 
 
         /* This is the first message in the batch. Do not wait for
@@ -727,8 +724,8 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
         qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(q_batch), NFD_IN_TX_QUEUE);
-        __qc_add_to_ptr(PCIE_ISL, qc_queue, QC_RPTR, n_batch, &qc_xfer,
-                        sig_done, &qc_sig);
+        __qc_add_to_ptr_wr(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
+                           &batch_out.pkt0.__raw[0], sig_done, &qc_sig);
 
     } else {
         /* Participate in ctm_ring_get ordering */

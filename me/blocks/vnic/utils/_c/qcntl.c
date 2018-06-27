@@ -205,3 +205,38 @@ qc_add_to_ptr(unsigned char pcie_isl, unsigned int queue,
     __implicit_read(&xfer);
 }
 
+
+__intrinsic void
+__qc_add_to_ptr_wr(unsigned char pcie_isl, unsigned int queue,
+                   enum qc_ptr_type ptr, unsigned int value,
+                   __xwrite unsigned int *xfer, sync_t sync, SIGNAL *sig)
+{
+    __gpr unsigned int addr_hi = pcie_isl << 30;
+    struct nfp_qc_add_rptr val_str;
+    unsigned int ptr_offset;
+
+    ctassert(ptr == QC_WPTR || ptr == QC_RPTR);
+    try_ctassert(value < 64); /* We are using the address bits to pass value */
+
+    if (ptr == QC_WPTR) {
+        ptr_offset = NFP_QC_ADD_WPTR;
+    } else {
+        ptr_offset = NFP_QC_ADD_RPTR;
+    }
+
+    /* Code the value to add into the ptr_offset
+     * The value is taken from bits [9:4], and bit 10 must be set to
+     * indicate that we are using this access mode. */
+    ptr_offset |= (value << 4);
+    ptr_offset |= (1 << 10);
+
+    ptr_offset |= NFP_PCIE_QUEUE(queue);
+
+    if (sync == sig_done) {
+        __asm pcie[write_pci, *xfer, addr_hi, <<8, ptr_offset, 1], \
+            sig_done[*sig];
+    } else {
+        __asm pcie[write_pci, *xfer, addr_hi, <<8, ptr_offset, 1], \
+            ctx_swap[*sig];
+    }
+}
