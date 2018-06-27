@@ -73,8 +73,8 @@ NFD_INIT_DONE_DECLARE;
 
 
 /* Shared with issue DMA */
-__visible volatile __xread unsigned int nfd_in_data_compl_refl_in = 0;
-__visible volatile __xread unsigned int nfd_in_jumbo_compl_refl_in = 0;
+__visible __xread unsigned int nfd_in_data_compl_refl_in = 0;
+__visible __xread unsigned int nfd_in_jumbo_compl_refl_in = 0;
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in;
 __remote volatile SIGNAL nfd_in_data_served_refl_sig;
 
@@ -247,7 +247,7 @@ do {                                                                    \
 
 
 /* Registers to receive and store reset state */
-__visible volatile __xread unsigned int gather_reset_state_xfer = 0;
+__visible __xread unsigned int gather_reset_state_xfer = 0;
 __shared __gpr unsigned int gather_reset_state_gpr = 0;
 
 
@@ -255,7 +255,7 @@ __shared __gpr unsigned int gather_reset_state_gpr = 0;
 __intrinsic void
 reflect_data(unsigned int dst_me, unsigned int dst_ctx,
              unsigned int dst_xfer, unsigned int sig_no,
-             volatile __xwrite void *src_xfer, size_t size)
+             __xwrite void *src_xfer, size_t size)
 {
     unsigned int addr;
     unsigned int count = (size >> 2);
@@ -780,10 +780,13 @@ distr_notify(int side)
     /* Store reset state in absolute GPR */
     copy_absolute_xfer(&gather_reset_state_gpr,
                        __xfer_reg_number(&gather_reset_state_xfer));
+    __implicit_read(&gather_reset_state_xfer);
 
     if (side == 0) {
 #ifdef NFD_IN_HAS_ISSUE0
         data_dma_seq_compl0 = nfd_in_data_compl_refl_in;
+        __implicit_write(&nfd_in_data_compl_refl_in);
+        __implicit_read(&nfd_in_jumbo_compl_refl_in);
 
         if (data_dma_seq_served0 != data_dma_seq_sent) {
             __implicit_read(&nfd_in_data_served_refl_out);
@@ -804,6 +807,8 @@ distr_notify(int side)
 
 #ifdef NFD_IN_HAS_ISSUE1
         data_dma_seq_compl1 = nfd_in_data_compl_refl_in;
+        __implicit_write(&nfd_in_data_compl_refl_in);
+        __implicit_read(&nfd_in_jumbo_compl_refl_in);
 
         if (data_dma_seq_served1 != data_dma_seq_sent) {
             __implicit_read(&nfd_in_data_served_refl_out);
