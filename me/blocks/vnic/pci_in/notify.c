@@ -45,6 +45,9 @@
 #error "At least one of NFD_IN_HAS_ISSUE0 and NFD_IN_HAS_ISSUE1 must be defined"
 #endif
 
+#define LSO_PKT_XFER_START0     48
+#define LSO_PKT_XFER_START1     56
+
 
 struct _issued_pkt_batch {
     struct nfd_in_issued_desc pkt0;
@@ -296,6 +299,42 @@ copy_absolute_xfer(__shared __gpr unsigned int *dst, unsigned int src_xnum)
 }
 
 
+__intrinsic void
+lso_ring_get(unsigned int rnum, mem_ring_addr_t raddr, unsigned int xnum,
+             size_t size, sync_t sync, SIGNAL_PAIR *sigpair)
+{
+    unsigned int ind;
+    unsigned int count = (size >> 2);
+
+    ctassert(size != 0);
+    ctassert(size <= (8 * 4));
+    ctassert(__is_aligned(size, 4));
+    ctassert(__is_ct_const(sync));
+    ctassert(sync == sig_done);
+
+    ind = NFP_MECSR_PREV_ALU_OVE_DATA(1);
+    __asm {
+        alu[--, ind, OR, xnum, <<(NFP_MECSR_PREV_ALU_DATA16_shift + 2)];
+        mem[get, --, raddr, <<8, rnum, __ct_const_val(count)], indirect_ref, \
+            sig_done[*sigpair];
+    }
+}
+
+
+__intrinsic void
+lso_msg_copy(__gpr struct nfd_in_lso_desc *lso_pkt, unsigned int xnum)
+{
+    local_csr_write(local_csr_t_index, MECSR_XFER_INDEX(xnum));
+    __asm {
+        alu[*lso_pkt.desc.__raw[0], --, B, *$index++];
+        alu[*lso_pkt.desc.__raw[1], --, B, *$index++];
+        alu[*lso_pkt.desc.__raw[2], --, B, *$index++];
+        alu[*lso_pkt.desc.__raw[3], --, B, *$index++];
+        alu[*lso_pkt.jumbo_seq, --, B, *$index++];
+    }
+}
+
+
 /**
  * Perform shared configuration for notify
  */
@@ -371,7 +410,7 @@ do {} while (0)
 #endif
 
 
-#define _NOTIFY_PROC(_pkt)                                                   \
+#define _NOTIFY_PROC(_pkt, _lso_xfer_num)                                    \
 do {                                                                         \
     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                               \
                          NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC);             \
@@ -396,7 +435,7 @@ do {                                                                         \
                              &wq_sig##_pkt);                                 \
     } else if (batch_in.pkt##_pkt##.lso != NFD_IN_ISSUED_DESC_LSO_NULL) {    \
         /* else LSO packets */                                               \
-        __xread struct nfd_in_lso_desc lso_pkt;                              \
+        __gpr struct nfd_in_lso_desc lso_pkt;                                \
         SIGNAL_PAIR lso_sig_pair;                                            \
         SIGNAL_MASK lso_wait_msk;                                            \
         __shared __gpr unsigned int jumbo_compl_seq;                         \
@@ -411,19 +450,18 @@ do {                                                                         \
          /* finished packet with LSO to handle */                            \
         for (;;) {                                                           \
             /* read packet from nfd_in_issued_lso_ring */                    \
-            __mem_ring_get(lso_ring_num, lso_ring_addr, &lso_pkt,            \
-                           sizeof(lso_pkt), sizeof(lso_pkt), sig_done,       \
-                           &lso_sig_pair);                                   \
+            lso_ring_get(lso_ring_num, lso_ring_addr, _lso_xfer_num,         \
+                         sizeof(lso_pkt), sig_done, &lso_sig_pair);          \
             wait_sig_mask(lso_wait_msk);                                     \
             __implicit_read(&lso_sig_pair.even);                             \
             __implicit_read(&wq_sig##_pkt);                                  \
             while (signal_test(&lso_sig_pair.odd)) {                         \
                 /* Ring get failed, retry */                                 \
-                __mem_ring_get(lso_ring_num, lso_ring_addr, &lso_pkt,        \
-                               sizeof(lso_pkt), sizeof(lso_pkt), sig_done,   \
-                               &lso_sig_pair);                               \
+                lso_ring_get(lso_ring_num, lso_ring_addr, _lso_xfer_num,     \
+                             sizeof(lso_pkt), sig_done, &lso_sig_pair);      \
                 wait_for_all_single(&lso_sig_pair.even);                     \
             }                                                                \
+            lso_msg_copy(&lso_pkt, _lso_xfer_num);                           \
                                                                              \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING);           \
@@ -528,7 +566,7 @@ do {                                                                         \
 __intrinsic void
 _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         int input_ring, unsigned int data_compl_xnum,
-        unsigned int jumbo_compl_xnum)
+        unsigned int jumbo_compl_xnum, unsigned int lso_xnum)
 {
 
     unsigned int n_batch;
@@ -605,14 +643,14 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         pkt_desc_tmp.seq_num = 0;
 #endif
 
-        _NOTIFY_PROC(0);
-        _NOTIFY_PROC(1);
-        _NOTIFY_PROC(2);
-        _NOTIFY_PROC(3);
-        _NOTIFY_PROC(4);
-        _NOTIFY_PROC(5);
-        _NOTIFY_PROC(6);
-        _NOTIFY_PROC(7);
+        _NOTIFY_PROC(0, lso_xnum);
+        _NOTIFY_PROC(1, lso_xnum);
+        _NOTIFY_PROC(2, lso_xnum);
+        _NOTIFY_PROC(3, lso_xnum);
+        _NOTIFY_PROC(4, lso_xnum);
+        _NOTIFY_PROC(5, lso_xnum);
+        _NOTIFY_PROC(6, lso_xnum);
+        _NOTIFY_PROC(7, lso_xnum);
 
         /* Allow the next context taking a message to go.
          * We have finished _NOTIFY_PROC() where we need to
@@ -666,7 +704,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
         for (;;) {
             /* Count the message and service it */
             partial_served++;
-            _NOTIFY_PROC(0);
+            _NOTIFY_PROC(0, lso_xnum);
 
             /* Wait for new messages in ctm ring.
              * Note: other contexts should not fetch new messages or update
@@ -714,7 +752,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
                              &msg_order_sig);
 
         /* Process the final descriptor from the batch */
-        _NOTIFY_PROC(0);
+        _NOTIFY_PROC(0, lso_xnum);
 
         /* Allow the next context taking a message to go.
          * We have finished _NOTIFY_PROC() where we need to
@@ -747,14 +785,16 @@ notify(int side)
                 (NFD_IN_NOTIFY_MANAGER0 << 5 |
                  __xfer_reg_number(&nfd_in_data_compl_refl_in)),
                 (NFD_IN_NOTIFY_MANAGER0 << 5 |
-                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in)));
+                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in)),
+                LSO_PKT_XFER_START0);
     } else {
         _notify(&data_dma_seq_compl1, &data_dma_seq_served1,
                 NFD_IN_ISSUED_RING1_NUM,
                 (NFD_IN_NOTIFY_MANAGER1 << 5 |
                  __xfer_reg_number(&nfd_in_data_compl_refl_in)),
                 (NFD_IN_NOTIFY_MANAGER1 << 5 |
-                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in)));
+                 __xfer_reg_number(&nfd_in_jumbo_compl_refl_in)),
+                LSO_PKT_XFER_START1);
     }
 }
 
@@ -869,6 +909,12 @@ main(void)
 
         for (;;) {
             if (ctx() == NFD_IN_NOTIFY_MANAGER0) {
+                __xread struct nfd_in_lso_desc lso_pkt0;
+                __xread struct nfd_in_lso_desc lso_pkt1;
+
+                __assign_relative_register(&lso_pkt0, LSO_PKT_XFER_START0);
+                __assign_relative_register(&lso_pkt1, LSO_PKT_XFER_START1);
+
                 notify_manager_reorder();
                 notify_manager_reorder();
                 distr_notify(0);
