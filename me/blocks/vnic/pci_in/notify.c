@@ -90,7 +90,6 @@ __shared __gpr unsigned int data_dma_seq_compl1 = 0;
 
 
 /* Notify private variables */
-static __xwrite unsigned int nfd_in_data_served_refl_out = 0;
 static __gpr unsigned int data_dma_seq_sent = 0;
 static __gpr mem_ring_addr_t lso_ring_addr;
 static __gpr unsigned int lso_ring_num;
@@ -846,18 +845,18 @@ distr_notify(int side)
         data_dma_seq_compl0 = nfd_in_data_compl_refl_in;
 
         if (data_dma_seq_served0 != data_dma_seq_sent) {
-            __implicit_read(&nfd_in_data_served_refl_out);
-
             data_dma_seq_sent = data_dma_seq_served0;
 
-            nfd_in_data_served_refl_out = data_dma_seq_sent;
+            /* XXX reuse batch_out xfers on managers to avoid
+             * live range issues */
+            batch_out.pkt0.__raw[0] = data_dma_seq_sent;
             reflect_data(NFD_IN_DATA_DMA_ME0, NFD_IN_ISSUE_MANAGER,
                          __xfer_reg_number(&nfd_in_data_served_refl_in,
                                            NFD_IN_DATA_DMA_ME0),
                          __signal_number(&nfd_in_data_served_refl_sig,
                                          NFD_IN_DATA_DMA_ME0),
-                         &nfd_in_data_served_refl_out,
-                         sizeof nfd_in_data_served_refl_out);
+                         &batch_out.pkt0.__raw[0],
+                         sizeof data_dma_seq_sent);
         }
 #endif
     } else {
@@ -866,18 +865,18 @@ distr_notify(int side)
         data_dma_seq_compl1 = nfd_in_data_compl_refl_in;
 
         if (data_dma_seq_served1 != data_dma_seq_sent) {
-            __implicit_read(&nfd_in_data_served_refl_out);
-
             data_dma_seq_sent = data_dma_seq_served1;
 
-            nfd_in_data_served_refl_out = data_dma_seq_sent;
+            /* XXX reuse batch_out xfers on managers to avoid
+             * live range issues */
+            batch_out.pkt0.__raw[0] = data_dma_seq_sent;
             reflect_data(NFD_IN_DATA_DMA_ME1, NFD_IN_ISSUE_MANAGER,
                          __xfer_reg_number(&nfd_in_data_served_refl_in,
                                            NFD_IN_DATA_DMA_ME1),
                          __signal_number(&nfd_in_data_served_refl_sig,
                                          NFD_IN_DATA_DMA_ME1),
-                         &nfd_in_data_served_refl_out,
-                         sizeof nfd_in_data_served_refl_out);
+                         &batch_out.pkt0.__raw[0],
+                         sizeof data_dma_seq_sent);
         }
 #endif
     }
