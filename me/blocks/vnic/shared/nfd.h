@@ -118,6 +118,10 @@
 
 #if defined(__NFP_LANG_MICROC)
 
+#ifndef _link_sym
+#define _link_sym(x) __link_sym(#x)
+#endif
+
 #include <nfp/mem_atomic.h>     /* TEMP */
 
 /* Provide a standard symbol for host drivers to access MAC stats */

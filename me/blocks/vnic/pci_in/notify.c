@@ -31,7 +31,6 @@
 #include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd.h>
-#include <vnic/shared/nfd_cfg_internal.c>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/utils/ctm_ring.h>
 #include <vnic/utils/ordering.h>
@@ -899,9 +898,6 @@ main(void)
 {
     /* Perform per ME initialisation  */
     if (ctx() == 0) {
-
-        nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
-
         /*
          * This function will start ordering for CTX0,
          * the manager for loop 0
