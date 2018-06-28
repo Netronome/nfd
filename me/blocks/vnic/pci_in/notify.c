@@ -74,6 +74,15 @@ struct _pkt_desc_batch {
 
 NFD_INIT_DONE_DECLARE;
 
+__xread struct _issued_pkt_batch batch_in =
+    { { 0, 0, 0, 0 },
+      { 0, 0, 0, 0 },
+      { 0, 0, 0, 0 },
+      { 0, 0, 0, 0 },
+      { 0, 0, 0, 0 },
+      { 0, 0, 0, 0 },
+      { 0, 0, 0, 0 },
+      { 0, 0, 0, 0 } };
 
 /* Shared with issue DMA */
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in;
@@ -337,6 +346,9 @@ lso_msg_copy(__gpr struct nfd_in_lso_desc *lso_pkt, unsigned int xnum)
 void
 notify_setup_shared()
 {
+
+    __implicit_read(&batch_in);
+
 #ifdef NFD_IN_WQ_SHARED
     wq_num_base = NFD_RING_LINK(0, nfd_in, 0);
     wq_raddr = (unsigned long long) NFD_EMEM_SHARED(NFD_IN_WQ_SHARED) >> 8;
@@ -572,7 +584,6 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
 
     unsigned int out_msg_sz = sizeof(struct nfd_in_pkt_desc);
 
-    __xread struct _issued_pkt_batch batch_in;
     struct _pkt_desc_batch batch_tmp;
     struct nfd_in_pkt_desc pkt_desc_tmp;
 
