@@ -782,7 +782,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
 }
 
 
-__forceinline void
+__intrinsic void
 notify(int side)
 {
     if (side == 0) {
