@@ -932,7 +932,7 @@ main(void)
         }
 #else
         for (;;) {
-            ctx_swap();
+            ctx_swap(kill);
         }
 #endif
 
@@ -953,7 +953,7 @@ main(void)
         }
 #else
         for (;;) {
-            ctx_swap();
+            ctx_swap(kill);
         }
 #endif
 
