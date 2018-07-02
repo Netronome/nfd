@@ -914,19 +914,21 @@ main(void)
 #ifdef NFD_IN_HAS_ISSUE0
         notify_setup(0);
 
-        for (;;) {
-            if (ctx() == NFD_IN_NOTIFY_MANAGER0) {
+        if (ctx() == NFD_IN_NOTIFY_MANAGER0) {
 
-                __xread struct nfd_in_lso_desc lso_pkt0;
-                __xread struct nfd_in_lso_desc lso_pkt1;
+            __xread struct nfd_in_lso_desc lso_pkt0;
+            __xread struct nfd_in_lso_desc lso_pkt1;
 
-                __assign_relative_register(&lso_pkt0, LSO_PKT_XFER_START0);
-                __assign_relative_register(&lso_pkt1, LSO_PKT_XFER_START1);
+            __assign_relative_register(&lso_pkt0, LSO_PKT_XFER_START0);
+            __assign_relative_register(&lso_pkt1, LSO_PKT_XFER_START1);
 
+            for (;;) {
                 notify_manager_reorder();
                 notify_manager_reorder();
                 distr_notify(0);
-            } else {
+            }
+        } else {
+            for (;;) {
                 notify(0);
             }
         }
@@ -936,18 +938,19 @@ main(void)
         }
 #endif
 
-
     } else {
 
 #ifdef NFD_IN_HAS_ISSUE1
         notify_setup(1);
 
-        for (;;) {
-            if (ctx() == NFD_IN_NOTIFY_MANAGER1) {
+        if (ctx() == NFD_IN_NOTIFY_MANAGER1) {
+            for (;;) {
                 notify_manager_reorder();
                 notify_manager_reorder();
                 distr_notify(1);
-            } else {
+            }
+        } else {
+            for (;;) {
                 notify(1);
             }
         }
