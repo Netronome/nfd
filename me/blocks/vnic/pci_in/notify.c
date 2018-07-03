@@ -73,17 +73,11 @@ struct _pkt_desc_batch {
 
 NFD_INIT_DONE_DECLARE;
 
-__xread struct _issued_pkt_batch batch_in =
-    { { 0, 0, 0, 0 },
-      { 0, 0, 0, 0 },
-      { 0, 0, 0, 0 },
-      { 0, 0, 0, 0 },
-      { 0, 0, 0, 0 },
-      { 0, 0, 0, 0 },
-      { 0, 0, 0, 0 },
-      { 0, 0, 0, 0 } };
-
 /* Shared with issue DMA */
+/* XXX the compl_refl_in xfers are accessed via #defined address
+ * this avoids register live range and allocation problems */
+__xread unsigned int nfd_in_data_compl_refl_in = 0;
+__xread unsigned int nfd_in_jumbo_compl_refl_in = 0;
 __remote volatile __xread unsigned int nfd_in_data_served_refl_in;
 __remote volatile SIGNAL nfd_in_data_served_refl_sig;
 
@@ -255,6 +249,7 @@ do {                                                                    \
 
 
 /* Registers to store reset state */
+__xread unsigned int notify_reset_state_xfer = 0;
 __shared __gpr unsigned int notify_reset_state_gpr = 0;
 
 
@@ -340,14 +335,30 @@ lso_msg_copy(__gpr struct nfd_in_lso_desc *lso_pkt, unsigned int xnum)
 
 
 /**
+ * Assign addresses for "visible" transfer registers
+ */
+void
+notify_setup_visible(void)
+{
+    __assign_relative_register(&notify_reset_state_xfer,
+                               NFD_IN_NOTIFY_RESET_RD);
+    __assign_relative_register(&nfd_in_data_compl_refl_in,
+                               NFD_IN_NOTIFY_DATA_RD);
+    __assign_relative_register(&nfd_in_jumbo_compl_refl_in,
+                               NFD_IN_NOTIFY_JUMBO_RD);
+
+    __implicit_write(&notify_reset_state_xfer);
+    __implicit_write(&nfd_in_data_compl_refl_in);
+    __implicit_write(&nfd_in_jumbo_compl_refl_in);
+}
+
+
+/**
  * Perform shared configuration for notify
  */
 void
 notify_setup_shared()
 {
-
-    __implicit_read(&batch_in);
-
 #ifdef NFD_IN_WQ_SHARED
     wq_num_base = NFD_RING_LINK(0, nfd_in, 0);
     wq_raddr = (unsigned long long) NFD_EMEM_SHARED(NFD_IN_WQ_SHARED) >> 8;
@@ -583,6 +594,7 @@ _notify(__gpr unsigned int *complete, __gpr unsigned int *served,
 
     unsigned int out_msg_sz = sizeof(struct nfd_in_pkt_desc);
 
+    __xread struct _issued_pkt_batch batch_in;
     struct _pkt_desc_batch batch_tmp;
     struct nfd_in_pkt_desc pkt_desc_tmp;
 
@@ -833,17 +845,6 @@ notify_manager_reorder()
 __intrinsic void
 distr_notify(int side)
 {
-    __xread unsigned int notify_reset_state_xfer;
-    __xread unsigned int nfd_in_data_compl_refl_in;
-    __xread unsigned int nfd_in_jumbo_compl_refl_in;
-
-    __assign_relative_register(&notify_reset_state_xfer,
-                               NFD_IN_NOTIFY_RESET_RD);
-    __assign_relative_register(&nfd_in_data_compl_refl_in,
-                               NFD_IN_NOTIFY_DATA_RD);
-    __assign_relative_register(&nfd_in_jumbo_compl_refl_in,
-                               NFD_IN_NOTIFY_JUMBO_RD);
-
     __implicit_read(&nfd_in_jumbo_compl_refl_in);
 
     /* Store reset state in absolute GPR */
@@ -897,6 +898,8 @@ int
 main(void)
 {
     /* Perform per ME initialisation  */
+    notify_setup_visible();
+
     if (ctx() == 0) {
         /*
          * This function will start ordering for CTX0,
