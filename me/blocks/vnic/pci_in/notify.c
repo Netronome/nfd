@@ -851,6 +851,10 @@ distr_notify(int side)
     copy_absolute_xfer(&notify_reset_state_gpr, NFD_IN_NOTIFY_RESET_RD);
     __implicit_read(&notify_reset_state_xfer);
 
+    /* XXX prevent NFCC from removing the above copy as the shared
+     * notify_reset_state_gpr is not used in this context */
+    __implicit_read(&notify_reset_state_gpr);
+
     if (side == 0) {
 #ifdef NFD_IN_HAS_ISSUE0
         data_dma_seq_compl0 = nfd_in_data_compl_refl_in;
