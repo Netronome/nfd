@@ -156,6 +156,7 @@ main(void)
             wait_sig_mask(distr_wait_msk);
             distr_wait_msk = 0;
             __implicit_read(&distr0);
+            __implicit_read(&distr1);
         }
     } else {
         /* Worker main loop */

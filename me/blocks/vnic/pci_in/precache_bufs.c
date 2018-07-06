@@ -510,7 +510,6 @@ precache_bufs_jumbo_use(__gpr unsigned int *buf_addr)
          * Allow CTX0 to execute precache_bufs_jumbo() again to
          * hopefully refill the jumbo_store. */
         signal_ctx(0, __signal_number(&nfd_in_jumbo_event_sig));
-        __implicit_write(&nfd_in_jumbo_event_sig);
 
         /* Set the return buffer to a distinctive value to help identify
          * incorrect use of the return data. */
