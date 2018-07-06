@@ -601,7 +601,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
                 NFD_IN_DATA_EVENT_FILTER,
                 NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
                 NFD_IN_DATA_EVENT_FILTER,
-                sig_done, data_sig);
+                data_wr, sig_done, data_sig);
             *wait_msk |= __signals(data_sig);
         }
 
@@ -624,7 +624,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
                 NFD_IN_JUMBO_EVENT_FILTER,
                 NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
                 NFD_IN_JUMBO_EVENT_FILTER,
-                sig_done, jumbo_sig);
+                jumbo_wr, sig_done, jumbo_sig);
             *wait_msk |= __signals(jumbo_sig);
         }
     } else {
@@ -669,7 +669,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
                 NFD_IN_DATA_EVENT_FILTER,
                 NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
                 NFD_IN_DATA_EVENT_FILTER,
-                sig_done, data_sig);
+                data_wr, sig_done, data_sig);
             *wait_msk |= __signals(data_sig);
         }
 
@@ -687,7 +687,7 @@ distr_precache_bufs(__xwrite unsigned int *data_wr,
                 NFD_IN_JUMBO_EVENT_FILTER,
                 NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
                 NFD_IN_JUMBO_EVENT_FILTER,
-                sig_done, jumbo_sig);
+                jumbo_wr, sig_done, jumbo_sig);
             *wait_msk |= __signals(jumbo_sig);
         }
     }
