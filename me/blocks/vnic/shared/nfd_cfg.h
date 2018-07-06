@@ -131,6 +131,12 @@
 #define NFP_PCIEX_COMPCFG_CNTRLR1                            0x00100064
 #define NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_HOLD_IF_DISABLED_shf  6
 #define NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf  4
+#define NFP_PCIEX_COMPCFG_CNTRLR2                            0x00100068
+#define NFP_PCIEX_COMPCFG_CNTRLR2_msk                        0x21c
+#define NFP_PCIEX_COMPCFG_CNTRLR2_CORR(x)                    (1 & ((x) >> 2))
+#define NFP_PCIEX_COMPCFG_CNTRLR2_NON_FATAL(x)               (1 & ((x) >> 3))
+#define NFP_PCIEX_COMPCFG_CNTRLR2_FATAL(x)                   (1 & ((x) >> 4))
+#define NFP_PCIEX_COMPCFG_CNTRLR2_LOCAL(x)                   (1 & ((x) >> 9))
 #define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c
 #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk    0x3f
 #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf    16

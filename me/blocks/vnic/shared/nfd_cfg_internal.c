@@ -195,6 +195,13 @@ NFD_CFG_RINGS_INIT(3);
 #define NFD_NET_APP_ID_DECLARE(_isl) NFD_NET_APP_ID_DECLARE_IND(_isl)
 
 
+_NFP_CHIPRES_ASM(.alloc_mem _abi_pcie_error_cnt emem global 64 64)
+#define NFD_CFG_PCIE_ERROR_ISL_SZ       16
+#define NFD_CFG_PCIE_ERROR_CORR         0x0
+#define NFD_CFG_PCIE_ERROR_NON_FATAL    0x4
+#define NFD_CFG_PCIE_ERROR_FATAL        0x8
+#define NFD_CFG_PCIE_ERROR_LOCAL        0xc
+
 
 /* /\* XXX temp defines that loosely match the BSP pcie_monitor_api.h *\/ */
 /* #define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c */
@@ -791,6 +798,7 @@ nfd_cfg_check_flr_ap()
         __xread unsigned int vf_csr[2];
         unsigned int vendor_msg;
         unsigned int state_change_ack;
+        unsigned int pcie_error_ack;
         unsigned int int_mgr_status;
         int vf;
 
@@ -815,6 +823,26 @@ nfd_cfg_check_flr_ap()
         if (state_change_ack) {
             xpb_write(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT,
                       state_change_ack);
+        }
+
+        /* Count and acknowledge PCIe errors */
+        pcie_error_ack = xpb_read(NFP_PCIEX_COMPCFG_CNTRLR2);
+        pcie_error_ack &= NFP_PCIEX_COMPCFG_CNTRLR2_msk;
+        if (pcie_error_ack) {
+            __emem char *error_cnt;
+
+            error_cnt = (__emem char *) _link_sym(_abi_pcie_error_cnt);
+            error_cnt += PCIE_ISL * NFD_CFG_PCIE_ERROR_ISL_SZ;
+            mem_add32_imm(NFP_PCIEX_COMPCFG_CNTRLR2_CORR(pcie_error_ack),
+                          error_cnt + NFD_CFG_PCIE_ERROR_CORR);
+            mem_add32_imm(NFP_PCIEX_COMPCFG_CNTRLR2_NON_FATAL(pcie_error_ack),
+                          error_cnt + NFD_CFG_PCIE_ERROR_NON_FATAL);
+            mem_add32_imm(NFP_PCIEX_COMPCFG_CNTRLR2_FATAL(pcie_error_ack),
+                          error_cnt + NFD_CFG_PCIE_ERROR_FATAL);
+            mem_add32_imm(NFP_PCIEX_COMPCFG_CNTRLR2_LOCAL(pcie_error_ack),
+                          error_cnt + NFD_CFG_PCIE_ERROR_LOCAL);
+
+            xpb_write(NFP_PCIEX_COMPCFG_CNTRLR2, pcie_error_ack);
         }
 
         /* Recheck InterruptManager.Status  */
