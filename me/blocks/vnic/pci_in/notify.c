@@ -492,6 +492,20 @@ do {                                                                         \
                                                                              \
                 copy_absolute_xfer(&jumbo_compl_seq, jumbo_compl_xnum);      \
                 seqn_chk = lso_pkt.jumbo_seq - jumbo_compl_seq;              \
+                                                                             \
+                /* XXX we can also check for LSO DMA completions */          \
+                /* by watching the data_dma_seq_compl, because they */       \
+                /* both use the low priority DMA queue. */                   \
+                copy_absolute_xfer(complete, data_compl_xnum);               \
+                num_avail = *complete - *served;                             \
+                if (num_avail > NFD_IN_MAX_BATCH_SZ) {                       \
+                    /* There is at least one unserviced batch */             \
+                    /* This guarantees that a DMA completed in our */        \
+                    /* queue after the DMA we're waiting on. */              \
+                    /* It's a worst case, because the 8x code in notify */   \
+                    /* advances *served before this point */                 \
+                    break;                                                   \
+                }                                                            \
             }                                                                \
                                                                              \
             /* We can carry on processing the descriptor */                  \
