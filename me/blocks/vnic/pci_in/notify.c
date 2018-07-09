@@ -596,7 +596,8 @@ do {                                                                         \
  * we must still participate in the "msg_order_sig" ordering.
  */
 __intrinsic void
-_notify(__gpr unsigned int *complete, __gpr unsigned int *served,
+_notify(__shared __gpr unsigned int *complete,
+        __shared __gpr unsigned int *served,
         int input_ring, unsigned int data_compl_xnum,
         unsigned int jumbo_compl_xnum, unsigned int lso_xnum)
 {
