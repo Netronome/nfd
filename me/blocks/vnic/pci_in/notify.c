@@ -428,7 +428,7 @@ do {} while (0)
 #endif
 
 
-#define _NOTIFY_PROC(_pkt, _lso_xfer_num)                                    \
+#define _NOTIFY_PROC(_pkt)                                                   \
 do {                                                                         \
     NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                               \
                          NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_DESC);             \
@@ -468,18 +468,18 @@ do {                                                                         \
          /* finished packet with LSO to handle */                            \
         for (;;) {                                                           \
             /* read packet from nfd_in_issued_lso_ring */                    \
-            lso_ring_get(lso_ring_num, lso_ring_addr, _lso_xfer_num,         \
+            lso_ring_get(lso_ring_num, lso_ring_addr, lso_xnum,              \
                          sizeof(lso_pkt), sig_done, &lso_sig_pair);          \
             wait_sig_mask(lso_wait_msk);                                     \
             __implicit_read(&lso_sig_pair.even);                             \
             __implicit_read(&wq_sig##_pkt);                                  \
             while (signal_test(&lso_sig_pair.odd)) {                         \
                 /* Ring get failed, retry */                                 \
-                lso_ring_get(lso_ring_num, lso_ring_addr, _lso_xfer_num,     \
+                lso_ring_get(lso_ring_num, lso_ring_addr, lso_xnum,          \
                              sizeof(lso_pkt), sig_done, &lso_sig_pair);      \
                 wait_for_all_single(&lso_sig_pair.even);                     \
             }                                                                \
-            lso_msg_copy(&lso_pkt, _lso_xfer_num);                           \
+            lso_msg_copy(&lso_pkt, lso_xnum);                                \
                                                                              \
             NFD_IN_LSO_CNTR_INCR(nfd_in_lso_cntr_addr,                       \
                     NFD_IN_LSO_CNTR_T_NOTIFY_ALL_PKT_FM_LSO_RING);           \
@@ -676,14 +676,14 @@ _notify(__shared __gpr unsigned int *complete,
         pkt_desc_tmp.seq_num = 0;
 #endif
 
-        _NOTIFY_PROC(0, lso_xnum);
-        _NOTIFY_PROC(1, lso_xnum);
-        _NOTIFY_PROC(2, lso_xnum);
-        _NOTIFY_PROC(3, lso_xnum);
-        _NOTIFY_PROC(4, lso_xnum);
-        _NOTIFY_PROC(5, lso_xnum);
-        _NOTIFY_PROC(6, lso_xnum);
-        _NOTIFY_PROC(7, lso_xnum);
+        _NOTIFY_PROC(0);
+        _NOTIFY_PROC(1);
+        _NOTIFY_PROC(2);
+        _NOTIFY_PROC(3);
+        _NOTIFY_PROC(4);
+        _NOTIFY_PROC(5);
+        _NOTIFY_PROC(6);
+        _NOTIFY_PROC(7);
 
         /* Allow the next context taking a message to go.
          * We have finished _NOTIFY_PROC() where we need to
@@ -737,7 +737,7 @@ _notify(__shared __gpr unsigned int *complete,
         for (;;) {
             /* Count the message and service it */
             partial_served++;
-            _NOTIFY_PROC(0, lso_xnum);
+            _NOTIFY_PROC(0);
 
             /* Wait for new messages in ctm ring.
              * Note: other contexts should not fetch new messages or update
@@ -785,7 +785,7 @@ _notify(__shared __gpr unsigned int *complete,
                              &msg_order_sig);
 
         /* Process the final descriptor from the batch */
-        _NOTIFY_PROC(0, lso_xnum);
+        _NOTIFY_PROC(0);
 
         /* Allow the next context taking a message to go.
          * We have finished _NOTIFY_PROC() where we need to
