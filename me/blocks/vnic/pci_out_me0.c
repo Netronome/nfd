@@ -30,10 +30,11 @@
 #include <vnic/shared/nfd_cfg_internal.c>
 #include <vnic/shared/nfd_rst_state.h>
 
-NFD_CFG_DECLARE(nfd_cfg_sig_pci_out, NFD_CFG_SIG_NEXT_ME);
 NFD_INIT_DONE_DECLARE;
 
+SIGNAL cfg_msg_sig;
 struct nfd_cfg_msg cfg_msg;
+__xread struct nfd_cfg_msg cfg_msg_rd;
 
 
 #ifdef NFD_USER_CTX_DECL
@@ -135,7 +136,9 @@ main(void)
     if (ctx() == 0) {
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_pci_out, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(PCIE_ISL, 2),
+                             &cfg_msg_rd, &cfg_msg_sig);
+
 
         /* Must run before PCI.OUT host interaction, and before stage_batch */
         cache_desc_setup_shared();
@@ -176,8 +179,8 @@ main(void)
             /* Either check for a message, or perform one tick of processing
              * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
-                nfd_cfg_check_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_out,
-                                      NFD_CFG_RING_NUM(PCIE_ISL, 2));
+                nfd_cfg_check_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(PCIE_ISL, 2),
+                                      &cfg_msg_rd, &cfg_msg_sig);
 
                 if (cfg_msg.msg_valid) {
                     if (cfg_msg.pci_reset) {
@@ -204,9 +207,7 @@ main(void)
                         cache_desc_compl_rst();
                     }
 
-                    nfd_cfg_complete_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_out,
-                                             &NFD_CFG_SIG_NEXT_ME,
-                                             NFD_CFG_NEXT_ME,
+                    nfd_cfg_complete_cfg_msg(&cfg_msg,
                                              NFD_CFG_RING_NUM(PCIE_ISL, 3));
                 }
             }

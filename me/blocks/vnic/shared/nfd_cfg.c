@@ -34,11 +34,18 @@
 
 
 __intrinsic void
-nfd_cfg_init_cfg_msg(SIGNAL *cfg_sig, struct nfd_cfg_msg *cfg_msg)
+nfd_cfg_init_cfg_msg(struct nfd_cfg_msg *cfg_msg, unsigned int rnum,
+                      __xread struct nfd_cfg_msg *cfg_msg_rd, SIGNAL *cfg_sig)
 {
-    __implicit_write(cfg_sig);
+    mem_ring_addr_t ring_addr;
 
+    /* Zero the current message */
     cfg_msg->__raw = 0;
+
+    /* Prepare to receive a message */
+    ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
+    __mem_workq_add_thread(rnum, ring_addr, cfg_msg_rd, sizeof cfg_msg_rd,
+                           sizeof cfg_msg_rd, sig_done, cfg_sig);
 }
 
 __intrinsic void
@@ -55,33 +62,21 @@ send_interthread_sig(unsigned int dst_me, unsigned int ctx, unsigned int sig_no)
     __asm ct[interthread_signal, --, addr, 0, --];
 }
 
+
 __intrinsic void
-nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
-                      unsigned int rnum)
+nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg, unsigned int rnum,
+                      __xread struct nfd_cfg_msg *cfg_msg_rd, SIGNAL *cfg_sig)
 {
-    /* XXX should this method read the vid config BAR? */
     if (signal_test(cfg_sig)) {
-        int ret;
-        __xread struct nfd_cfg_msg cfg_msg_rd;
         mem_ring_addr_t ring_addr;
 
-        __implicit_write(cfg_sig);
+        /* Copy message we received into GPRs */
+        *cfg_msg = *cfg_msg_rd;
 
-        /* Only check for a new cfg_msg in the ring if we don't have
-         * a message to process currently.  The fact that we have cleared
-         * the signal is okay, because we will continue to poll the ring
-         * as we complete messages. */
-        if (!cfg_msg->msg_valid) {
-
-            /* We aren't currently processing a message, so we can
-             * fetch a new one. */
-            ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
-            ret = mem_ring_get(rnum, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd);
-
-            if (ret == 0) {
-                *cfg_msg = cfg_msg_rd;
-            }
-        }
+        /* Prepare to receive another message */
+        ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
+        __mem_workq_add_thread(rnum, ring_addr, cfg_msg_rd, sizeof cfg_msg_rd,
+                               sizeof cfg_msg_rd, sig_done, cfg_sig);
     }
 }
 
@@ -288,23 +283,15 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
                                  NFD_CFG_FLR_AP_SIG_NO);
         }
     }
-
-    /* Set cfg_sig so that "nfd_cfg_check_cfg_msg()" runs again */
-    signal_ctx(0, __signal_number(cfg_sig));
-    __implicit_read(cfg_sig);
-    __implicit_write(cfg_sig);
 }
 
 
 __intrinsic void
-nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
-                         __remote SIGNAL *cfg_sig_remote,
-                         unsigned int next_me, unsigned int rnum_out)
+nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg, unsigned int rnum)
 {
     struct nfd_cfg_msg cfg_msg_tmp;
     __xwrite struct nfd_cfg_msg cfg_msg_wr;
     mem_ring_addr_t ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
-    SIGNAL journal_sig;
 
     /* Clear the internal state fields and set msg_valid before sending  */
     cfg_msg_tmp.__raw = 0;
@@ -314,17 +301,8 @@ nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
     cfg_msg_tmp.vid = cfg_msg->vid;
     cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
-    /* Journal is guaranteed to not overflow by design (it is larger than
+    /* Add work is guaranteed to not overflow by design (it is larger than
      * the number of possible vNICs). */
-    __mem_ring_journal(rnum_out, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr,
-                       sizeof cfg_msg_wr, sig_done, &journal_sig);
-    wait_for_all(&journal_sig);
-
-    /* Signal the next ME in the message chain */
-    send_interthread_sig(next_me, 0,
-                         __signal_number(cfg_sig_remote, next_me));
-
-    /* Set cfg_sig so that "nfd_cfg_check_cfg_msg()" runs again */
-    signal_ctx(0, __signal_number(cfg_sig));
+    mem_workq_add_work(rnum, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr);
 }
 

@@ -58,10 +58,6 @@
 #define NFD_RSS_HASH_FUNC NFP_NET_CFG_RSS_TOEPLITZ
 #endif /* NFD_RSS_HASH_FUNC */
 
-#define NFD_CFG_DECLARE(_sig, _next_sig)  \
-    __visible SIGNAL _sig;                \
-    __remote SIGNAL _next_sig;
-
 
 #define NFD_CFG_NEXT_ME_IND1(_me_str) __nfp_idstr2meid(#_me_str)
 #define NFD_CFG_NEXT_ME_IND0(_isl, _me)         \
@@ -263,10 +259,6 @@ static __shared __gpr unsigned int flr_pend_vf[2] = {0, 0};
 static SIGNAL flr_ap_sig;
 static __xread unsigned int flr_ap_xfer;
 
-
-#ifdef NFD_CFG_SIG_NEXT_ME
-__remote SIGNAL NFD_CFG_SIG_NEXT_ME;
-#endif
 
 NFD_CFG_BASE_DECLARE(PCIE_ISL);
 /* XXX add the equivalent of nfd_cfg_pf_bars.uc in microC here. */
@@ -922,15 +914,10 @@ nfd_cfg_next_vnic()
 /**
  * Add a cfg_msg to the start of the ring pipeline
  * @param cfg_msg           message to add
- * @param cfg_sig_remote    remote signal to set on success
- * @param next_me           ME to signal on success
  * @param rnum              ring number to use for the ring journal
- * @param rbase             base address of the ring to use
  */
 __intrinsic void
-nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
-                       __remote SIGNAL *cfg_sig_remote,
-                       unsigned int next_me, unsigned int rnum)
+nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg, unsigned int rnum)
 {
     struct nfd_cfg_msg cfg_msg_tmp;
     __xwrite struct nfd_cfg_msg cfg_msg_wr;
@@ -944,10 +931,7 @@ nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
     cfg_msg_tmp.vid = cfg_msg->vid;
     cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
 
-    mem_ring_journal(rnum, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr);
-
-    send_interthread_sig(next_me, 0,
-                         __signal_number(cfg_sig_remote, next_me));
+    mem_workq_add_work(rnum, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr);
 }
 
 

@@ -479,31 +479,49 @@ struct nfd_cfg_msg {
 
 /**
  * Perform shared configuration on "cfg_msg" and "cfg_sig".
- * @param cfg_sig       signal set to indicate that a message is ready
  * @param cfg_msg       current configuration message and state
+ * @param rnum          ring number to fetch messages from
+ * @param cfg_msg_rd    read xfer for new messages
+ * @param cfg_sig       signal set to indicate that a message is ready
  */
-__intrinsic void nfd_cfg_init_cfg_msg(SIGNAL *cfg_sig,
-                                      struct nfd_cfg_msg *cfg_msg);
+__intrinsic void nfd_cfg_init_cfg_msg(struct nfd_cfg_msg *cfg_msg,
+                                      unsigned int rnum,
+                                      __xread struct nfd_cfg_msg *cfg_msg_rd,
+                                      SIGNAL *cfg_sig);
+/**
+ * Convenience macro to init cfg_msg from the app ME master without rnum
+ * @param _pci              PCIe island
+ * @param _msg              message struct to fill
+ * @param _xfer             read xfer for new messages
+ * @param _sig              signal to check for messages
+ */
+#define nfd_cfg_master_init_cfg_msg(_pci, _msg, _xfer, _sig)            \
+    nfd_cfg_init_cfg_msg((_msg), NFD_CFG_RING_NUM(_pci, 5), (_xfer), (_sig))
+
 
 
 /**
  * Check for a cfg_msg  on a NFD ME
- * @param cfg_msg           message struct to fill
- * @param cfg_sig           signal to check for messages
- * @param rnum              ring number to fetch messages from
+ * @param cfg_msg       message struct to fill
+ * @param rnum          ring number to fetch messages from
+ * @param cfg_msg_rd    read xfer for new messages
+ * @param cfg_sig       signal to check for messages
  */
 __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
-                                       SIGNAL *cfg_sig,
-                                       unsigned int rnum);
+                                       unsigned int rnum,
+                                       __xread struct nfd_cfg_msg *cfg_msg_rd,
+                                       SIGNAL *cfg_sig);
+
 
 /**
  * Convenience macro to check cfg_msg from the app ME master without rnum
- * @param _msg              message struct to fill
- * @param _sig              signal to check for messages
  * @param _pci              PCIe island
+ * @param _msg              message struct to fill
+ * @param _xfer             read xfer for new messages
+ * @param _sig              signal to check for messages
  */
-#define nfd_cfg_master_chk_cfg_msg(_msg, _sig, _pci)                    \
-    nfd_cfg_check_cfg_msg((_msg), (_sig), NFD_CFG_RING_NUM(_pci, 5))
+#define nfd_cfg_master_chk_cfg_msg(_pci, _msg, _xfer, _sig)             \
+    nfd_cfg_check_cfg_msg((_msg), NFD_CFG_RING_NUM(_pci, 5), (_xfer), (_sig))
 
 
 /**
@@ -512,10 +530,6 @@ __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
  * @param cfg_msg       message listing the queue that has been configured
  * @param isl_base      start address of the CFG BAR for this PCIe island
  * @param cfg_sig       signal to trigger a check for new messages
- *
- * As this function completes, it sets "cfg_sig" to ensure that
- * "nfd_cfg_check_cfg_msg()" checks for any outstanding configuration
- * messages.
  */
 __intrinsic void nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
                                               struct nfd_cfg_msg *cfg_msg,
@@ -523,19 +537,12 @@ __intrinsic void nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
                                               SIGNAL *cfg_sig);
 
 /**
- * Pass this message to the next stage, and flag to check for new msg
+ * Pass this message to the next stage
  * @param cfg_msg           completed message
- * @param cfg_sig           signal for this ME to check for new message
- * @param cfg_sig_remote    signal to set for next recipient
- * @param next_me           ME to signal
- * @param rnum_out          output ring number
+ * @param rnum              output ring number
  */
 __intrinsic void nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
-                                          SIGNAL *cfg_sig,
-                                          __remote SIGNAL *cfg_sig_remote,
-                                          unsigned int next_me,
-                                          unsigned int rnum_out);
-
+                                          unsigned int rnum);
 
 #endif /* __NFP_LANG_MICROC */
 

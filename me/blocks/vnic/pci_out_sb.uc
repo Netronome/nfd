@@ -389,7 +389,23 @@
 /**
  * Process reconfiguation messages.
  */
-#macro process_reconfig()
+#macro prep_reconfig(io_xfer, io_sig)
+.begin
+    .reg ring_addr_hi
+    .reg ring_in_addr_lo
+
+    move(ring_addr_hi, (EMEM_ADDR(NFD_CFG_RING_EMEM) >> 8))
+    move(ring_in_addr_lo, nfd_cfg_ring_num/**/PCIE_ISL/**/3)
+
+    mem[qadd_thread, io_xfer[0], ring_addr_hi, <<8, ring_in_addr_lo, 1], sig_done[io_sig]
+
+.end
+#endm
+
+/**
+ * Process reconfiguation messages.
+ */
+#macro process_reconfig(io_xfer, io_sig)
 .begin
 
     .reg ring_addr_hi
@@ -397,40 +413,22 @@
     .reg ring_out_addr_lo
     .reg vid
 
-    .reg $cmsg[1]
-    .xfer_order $cmsg
 
-    .sig get_sig
     .sig put_sig
 
     move(ring_addr_hi, (EMEM_ADDR(NFD_CFG_RING_EMEM) >> 8))
     move(ring_in_addr_lo, nfd_cfg_ring_num/**/PCIE_ISL/**/3)
     move(ring_out_addr_lo, nfd_cfg_ring_num/**/PCIE_ISL/**/4)
 
-    .while (1)
+    // Extract the queue ID that is going up or down
+    wsm_extract(vid, io_xfer, NFD_CFG_MSG_VID)
 
-        .io_completed get_sig
-        mem[get, $cmsg[0], ring_addr_hi, <<8, ring_in_addr_lo, 1], sig_done[get_sig]
-        ctx_arb[get_sig[0]]
+    _check_vnic_state(vid)
 
-        .if (SIGNAL(get_sig[1]))
-        .endif
-
-        .if (BIT($cmsg[0], NFD_CFG_MSG_VALID_bit) == 0)
-            .break
-        .endif
-
-        // Extract the queue ID that is going up or down
-        wsm_extract(vid, $cmsg, NFD_CFG_MSG_VID)
-
-        _check_vnic_state(vid)
-
-        // Propagate the message down the line
-        move($cmsg[0], $cmsg[0])
-        mem[journal, $cmsg[0], ring_addr_hi, <<8, ring_out_addr_lo, 1], ctx_swap[put_sig]
-        signal_next_cfg_me()
-
-    .endw
+    // Propagate the message down the line
+    move(io_xfer[0], io_xfer[0])
+    mem[qadd_work, io_xfer[0], ring_addr_hi, <<8, ring_out_addr_lo, 1], ctx_swap[put_sig]
+    mem[qadd_thread, io_xfer[0], ring_addr_hi, <<8, ring_in_addr_lo, 1], sig_done[io_sig]
 
 .end
 #endm
@@ -575,7 +573,9 @@ copy_loop#:
     .sig volatile visible _nfd_credit_sig_sb
     .addr _nfd_credit_sig_sb PCI_OUT_SB_WQ_CREDIT_SIG_NUM
 
-    .sig volatile visible _nfd_cfg_sig_sb
+    .reg volatile $cmsg[1]
+    .xfer_order $cmsg
+    .sig volatile _nfd_cfg_sig_sb
     .addr _nfd_cfg_sig_sb PCI_OUT_SB_CFG_SIG_NUM
 
     .sig volatile state_alarm_sig
@@ -594,6 +594,8 @@ copy_loop#:
     signal_ctx(STAGE_BATCH_FIRST_WORKER, ORDER_SIG_NUM)
 
     set_alarm(state_alarm_sig, 16384)
+
+    prep_reconfig($cmsg, _nfd_cfg_sig_sb)
 
     .while (1)
 
@@ -614,7 +616,7 @@ copy_loop#:
             alu[@nconfigs, @nconfigs, +, 1]
             local_csr_wr[MAILBOX0, @nconfigs]
 
-            process_reconfig()
+            process_reconfig($cmsg, _nfd_cfg_sig_sb)
             .continue
 
         .endif

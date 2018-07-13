@@ -49,11 +49,14 @@
 DBG_JOURNAL_DECLARE(dbg_cfg_msg_jrnl);
 
 
+
+struct nfd_cfg_msg cfg_msg;
+__xread unsigned int cfg_bar_data[6];
+
+
 #ifdef NFD_PCIE0_EMEM
-__visible SIGNAL nfd_cfg_sig_svc_me0;
-__remote SIGNAL NFD_CFG_SIG_NEXT_ME0;
-__xread unsigned int cfg_bar_data0[6];
-struct nfd_cfg_msg cfg_msg0;
+SIGNAL nfd_cfg_sig_svc_me0;
+__xread struct nfd_cfg_msg cfg_msg_rd0;
 
 NFD_CFG_BASE_DECLARE(0);
 NFD_VF_CFG_DECLARE(0);
@@ -66,10 +69,8 @@ PCIE_C2P_BAR_ALLOC_OFF(nfd_scv_qmon_bar0, me, 0, PCIE_CPP2PCIE_QMON, 1);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
-__visible SIGNAL nfd_cfg_sig_svc_me1;
-__remote SIGNAL NFD_CFG_SIG_NEXT_ME1;
-__xread unsigned int cfg_bar_data1[6];
-struct nfd_cfg_msg cfg_msg1;
+SIGNAL nfd_cfg_sig_svc_me1;
+__xread struct nfd_cfg_msg cfg_msg_rd1;
 
 NFD_CFG_BASE_DECLARE(1);
 NFD_VF_CFG_DECLARE(1);
@@ -82,10 +83,8 @@ PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar1, me, 1, PCIE_CPP2PCIE_QMON, 1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
-__visible SIGNAL nfd_cfg_sig_svc_me2;
-__remote SIGNAL NFD_CFG_SIG_NEXT_ME2;
-__xread unsigned int cfg_bar_data2[6];
-struct nfd_cfg_msg cfg_msg2;
+SIGNAL nfd_cfg_sig_svc_me2;
+__xread struct nfd_cfg_msg cfg_msg_rd2;
 
 NFD_CFG_BASE_DECLARE(2);
 NFD_VF_CFG_DECLARE(2);
@@ -98,10 +97,8 @@ PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar2, me, 2, PCIE_CPP2PCIE_QMON, 1);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
-__visible SIGNAL nfd_cfg_sig_svc_me3;
-__remote SIGNAL NFD_CFG_SIG_NEXT_ME3;
-__xread unsigned int cfg_bar_data3[6];
-struct nfd_cfg_msg cfg_msg3;
+SIGNAL nfd_cfg_sig_svc_me3;
+__xread struct nfd_cfg_msg cfg_msg_rd3;
 
 NFD_CFG_BASE_DECLARE(3);
 NFD_VF_CFG_DECLARE(3);
@@ -118,39 +115,39 @@ NFD_VF_CFG_MAX_VFS;
 
 #define CHECK_CFG_MSG(_isl)                                                 \
 do {                                                                        \
-    nfd_cfg_check_cfg_msg(&cfg_msg##_isl, &nfd_cfg_sig_svc_me##_isl,        \
-                          NFD_CFG_RING_NUM(_isl, 4));                       \
-    if (cfg_msg##_isl.msg_valid) {                                          \
+    nfd_cfg_check_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(_isl, 4),              \
+                          &cfg_msg_rd##_isl, &nfd_cfg_sig_svc_me##_isl);    \
+    if (cfg_msg.msg_valid) {                                                \
         ncfg++;                                                             \
-        mem_read64(cfg_bar_data##_isl,                                      \
-                   NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),                \
-                   sizeof cfg_bar_data##_isl);                              \
+        mem_read64(cfg_bar_data,                                            \
+                   NFD_CFG_BAR_ISL(_isl, cfg_msg.vid),                      \
+                   sizeof cfg_bar_data);                                    \
                                                                             \
         /* TEMP journal cfg messages */                                     \
         JDBG(dbg_cfg_msg_jrnl, (0x40 | _isl));                              \
-        JDBG(dbg_cfg_msg_jrnl, cfg_msg##_isl.__raw);                        \
-        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data##_isl[0]);                      \
-        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data##_isl[1]);                      \
+        JDBG(dbg_cfg_msg_jrnl, cfg_msg.__raw);                              \
+        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data[0]);                            \
+        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data[1]);                            \
                                                                             \
-        msix_qmon_reconfig(_isl, cfg_msg##_isl.vid,                         \
-                           NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid),        \
-                           cfg_bar_data##_isl);                             \
+        msix_qmon_reconfig(_isl, cfg_msg.vid,                               \
+                           NFD_CFG_BAR_ISL(_isl, cfg_msg.vid),              \
+                           cfg_bar_data);                                   \
                                                                             \
         /* Handle FLRs */                                                   \
-        if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_RESET) {             \
+        if (cfg_bar_data[1] & NFP_NET_CFG_UPDATE_RESET) {                   \
                                                                             \
             /* NB: This function writes ~8K of data */                      \
-            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid));      \
-            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vid,                 \
+            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg.vid));            \
+            nfd_flr_init_cfg_queue(_isl, cfg_msg.vid,                       \
                                    PCIE_QC_EVENT_NOT_EMPTY);                \
                                                                             \
-            if (NFD_VID_IS_PF(cfg_msg##_isl.vid)) {                         \
-                nfd_flr_init_pf_cfg_bar(_isl, cfg_msg##_isl.vid);           \
-            } else if (NFD_VID_IS_VF(cfg_msg##_isl.vid)) {                  \
+            if (NFD_VID_IS_PF(cfg_msg.vid)) {                               \
+                nfd_flr_init_pf_cfg_bar(_isl, cfg_msg.vid);                 \
+            } else if (NFD_VID_IS_VF(cfg_msg.vid)) {                        \
                 nfd_flr_init_vf_cfg_bar(NFD_VF_CFG_BASE_LINK(_isl), _isl,   \
-                                        cfg_msg##_isl.vid);                 \
+                                        cfg_msg.vid);                       \
             } else {                                                        \
-                nfd_flr_init_ctrl_cfg_bar(_isl, cfg_msg##_isl.vid);         \
+                nfd_flr_init_ctrl_cfg_bar(_isl, cfg_msg.vid);               \
             }                                                               \
         }                                                                   \
                                                                             \
@@ -158,22 +155,22 @@ do {                                                                        \
         /* XXX For now this largely replicates the FLR handling code */     \
         /* In the future we can consider combining with FLR handling */     \
         /* if that continues to be the case */                              \
-        if (cfg_bar_data##_isl[1] & NFP_NET_CFG_UPDATE_PCI_RST) {           \
+        if (cfg_bar_data[1] & NFP_NET_CFG_UPDATE_PCI_RST) {                 \
             /* NB: This function writes ~8K of data */                      \
-            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg##_isl.vid));      \
-            nfd_flr_init_cfg_queue(_isl, cfg_msg##_isl.vid,                 \
+            nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg.vid));            \
+            nfd_flr_init_cfg_queue(_isl, cfg_msg.vid,                       \
                                    PCIE_QC_EVENT_NOT_EMPTY);                \
                                                                             \
-            if (NFD_VID_IS_PF(cfg_msg##_isl.vid)) {                         \
-                nfd_flr_init_pf_cfg_bar(_isl, cfg_msg##_isl.vid);           \
-            } else if (NFD_VID_IS_VF(cfg_msg##_isl.vid)) {                  \
+            if (NFD_VID_IS_PF(cfg_msg.vid)) {                               \
+                nfd_flr_init_pf_cfg_bar(_isl, cfg_msg.vid);                 \
+            } else if (NFD_VID_IS_VF(cfg_msg.vid)) {                        \
                 nfd_flr_init_vf_cfg_bar(NFD_VF_CFG_BASE_LINK(_isl), _isl,   \
-                                        cfg_msg##_isl.vid);                 \
+                                        cfg_msg.vid);                       \
             } else {                                                        \
-                nfd_flr_init_ctrl_cfg_bar(_isl, cfg_msg##_isl.vid);         \
+                nfd_flr_init_ctrl_cfg_bar(_isl, cfg_msg.vid);               \
             }                                                               \
                                                                             \
-            if (cfg_msg##_isl.vid == 0) {                                   \
+            if (cfg_msg.vid == 0) {                                         \
                 /* This is the start of PCIe island reset */                \
                 /* processing. */                                           \
                                                                             \
@@ -182,7 +179,7 @@ do {                                                                        \
                 nfd_flr_update_mstr_drop_if_disabled(_isl, 1);              \
             }                                                               \
                                                                             \
-            if (cfg_msg##_isl.vid == NFD_LAST_PF) {                         \
+            if (cfg_msg.vid == NFD_LAST_PF) {                               \
                 /* This is the end of PCIe island reset */                  \
                 /* processing. */                                           \
                 /* TODO implement! */                                       \
@@ -191,12 +188,8 @@ do {                                                                        \
                                                                             \
                                                                             \
         /* Complete the message */                                          \
-        cfg_msg##_isl.msg_valid = 0;                                        \
-        nfd_cfg_complete_cfg_msg(&cfg_msg##_isl,                            \
-                                 &nfd_cfg_sig_svc_me##_isl,                 \
-                                 &NFD_CFG_SIG_NEXT_ME##_isl,                \
-                                 NFD_CFG_NEXT_ME##_isl,                     \
-                                 NFD_CFG_RING_NUM(_isl, 5));                \
+        cfg_msg.msg_valid = 0;                                              \
+        nfd_cfg_complete_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(_isl, 5));      \
     }                                                                       \
 } while (0)
 
@@ -211,25 +204,29 @@ main(void)
         /* Initialisation */
 #ifdef NFD_PCIE0_EMEM
         MSIX_INIT_ISL(0);
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me0, &cfg_msg0);
+        nfd_cfg_init_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(0, 4), &cfg_msg_rd0,
+                             &nfd_cfg_sig_svc_me0);
         msix_qmon_init(0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
         MSIX_INIT_ISL(1);
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me1, &cfg_msg1);
+        nfd_cfg_init_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(1, 4), &cfg_msg_rd1,
+                             &nfd_cfg_sig_svc_me1);
         msix_qmon_init(1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
         MSIX_INIT_ISL(2);
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me2, &cfg_msg2);
+        nfd_cfg_init_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(2, 4), &cfg_msg_rd2,
+                             &nfd_cfg_sig_svc_me2);
         msix_qmon_init(2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
         MSIX_INIT_ISL(3);
-        nfd_cfg_init_cfg_msg(&nfd_cfg_sig_svc_me3, &cfg_msg3);
+        nfd_cfg_init_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(3, 4), &cfg_msg_rd3,
+                             &nfd_cfg_sig_svc_me3);
         msix_qmon_init(3);
 #endif
 

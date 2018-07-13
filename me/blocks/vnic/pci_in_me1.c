@@ -38,37 +38,29 @@
 
 #if PCI_IN_ISSUE_DMA_IDX == 0
 
-#define CFG_SIG_IN      nfd_cfg_sig_pci_in0
 #define CFG_RING_IN     0
 
 #ifdef NFD_IN_HAS_ISSUE1
 /* Route the configuration message via issue1 */
 #define CFG_RING_OUT    1
-#define CFG_NEXT_ME     3
-#define CFG_SIG_OUT     nfd_cfg_sig_pci_in1
 
 #else
 /* Route the configuration message to cache_desc */
 #define CFG_RING_OUT    2
-#define CFG_NEXT_ME     0
-#define CFG_SIG_OUT     nfd_cfg_sig_pci_out
 
 #endif
 
 #else   /* PCI_IN_ISSUE_DMA_IDX == 1 */
 /* Route the configuration message to cache_desc */
-#define CFG_SIG_IN      nfd_cfg_sig_pci_in1
 #define CFG_RING_IN     1
-
 #define CFG_RING_OUT    2
-#define CFG_NEXT_ME     0
-#define CFG_SIG_OUT     nfd_cfg_sig_pci_out
 #endif
 
-NFD_CFG_DECLARE(CFG_SIG_IN, CFG_SIG_OUT);
 NFD_INIT_DONE_DECLARE;
 
+SIGNAL cfg_msg_sig;
 struct nfd_cfg_msg cfg_msg;
+__xread struct nfd_cfg_msg cfg_msg_rd;
 
 
 int
@@ -78,7 +70,8 @@ main(void)
     if (ctx() == NFD_IN_ISSUE_MANAGER) {
         nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
 
-        nfd_cfg_init_cfg_msg(&CFG_SIG_IN, &cfg_msg);
+        nfd_cfg_init_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(PCIE_ISL, CFG_RING_IN),
+                             &cfg_msg_rd, &cfg_msg_sig);
 
         precache_bufs_setup();
 
@@ -117,8 +110,9 @@ main(void)
              * on the message each loop iteration */
             if (!cfg_msg.msg_valid) {
                 /* XXX extract ring number once and save aside */
-                nfd_cfg_check_cfg_msg(&cfg_msg, &CFG_SIG_IN,
-                                      NFD_CFG_RING_NUM(PCIE_ISL, CFG_RING_IN));
+                nfd_cfg_check_cfg_msg(&cfg_msg,
+                                      NFD_CFG_RING_NUM(PCIE_ISL, CFG_RING_IN),
+                                      &cfg_msg_rd, &cfg_msg_sig);
 
                 if (cfg_msg.msg_valid) {
                     if (cfg_msg.pci_reset) {
@@ -141,12 +135,8 @@ main(void)
                 issue_dma_vnic_setup((void *) &cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
-                    nfd_cfg_complete_cfg_msg(&cfg_msg, &CFG_SIG_IN,
-                                             &CFG_SIG_OUT,
-                                             NFD_CFG_NEXT_ME(PCIE_ISL,
-                                                             CFG_NEXT_ME),
-                                             NFD_CFG_RING_NUM(PCIE_ISL,
-                                                              CFG_RING_OUT));
+                    nfd_cfg_complete_cfg_msg(
+                        &cfg_msg, NFD_CFG_RING_NUM(PCIE_ISL, CFG_RING_OUT));
                 }
             }
 
