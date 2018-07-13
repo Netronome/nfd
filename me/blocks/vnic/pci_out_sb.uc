@@ -344,32 +344,6 @@
 #endm
 
 
-#define NFD_CFG_NEXT_CTX 0
-#macro signal_next_cfg_me()
-.begin
-
-    .reg meid
-    .reg addr
-    .reg tmp
-
-    .sig remote NFD_CFG_SIG_NEXT_ME
-
-    move(meid, (NFD_CFG_NEXT_ME))
-    move(tmp, 0x3F0)
-    alu[tmp, tmp, AND, meid]
-    alu[addr, --, B, tmp, <<20]
-    alu[tmp, 0xF, AND, meid]
-    alu[addr, addr, OR, tmp, <<9]
-    alu[addr, addr, OR, NFD_CFG_NEXT_CTX, <<6]
-    move(tmp, (&remote(NFD_CFG_SIG_NEXT_ME, NFD_CFG_NEXT_ME)))
-    alu[addr, addr, OR, tmp, <<2]
-
-    ct[interthread_signal, --, 0, addr]
-
-.end
-#endm
-
-
 #macro signal_ctx(in_ctx, in_signum)
 .begin
 

@@ -59,15 +59,6 @@
 #endif /* NFD_RSS_HASH_FUNC */
 
 
-#define NFD_CFG_NEXT_ME_IND1(_me_str) __nfp_idstr2meid(#_me_str)
-#define NFD_CFG_NEXT_ME_IND0(_isl, _me)         \
-    NFD_CFG_NEXT_ME_IND1(pcie##_isl##.me##_me)
-
-#ifndef NFD_CFG_NEXT_ME
-#define NFD_CFG_NEXT_ME(_isl, _me) NFD_CFG_NEXT_ME_IND0(_isl, _me)
-#endif
-
-
 _NFP_CHIPRES_ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
                  (NFD_MAX_ISL * NFD_CFG_NUM_RINGS * NFD_CFG_RING_SZ)  \
                  (NFD_MAX_ISL * NFD_CFG_NUM_RINGS * NFD_CFG_RING_SZ))
@@ -271,21 +262,6 @@ __xread unsigned int cfg_ring_addr[2] = {0, 0};
  * (2) char[] arrays with non-const index trigger the use of the
  * T-INDEX in NFCC, which is unnecessary in this case. */
 __xread unsigned int  cfg_ring_sizes = 0;
-
-/* XXX move to some sort of CT library */
-__intrinsic void
-send_interthread_sig(unsigned int dst_me, unsigned int ctx, unsigned int sig_no)
-{
-    unsigned int addr;
-
-    /* Generic address computation.
-     * Could be expensive if dst_me, or dst_xfer
-     * not compile time constants */
-    addr = ((dst_me & 0x3F0)<<20 | (dst_me & 15)<<9 | (ctx & 7) << 6 |
-            (sig_no & 15)<<2);
-
-    __asm ct[interthread_signal, --, addr, 0, --];
-}
 
 
 /**
