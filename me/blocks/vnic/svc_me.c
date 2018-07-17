@@ -45,8 +45,8 @@
  */
 
 
-/* TEMP add a ring to journal CFG messages */
-DBG_JOURNAL_DECLARE(dbg_cfg_msg_jrnl);
+/* Journal CFG messages that the service ME sees */
+DBG_JOURNAL_DECLARE(nfd_cfg_msg_jrnl);
 
 
 
@@ -123,11 +123,12 @@ do {                                                                        \
                    NFD_CFG_BAR_ISL(_isl, cfg_msg.vid),                      \
                    sizeof cfg_bar_data);                                    \
                                                                             \
-        /* TEMP journal cfg messages */                                     \
-        JDBG(dbg_cfg_msg_jrnl, (0x40 | _isl));                              \
-        JDBG(dbg_cfg_msg_jrnl, cfg_msg.__raw);                              \
-        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data[0]);                            \
-        JDBG(dbg_cfg_msg_jrnl, cfg_bar_data[1]);                            \
+        /* Journal cfg messages */                                          \
+        /* XXX Tag the message with "_isl + ring num" */                    \
+        JDBG(nfd_cfg_msg_jrnl, ((_isl) << 4) | 4);                          \
+        JDBG(nfd_cfg_msg_jrnl, cfg_msg.__raw);                              \
+        JDBG(nfd_cfg_msg_jrnl, cfg_bar_data[0]);                            \
+        JDBG(nfd_cfg_msg_jrnl, cfg_bar_data[1]);                            \
                                                                             \
         msix_qmon_reconfig(_isl, cfg_msg.vid,                               \
                            NFD_CFG_BAR_ISL(_isl, cfg_msg.vid),              \
