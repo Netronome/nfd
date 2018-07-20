@@ -118,6 +118,7 @@ __export __shared __ctm40 __align(NFD_IN_MAX_LSO_HDR_SZ) unsigned char
     lso_hdr_data[NFD_IN_MAX_LSO_HDR_SZ * NFD_IN_MAX_QUEUES];
 
 static __shared __gpr unsigned int lso_hdr_data_base;
+volatile SIGNAL lso_hdr_dma_sig;
 
 /* Sequence number declarations */
 __shared __gpr unsigned int gather_dma_seq_compl = 0;
@@ -906,7 +907,6 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
     unsigned int pcie_hi_word;                                               \
     unsigned int pcie_addr_lo;                                               \
     __gpr unsigned int buf_addr;                                             \
-    SIGNAL lso_hdr_dma_sig;                                                  \
     SIGNAL lso_hdr_enq_sig;                                                  \
     SIGNAL lso_enq_sig;                                                      \
     SIGNAL lso_hdr_sig;                                                      \
