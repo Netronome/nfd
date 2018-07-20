@@ -1169,6 +1169,9 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                                                                              \
         /* should be using pcie_dma_set_sig but we don't use the "cmd"*/     \
         /* needed for it.*/                                                  \
+        /* XXX make sure lso_hdr_dma_sig is clear before we use it */        \
+        /* signals used for DMAs might be left set after a PCIe reset */     \
+        while (signal_test(&lso_hdr_dma_sig));                               \
         mode =  ((__MEID & 0xF) << 13) | (((__MEID >> 4) & 0x3F) << 7);      \
         mode |= ((ctx() & 0x7) << 4);                                        \
         mode |= __signal_number(&lso_hdr_dma_sig);                           \
