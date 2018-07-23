@@ -1037,6 +1037,14 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                         or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }             \
         }                                                                    \
                                                                              \
+    } else if (issue_dma_queue_state_bit_set_test(NFD_IN_DMA_STATE_UP_shf)   \
+               == 0) {                                                       \
+        /* The queue has gone down before the descriptor was processed */    \
+        /* Flag the descriptor as invalid */                                 \
+        __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],        \
+                    NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],        \
+                    or, 1, <<NFD_IN_DMA_STATE_INVALID_shf] }                 \
+                                                                             \
     } else {                                                                 \
         unsigned int mss_msk = NFD_IN_DMA_STATE_LSO_MSS_msk;                 \
                                                                              \
