@@ -1175,6 +1175,7 @@ main#:
 
     one_packet_issue_dma#:
         br_signal[g_reset_sig, one_packet_handle_reset#]
+        br_signal[dma_sig0, one_packet_issue_dma#] // PCI rst may leave set
         br_!signal[work_sig0, unreached#]
         // fall through and process new work if reset signal clear
 
@@ -1207,6 +1208,7 @@ main#:
 
     state_e0n0_check_reset#:
         br_signal[g_reset_sig, state_e0n0_handle_reset#]
+        br_signal[dma_sig0, state_e0n0_check_reset#] // PCI rst may leave set
         br_!signal[work_sig0, unreached#]
         // fall through and process new work if reset signal clear
 
@@ -1254,6 +1256,7 @@ main#:
 
     state_e0n1_check_reset#:
         br_signal[g_reset_sig, state_e0n1_handle_reset#]
+        br_signal[dma_sig1, state_e0n1_check_reset#] // PCI rst may leave set
         br_!signal[work_sig1, unreached#]
         // fall through and process new work if reset signal clear
 
@@ -1301,6 +1304,7 @@ main#:
 
     state_e0n2_check_reset#:
         br_signal[g_reset_sig, state_e0n2_handle_reset#]
+        br_signal[dma_sig2, state_e0n2_check_reset#] // PCI rst may leave set
         br_!signal[work_sig2, unreached#]
         // fall through and process new work if reset signal clear
 
