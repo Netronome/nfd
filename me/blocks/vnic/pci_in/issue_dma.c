@@ -1114,7 +1114,7 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
         }                                                                    \
     }                                                                        \
                                                                              \
-    if (dma_len == 0) {                                                      \
+    if ((dma_len == 0) || NFD_RST_STATE_TEST_RST(PCIE_ISL)) {                \
         /* Flag the packet as invalid.  This will suppress header dma */     \
         /* and abort the descriptor messaging notify to ignore it too. */    \
         __asm { alu[NFD_IN_Q_STATE_PTR[NFD_IN_DMA_STATE_INVALID_wrd],        \
