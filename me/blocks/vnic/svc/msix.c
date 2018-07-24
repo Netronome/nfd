@@ -53,7 +53,7 @@ MSIX_DECLARE;
 
 
 /* Global variable to cache the current CPP 2 PCIe BAR */
-__gpr static unsigned int msix_cur_cpp2pci_addr = 0;
+volatile __shared __lmem unsigned int msix_cur_cpp2pci_addr[NFD_MAX_ISL] = {0};
 
 
 /**
@@ -137,9 +137,9 @@ msix_pf_send(unsigned int pcie_nr, unsigned int bar_nr,
 
     /* Check if we need to re-configure the CPP2PCI BAR */
     bar_addr = pcie_c2p_barcfg_val(addr_hi, addr_lo, 0);
-    if (bar_addr != msix_cur_cpp2pci_addr) {
+    if (bar_addr != msix_cur_cpp2pci_addr[pcie_nr]) {
         pcie_c2p_barcfg_set_expl(pcie_nr, bar_nr, bar_addr);
-        msix_cur_cpp2pci_addr = bar_addr;
+        msix_cur_cpp2pci_addr[pcie_nr] = bar_addr;
     }
 
     /* Send the MSI-X and automask.  We overlap the commands so that
@@ -236,9 +236,9 @@ msix_vf_send(unsigned int pcie_nr, unsigned int bar_nr, unsigned int vid,
     /* Check if we need to re-configure the CPP2PCI BAR */
     /* XXX vid is equal to VF num currently */
     bar_addr = pcie_c2p_barcfg_val(addr_hi, addr_lo, (vid + 64));
-    if (bar_addr != msix_cur_cpp2pci_addr) {
+    if (bar_addr != msix_cur_cpp2pci_addr[pcie_nr]) {
         pcie_c2p_barcfg_set_expl(pcie_nr, bar_nr, bar_addr);
-        msix_cur_cpp2pci_addr = bar_addr;
+        msix_cur_cpp2pci_addr[pcie_nr] = bar_addr;
     }
 
     /* Send the MSI-X and automask.  We overlap the commands so that
