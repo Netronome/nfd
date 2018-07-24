@@ -165,14 +165,6 @@ static __gpr struct nfp_pcie_dma_cmd descr_tmp;
 /*
  * Reserve PCIe Resources
  */
-PCIE_DMA_CFG_ALLOC_OFF(nfd_out_fl_desc_dma_cfg, island, PCIE_ISL,
-                       NFD_OUT_FL_CFG_REG, 1);
-PCIE_DMA_CFG_ALLOC_OFF(nfd_out_rx_desc_dma_cfg, island, PCIE_ISL,
-                       NFD_OUT_DESC_CFG_REG, 1);
-PCIE_DMA_CFG_ALLOC_OFF(nfd_out_data_dma_cfg, island, PCIE_ISL,
-                       NFD_OUT_DATA_CFG_REG, 1);
-PCIE_DMA_CFG_ALLOC_OFF(nfd_out_data_sig_only_dma_cfg, island, PCIE_ISL,
-                       NFD_OUT_DATA_CFG_REG_SIG_ONLY, 1);
 PCIE_DMA_ALLOC(nfd_out_fl_desc_dma, island, PCIE_ISL, frompci_hi,
                NFD_OUT_FL_MAX_IN_FLIGHT);
 PCIE_DMA_ALLOC(nfd_out_rx_desc_dma, island, PCIE_ISL, topci_med,
@@ -237,8 +229,6 @@ _zero_imm(unsigned int base, unsigned int queue, size_t size)
 void
 cache_desc_setup_shared()
 {
-    struct pcie_dma_cfg_one cfg;
-
     queue_data = 0;
 
     /* Zero bitmasks */
@@ -248,50 +238,6 @@ cache_desc_setup_shared()
     dma_seqn_ap_setup(NFD_OUT_FL_EVENT_FILTER, NFD_OUT_FL_EVENT_FILTER,
                       NFD_OUT_FL_EVENT_TYPE, NFD_OUT_FL_EXT_TYPE,
                       &fl_cache_event_xfer, &fl_cache_event_sig);
-
-    /*
-     * Set up RX_FL_CFG_REG DMA Config Register
-     */
-    cfg.__raw = 0;
-#ifdef NFD_VNIC_NO_HOST
-    /* Use signal_only for seqn num generation
-     * Don't actually DMA data */
-    cfg.signal_only = 1;
-#else
-    cfg.signal_only = 0;
-#endif
-    cfg.end_pad     = 0;
-    cfg.start_pad   = 0;
-    /* Ordering settings? */
-    cfg.target_64   = 1;
-    cfg.cpp_target  = 7;
-    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_FL_CFG_REG, cfg);
-
-    /*
-     * Set up NFD_OUT_DATA_CFG_REG DMA Config Register
-     * This register is used by the pci_out_pd.uc MEs.  As
-     * there are multiple PD MEs and they are not within
-     * the PCIe island, cache_desc takes ownership of the
-     * configuration register.  FL descriptors must be
-     * cached before credits can be issued for packets,
-     * so this configuration must have completed before
-     * the PD MEs can attempt to DMA.
-     */
-    cfg.__raw = 0;
-#ifdef NFD_VNIC_NO_HOST
-    /* Use signal_only for seqn num generation
-     * Don't actually DMA data */
-    cfg.signal_only = 1;
-#else
-    cfg.signal_only = 0;
-#endif
-    cfg.end_pad     = 0;
-    cfg.start_pad   = 0;
-    /* Ordering settings? */
-    cfg.target_64   = 1;
-    cfg.cpp_target  = 7;
-    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DATA_CFG_REG, cfg);
-
 
     /*
      * Initialise a DMA descriptor template
@@ -755,8 +701,6 @@ cache_desc_compute_fl_addr(__gpr unsigned int *queue, unsigned int seq)
 void
 send_desc_setup_shared()
 {
-    struct pcie_dma_cfg_one cfg;
-
     /* Zero bitmasks */
     init_bitmasks(&cached_bmsk);
     init_bitmasks(&pending_bmsk);
@@ -764,24 +708,6 @@ send_desc_setup_shared()
     dma_seqn_ap_setup(NFD_OUT_DESC_EVENT_FILTER, NFD_OUT_DESC_EVENT_FILTER,
                       NFD_OUT_DESC_EVENT_TYPE, NFD_OUT_DESC_EXT_TYPE,
                       &desc_dma_event_xfer, &desc_dma_event_sig);
-
-    /*
-     * Set up RX_FL_CFG_REG DMA Config Register
-     */
-    cfg.__raw = 0;
-#ifdef NFD_VNIC_NO_HOST
-    /* Use signal_only for seqn num generation
-     * Don't actually DMA data */
-    cfg.signal_only = 1;
-#else
-    cfg.signal_only = 0;
-#endif
-    cfg.end_pad     = 0;
-    cfg.start_pad   = 0;
-    /* Ordering settings? */
-    cfg.target_64   = 1;
-    cfg.cpp_target  = 7;
-    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DESC_CFG_REG, cfg);
 
     /*
      * Initialise a DMA descriptor template

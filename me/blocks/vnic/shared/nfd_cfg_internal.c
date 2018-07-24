@@ -25,6 +25,7 @@
 #include <nfp/mem_atomic.h>
 #include <nfp/mem_bulk.h>
 #include <nfp/mem_ring.h>
+#include <nfp/pcie.h>
 #include <nfp/xpb.h>
 #include <std/event.h>
 
@@ -57,6 +58,26 @@
 #endif /* ((NFD_CFG_PF_CAP | NFP_CFG_VF_CAP) & NFP_NET_CFG_CTRL_RSS) */
 #define NFD_RSS_HASH_FUNC NFP_NET_CFG_RSS_TOEPLITZ
 #endif /* NFD_RSS_HASH_FUNC */
+
+
+/*
+ * Reserve PCIe DMA CFG registers
+ * These are owned by this file so they can rewritten on PCIe reset
+ */
+PCIE_DMA_CFG_ALLOC_OFF(nfd_in_gather_dma_cfg, island, PCIE_ISL,
+                       NFD_IN_GATHER_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_in_data_dma_cfg, island, PCIE_ISL,
+                       NFD_IN_DATA_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_in_data_sig_only_dma_cfg, island, PCIE_ISL,
+                       NFD_IN_DATA_CFG_REG_SIG_ONLY, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_out_fl_desc_dma_cfg, island, PCIE_ISL,
+                       NFD_OUT_FL_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_out_rx_desc_dma_cfg, island, PCIE_ISL,
+                       NFD_OUT_DESC_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_out_data_dma_cfg, island, PCIE_ISL,
+                       NFD_OUT_DATA_CFG_REG, 1);
+PCIE_DMA_CFG_ALLOC_OFF(nfd_out_data_sig_only_dma_cfg, island, PCIE_ISL,
+                       NFD_OUT_DATA_CFG_REG_SIG_ONLY, 1);
 
 
 _NFP_CHIPRES_ASM(.alloc_mem nfd_cfg_ring_mem NFD_CFG_RING_EMEM global \
@@ -621,6 +642,57 @@ _nfd_cfg_init_pf_cfg_bar(unsigned int vid)
 }
 
 
+void
+_nfd_cfg_dma_cfg_reg_setup()
+{
+    struct nfp_pcie_dma_cfg cfg_tmp;
+    struct pcie_dma_cfg_one cfg_one;
+    __xwrite struct nfp_pcie_dma_cfg cfg;
+
+    /* PCI.IN desc DMAs */
+    cfg_one.__raw = 0;
+    cfg_one.signal_only = 0;
+    cfg_one.end_pad     = 0;
+    cfg_one.start_pad   = 0;
+    /* Ordering settings? */
+    cfg_one.target_64   = 0;
+    cfg_one.cpp_target  = 15;
+    pcie_dma_cfg_set_one(PCIE_ISL, NFD_IN_GATHER_CFG_REG, cfg_one);
+
+    /* PCI.IN data DMAs */
+    cfg_tmp.__raw = 0;
+    /* Signal only configuration for null messages */
+    cfg_tmp.signal_only_odd = 1;
+    cfg_tmp.target_64_odd = 1;
+    cfg_tmp.cpp_target_odd = 7;
+    /* Regular configuration */
+    cfg_tmp.signal_only_even = 0;
+    cfg_tmp.end_pad_even = 0;
+    cfg_tmp.start_pad_even = 0;
+    cfg_tmp.target_64_even = 1;
+    cfg_tmp.cpp_target_even = 7;
+    cfg = cfg_tmp;
+
+    pcie_dma_cfg_set_pair(PCIE_ISL, NFD_IN_DATA_CFG_REG, &cfg);
+
+    /* PCI.OUT FL desc DMAs */
+    cfg_one.__raw = 0;
+    cfg_one.signal_only = 0;
+    cfg_one.end_pad     = 0;
+    cfg_one.start_pad   = 0;
+    /* Ordering settings? */
+    cfg_one.target_64   = 1;
+    cfg_one.cpp_target  = 7;
+    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_FL_CFG_REG, cfg_one);
+
+    /* PCI.OUT RX desc DMAs use the same settings */
+    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DESC_CFG_REG, cfg_one);
+
+    /* PCI.OUT data DMAs use the same settings */
+    pcie_dma_cfg_set_one(PCIE_ISL, NFD_OUT_DATA_CFG_REG, cfg_one);
+}
+
+
 /**
  * Perform per PCIe island nfd_cfg initialisation
  */
@@ -658,6 +730,9 @@ nfd_cfg_setup()
         _nfd_cfg_init_pf_cfg_bar(vid);
     }
 #endif
+
+    /* Setup the DMA configuration registers */
+    _nfd_cfg_dma_cfg_reg_setup();
 }
 
 

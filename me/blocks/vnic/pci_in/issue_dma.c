@@ -256,15 +256,6 @@ _NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring1_num \
                  cls_rings+NFD_IN_BATCH_RING1_NUM island 1 1);
 
 
-/*
- * Reserve PCIe Resources for DMA Configuration Registers
- */
-PCIE_DMA_CFG_ALLOC_OFF(nfd_in_data_dma_cfg, island, PCIE_ISL,
-                       NFD_IN_DATA_CFG_REG, 1);
-PCIE_DMA_CFG_ALLOC_OFF(nfd_in_data_sig_only_dma_cfg, island, PCIE_ISL,
-                       NFD_IN_DATA_CFG_REG_SIG_ONLY, 1);
-
-
 /* Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
  * swap token complete correctly for DMAs that aren't 4B multiples in size. */
 void
@@ -348,8 +339,6 @@ _add_to_pcie_addr(unsigned int *pcie_hi_word, unsigned int *pcie_addr_lo,
 void
 issue_dma_setup_shared()
 {
-    struct nfp_pcie_dma_cfg cfg_tmp;
-    __xwrite struct nfp_pcie_dma_cfg cfg;
     __xwrite uint32_t lso_hdr_data_init_xw = 0xDEADBEEF;
     __gpr uint32_t i;
 
@@ -376,32 +365,6 @@ issue_dma_setup_shared()
                     (__mem40 void *)&lso_hdr_data[i * 4],
                     sizeof(lso_hdr_data_init_xw));
     }
-
-    /*
-     * Setup the DMA configuration registers
-     * XXX PCI.IN and PCI.OUT use the same settings,
-     * could share configuration registers.
-     */
-    cfg_tmp.__raw = 0;
-    /* Signal only configuration for null messages */
-    cfg_tmp.signal_only_odd = 1;
-    cfg_tmp.target_64_odd = 1;
-    cfg_tmp.cpp_target_odd = 7;
-    /* Regular configuration */
-#ifdef NFD_VNIC_NO_HOST
-    /* Use signal_only for seqn num generation
-     * Don't actually DMA data */
-    cfg_tmp.signal_only_even = 1;
-#else
-    cfg_tmp.signal_only_even = 0;
-#endif
-    cfg_tmp.end_pad_even = 0;
-    cfg_tmp.start_pad_even = 0;
-    cfg_tmp.target_64_even = 1;
-    cfg_tmp.cpp_target_even = 7;
-    cfg = cfg_tmp;
-
-    pcie_dma_cfg_set_pair(PCIE_ISL, NFD_IN_DATA_CFG_REG, &cfg);
 
     /* Kick off ordering */
     reorder_start(NFD_IN_ISSUE_START_CTX, &desc_order_sig);

@@ -120,8 +120,6 @@ _NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring1_num                    \
 /*
  * Reserve PCIe Resources
  */
-PCIE_DMA_CFG_ALLOC_OFF(nfd_in_gather_dma_cfg, island, PCIE_ISL,
-                       NFD_IN_GATHER_CFG_REG, 1);
 PCIE_DMA_ALLOC(nfd_in_gather_dma, island, PCIE_ISL, frompci_hi,
                NFD_IN_GATHER_MAX_IN_FLIGHT);
 
@@ -200,8 +198,6 @@ gather_compl_rst(volatile SIGNAL *poll_sig)
 void
 gather_setup_shared()
 {
-    struct pcie_dma_cfg_one cfg;
-
     cls_ring_setup(NFD_IN_BATCH_RING0_NUM,
                    (__cls void *)_link_sym(nfd_in_batch_ring0_mem),
                    (NFD_IN_BATCH_RING0_SIZE_LW * 4));
@@ -215,23 +211,6 @@ gather_setup_shared()
     desc_ring_base0 = ((unsigned int) &desc_ring0) & 0xFFFFFFFF;
     desc_ring_base1 = ((unsigned int) &desc_ring1) & 0xFFFFFFFF;
 
-    /*
-     * Set up NFD_IN_GATHER_CFG_REG DMA Config Register
-     */
-    cfg.__raw = 0;
-#ifdef NFD_VNIC_NO_HOST
-    /* Use signal_only for seqn num generation
-     * Don't actually DMA data */
-    cfg.signal_only = 1;
-#else
-    cfg.signal_only = 0;
-#endif
-    cfg.end_pad     = 0;
-    cfg.start_pad   = 0;
-    /* Ordering settings? */
-    cfg.target_64   = 0;
-    cfg.cpp_target  = 15;
-    pcie_dma_cfg_set_one(PCIE_ISL, NFD_IN_GATHER_CFG_REG, cfg);
 }
 
 
