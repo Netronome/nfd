@@ -80,6 +80,20 @@ do {                                                            \
 
 
 /**
+ * Reset msix_cur_cpp2pci_addr for pcie_nr
+ *
+ * @param pcie_nr     PCIe island number (0 to 3)
+ *
+ * When PCIe island resets occur, the PCIe internal targets may also need
+ * to be reset.  This clears the CPP2PCI BARs, so they need to be configured
+ * again before another MSIX interrupt is sent.  msix_cur_cpp2pci_addr tracks
+ * where the BARs point, so this data becomes stale after a PCIe reset and
+ * must be set back to zero.
+ */
+__intrinsic void msix_rst_curr_cpp2pci_addr(unsigned int pcie_nr);
+
+
+/**
  * Send MSI-X interrupt for a PF and optionally mask the interrupt
  *
  * Returns 0 on success and non-zero when the entry is masked.
