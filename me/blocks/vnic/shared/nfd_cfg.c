@@ -28,6 +28,7 @@
 #include <vnic/nfd_common.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
+#include <vnic/svc/msix.h>
 
 #include <nfp_net_ctrl.h>
 
@@ -270,8 +271,16 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
     /* Check for and handle PCIe island resets */
     if (update_request & NFP_NET_CFG_UPDATE_PCI_RST) {
         if (cfg_msg->vid == NFD_LAST_PF) {
-            /* Disable MasterDropIfDisabled */
+            /* All vNICs on this island have started and completed
+             * PCIe resets. */
+
+            /* The app master cannot send link state interrupts
+             * at this point, because it should be checking
+             * NFP_NET_CFG_LSC, and that has been reset for all
+             * vNICs.  This means we can clear MasterDropIfDisabled
+             * and clear msix_cur_cpp2pci_addr */
             _nfd_flr_update_mstr_drop_if_disabled(pcie_isl, 0);
+            msix_rst_curr_cpp2pci_addr(pcie_isl);
 
             /* Only ack the reset on the message for the last VID */
             _nfd_flr_ack_link_reset(pcie_isl);
