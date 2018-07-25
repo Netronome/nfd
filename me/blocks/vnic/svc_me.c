@@ -183,7 +183,9 @@ do {                                                                        \
             if (cfg_msg.vid == NFD_LAST_PF) {                               \
                 /* This is the end of PCIe island reset */                  \
                 /* processing. */                                           \
-                /* TODO implement! */                                       \
+                                                                            \
+                /* Clear msix_cur_cpp2pci_addr in case the BAR is reset */  \
+                msix_rst_curr_cpp2pci_addr(_isl);                           \
             }                                                               \
         }                                                                   \
                                                                             \
