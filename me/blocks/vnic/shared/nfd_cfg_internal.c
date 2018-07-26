@@ -363,6 +363,26 @@ _bar_addr(struct nfp_pcie_barcfg_p2c *bar, unsigned long long data)
 
 
 /**
+ * Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
+ * swap token complete correctly for DMAs that aren't 4B multiples in size.
+ */
+void
+_nfd_cfg_dma_enable_DmaByteMaskSwap()
+{
+/* XXX nfp6000/nfp_pcie.h should provide this */
+#define NFP_PCIE_DMA_DBG_REG_0          0x400f0
+
+    __gpr unsigned int addr_hi = PCIE_ISL << 30;
+    unsigned int dma_dbg_reg_0_addr = NFP_PCIE_DMA_DBG_REG_0;
+    __xwrite unsigned int data = 0x80000000;
+    SIGNAL sig;
+
+    __asm pcie[write_pci, data, addr_hi, <<8, dma_dbg_reg_0_addr, 1], \
+        ctx_swap[sig]
+}
+
+
+/**
  * XXX formalise setup_pf and setup_vf methods
  * Configure the PF for use with NFD
  */
@@ -733,6 +753,11 @@ nfd_cfg_setup()
 
     /* Setup the DMA configuration registers */
     _nfd_cfg_dma_cfg_reg_setup();
+
+    /* Enable B0 DMA ByteMask swapping */
+#if __REVISION_MIN >= __REVISION_B0
+    _nfd_cfg_dma_enable_DmaByteMaskSwap();
+#endif
 }
 
 

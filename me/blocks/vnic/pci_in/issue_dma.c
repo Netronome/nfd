@@ -256,24 +256,6 @@ _NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring1_num \
                  cls_rings+NFD_IN_BATCH_RING1_NUM island 1 1);
 
 
-/* Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
- * swap token complete correctly for DMAs that aren't 4B multiples in size. */
-void
-_issue_dma_enable_DmaByteMaskSwap(unsigned char pcie_isl)
-{
-/* XXX nfp6000/nfp_pcie.h should provide this */
-#define NFP_PCIE_DMA_DBG_REG_0          0x400f0
-
-    __xwrite unsigned int data = 0x80000000;
-    __gpr unsigned int addr_hi = pcie_isl << 30;
-    unsigned int dma_dbg_reg_0_addr = NFP_PCIE_DMA_DBG_REG_0;
-    SIGNAL sig;
-
-    __asm pcie[write_pci, data, addr_hi, <<8, dma_dbg_reg_0_addr, 1], \
-        ctx_swap[sig]
-}
-
-
 /**
  * Test a bit in the queue_data struct
  */
@@ -344,13 +326,6 @@ issue_dma_setup_shared()
 
     ctm_ring_setup(NFD_IN_ISSUED_RING_NUM, nfd_in_issued_ring,
                    sizeof nfd_in_issued_ring);
-
-/* Enable B0 DMA ByteMask swapping to ensure that DMAs with the byte
- * swap token complete correctly for DMAs that aren't 4B multiples in size. */
-#if __REVISION_MIN >= __REVISION_B0
-    _issue_dma_enable_DmaByteMaskSwap(PCIE_ISL);
-#endif
-
 
     /*
      * Initialise the CLS TX descriptor ring
