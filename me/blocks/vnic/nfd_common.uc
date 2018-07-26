@@ -77,7 +77,7 @@
         #endif
 
         #if (!streq('out_fq', '--'))
-            move(out_f, 0)
+            move(out_fq, 0)
         #endif
 
         #if (!streq('CTRL_TGT', '--'))
@@ -104,7 +104,7 @@
             #endif
 
             #if (!streq('out_fq', '--'))
-                move(out_fq, NFD_NATQ2PF(in_q))
+                move(out_fq, NFD_NATQ2PFQ(in_q))
             #endif
         #else
             #if (!streq('out_f', '--') || !streq('out_fq', '--'))
