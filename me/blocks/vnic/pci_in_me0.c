@@ -101,11 +101,7 @@ main(void)
         gather_status_setup();
 
         /* Initialisation that swaps and takes longer */
-#ifdef NFD_VNIC_PF
-        nfd_cfg_setup_pf();
-#endif
-
-#ifdef NFD_VNIC_VF
+#if (NFD_MAX_VFS > 0)
         nfd_cfg_setup_vf();
 #endif
 

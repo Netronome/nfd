@@ -631,15 +631,6 @@ struct nfd_out_send_desc_msg {
     NFD_RING_DECLARE_IND0(_isl, _comp, _sz)
 
 
-/* Check for consistency of defines */
-#if defined NFD_VNIC_PF && defined NFD_VNIC_VF
-#error "Incompatible defines: NFD_VNIC_PF and NFD_VNIC_VF both set"
-#endif
-
-#if !defined NFD_VNIC_PF && !defined NFD_VNIC_VF
-#error "Incompatible defines: Neither NFD_VNIC_PF nor NFD_VNIC_VF set"
-#endif
-
 #endif /* __NFP_LANG_MICROC */
 
 #endif /* !__NFP_LANG_ASM */

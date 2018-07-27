@@ -383,7 +383,8 @@ _nfd_cfg_dma_enable_DmaByteMaskSwap()
 
 
 /**
- * XXX formalise setup_pf and setup_vf methods
+ * XXX This function can be used for development when the host doesn't
+ * use CPP APIs to move BARs etc
  * Configure the PF for use with NFD
  */
 /* XXX TEMP configure wide PF BARs to access config mem and QC

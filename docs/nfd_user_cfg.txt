@@ -55,11 +55,6 @@
  */
 
 /**
- * Defines to select which NFP PCIe to CPP BARs to program
- * @NFD_VNIC_VF         Program VF P2C BARs, use even if NFD_MAX_VFS 0
- */
-
-/**
  * Defines to select EMEM units to use for NFD
  * @NFD_PCIE##_isl##_EMEM   Memory unit to use to per PCIe island memory
  * @NFD_CFG_RING_EMEM       Memory unit to use for shared memory
@@ -246,11 +241,17 @@
  * @USE_SVC_ME              Previously was required to include the svc_me
  *                          into the NFD message chain, but this is now
  *                          the default.
+ * @NFD_VNIC_PF             Previously specified to program PF P2C
+ *                          BARs, this would have been used in certain
+ *                          experimental configurations, but has been
+ *                          removed.
+ * @NFD_VNIC_VF             Previously specified to program VF P2C
+ *                          BARs.  Now NFD_MAX_VFS is tested to
+ *                          determine whether to program those BARs.
  */
 
 /**
  * Experimental defines
  * @NFD_OUT_CREDITS_HOST_ISSUED An experimental option not fully supported
  * @NFD_NO_ISOLATION        An experimental option not fully supported
- * @NFD_VNIC_PF             Program PF P2C BARs, *special purposes only*
  */
