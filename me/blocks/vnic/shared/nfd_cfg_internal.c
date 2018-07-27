@@ -26,6 +26,7 @@
 #include <nfp/mem_bulk.h>
 #include <nfp/mem_ring.h>
 #include <nfp/pcie.h>
+#include <nfp/remote_me.h>
 #include <nfp/xpb.h>
 #include <std/event.h>
 
@@ -728,9 +729,6 @@ nfd_cfg_setup()
     ctassert(NFD_CFG_NUM_RINGS == 8);
     ctassert(NFD_CFG_RING_SZ == 2048);
 
-    /* Setup the configuration queues */
-    _nfd_cfg_queue_setup();
-
     /*
      * Write compile time configured NFD_MAX_VF_QUEUES and
      * NFD_MAX_PF_QUEUES to mem.
@@ -752,6 +750,22 @@ nfd_cfg_setup()
     }
 #endif
 
+}
+
+
+/**
+ * Perform per PCIe island nfd_cfg setup in PCI power domain
+ */
+void
+nfd_cfg_pci_reconfig()
+{
+#if (NFD_MAX_VFS > 0)
+    nfd_cfg_setup_vf();
+#endif
+
+    /* Setup the configuration queues */
+    _nfd_cfg_queue_setup();
+
     /* Setup the DMA configuration registers */
     _nfd_cfg_dma_cfg_reg_setup();
 
@@ -760,6 +774,7 @@ nfd_cfg_setup()
     _nfd_cfg_dma_enable_DmaByteMaskSwap();
 #endif
 }
+
 
 
 /**
@@ -802,22 +817,19 @@ nfd_cfg_flr_setup()
 }
 
 
+
 /**
- * Request the pcie_monitor to stop processing PCIe events from the island
+ * Check that the PCIe monitor is the expected version
  *
  * This function will check the pcie_monitor ABI version number, and will
- * halt on a mismatch.  It should only be invoked after the NFD FLR autopush
- * has been configured.
+ * halt on a mismatch.
  */
 __intrinsic void
-nfd_cfg_pcie_monitor_stop()
+nfd_cfg_pcie_monitor_ver_check()
 {
 /* Values defined by the pcie_monitor ABI */
 #define NFP_BSP_PCIE_MON_ABI_BASE   0x4000
 #define NFP_BSP_PCIE_MON_ABI_CHK    0x50434900
-#define NFP_BSP_PCIE_MON_CTRL_BASE  0x4010
-#define NFP_BSP_PCIE_MON_ISL_STRIDE 0x4
-#define NFP_BSP_PCIE_MON_ENABLE_shf 0
 
     unsigned int addr_hi;
     unsigned int addr_lo;
@@ -837,14 +849,97 @@ nfd_cfg_pcie_monitor_stop()
         local_csr_write(local_csr_mailbox_1, chk_val);
 
         /* We have an ABI mismatch with the pcie_monitor, halt. */
-        /* halt(); */ /* XXX suppressed for compatibility with SDN BSP */
+        halt();
     }
+}
+
+
+/**
+ * Check whether the PCIe monitor has been enabled on our island
+ */
+__intrinsic void
+nfd_cfg_pcie_monitor_busy_poll()
+{
+#define PCIE_MONITOR_ISL 1
+#define PCIE_MONITOR_ME 1
+#define PCIE_MONITOR_MB NFP_MECSR_MAILBOX_0
+#define PCIE_MONITOR_POLL_CYCLES 4000
+
+    __xread unsigned int mailbox_val_rd;
+    __xwrite unsigned int mailbox_val_wr;
+    SIGNAL mb_sig;
+
+    do {
+        /* Busy wait reading remote mailbox */
+        __remote_me_reg_read_signal_local(&mailbox_val_rd, PCIE_MONITOR_ISL,
+                                          PCIE_MONITOR_ME, /* csr */ 1,
+                                          PCIE_MONITOR_MB >> 2, 4, sig_done,
+                                          &mb_sig);
+        while (!signal_test(&mb_sig));
+
+        /* Busy sleep to throttle polling rate, and to let PCIe
+         * monitor read the value before we change it */
+        __implicit_write(&mb_sig);
+        set_alarm(PCIE_MONITOR_POLL_CYCLES, &mb_sig);
+        while (!signal_test(&mb_sig));
+    } while ((mailbox_val_rd & (1 << PCIE_ISL)) == 0);
+
+    mailbox_val_wr = mailbox_val_rd & ~(1 << PCIE_ISL);
+    remote_me_reg_write_signal_local(&mailbox_val_wr, PCIE_MONITOR_ISL,
+                                     PCIE_MONITOR_ME, /* csr */ 1,
+                                     PCIE_MONITOR_MB >> 2, 4);
+}
+
+
+/**
+ * Request the pcie_monitor to stop processing PCIe events from the island
+ */
+__intrinsic void
+nfd_cfg_pcie_monitor_stop()
+{
+/* Values defined by the pcie_monitor ABI */
+#define NFP_BSP_PCIE_MON_CTRL_BASE  0x4010
+#define NFP_BSP_PCIE_MON_ISL_STRIDE 0x4
+#define NFP_BSP_PCIE_MON_ENABLE_shf 0
+
+    unsigned int addr_hi;
+    unsigned int addr_lo;
+
+    /* The pcie_monitor lives in the ARM island according to the ABI */
+    addr_hi = (unsigned long long) (__LoadTimeConstant("__addr_arm_cls")) >> 8;
 
     /* We disable the pcie_monitor by clearing a bit in ARM CLS */
     addr_lo = (NFP_BSP_PCIE_MON_CTRL_BASE +
                PCIE_ISL * NFP_BSP_PCIE_MON_ISL_STRIDE);
     __asm cls[set_imm, --, addr_hi, <<8, addr_lo,   \
               (1 << NFP_BSP_PCIE_MON_ENABLE_shf)];
+}
+
+
+/**
+ * Request the pcie_monitor to start processing PCIe events from the island
+ */
+__intrinsic void
+nfd_cfg_pcie_monitor_start()
+{
+/* Values defined by the pcie_monitor ABI */
+#define NFP_BSP_PCIE_MON_CTRL_BASE  0x4010
+#define NFP_BSP_PCIE_MON_ISL_STRIDE 0x4
+#define NFP_BSP_PCIE_MON_ENABLE_shf 0
+
+    unsigned int addr_hi;
+    unsigned int addr_lo;
+
+    /* The pcie_monitor lives in the ARM island according to the ABI */
+    addr_hi = (unsigned long long) (__LoadTimeConstant("__addr_arm_cls")) >> 8;
+
+    /* We disable the pcie_monitor by clearing a bit in ARM CLS */
+    addr_lo = (NFP_BSP_PCIE_MON_CTRL_BASE +
+               PCIE_ISL * NFP_BSP_PCIE_MON_ISL_STRIDE);
+    __asm cls[clr_imm, --, addr_hi, <<8, addr_lo,   \
+              (1 << NFP_BSP_PCIE_MON_ENABLE_shf)];
+
+    /* TODO also clear UP event */
 }
 
 
@@ -936,6 +1031,35 @@ nfd_cfg_check_flr_ap()
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_CFG_FLR_EVENT_FILTER);
     }
+}
+
+
+/* Returns true when the PCIe reset has been ACKed */
+__intrinsic int
+nfd_cfg_poll_rst_ack(volatile SIGNAL *poll_sig)
+{
+    __mem40 char *rst_ack_addr;
+    __xread unsigned int rst_ack_xfer;
+    int ret;
+
+    if (signal_test(poll_sig)) {
+        rst_ack_addr = NFD_FLR_LINK(PCIE_ISL) + sizeof(int) * NFD_FLR_PF_ind;
+        mem_read_atomic(&rst_ack_xfer, rst_ack_addr, sizeof(rst_ack_xfer));
+
+        /* If PCIe reset not yet acknowledged, rearm alarm;
+         * otherwise return success. */
+        if (bit_test(rst_ack_xfer, NFD_FLR_PCIE_RESET_shf)) {
+            set_alarm(NFD_CFG_RST_POLL_CYCLES, poll_sig);
+            ret = 0;
+        } else {
+            ret = 1;
+        }
+
+    } else {
+        ret = 0;
+    }
+
+    return ret;
 }
 
 
@@ -1421,14 +1545,11 @@ nfd_cfg_next_queue(struct nfd_cfg_msg *cfg_msg, unsigned int *queue)
  * If the PCIe link is not up, it is not safe to run NFD on the island, so
  * halt the ME immediately.
  *
- * If the PCIe island is not held in reset, check the link power state and
- * set an initial value in flr_pend_status, NFD_FLR_PCIE_STATE_ind.
- *
  * This function "busy waits" on the PCIe link check to ensure that no other
  * contexts can execute while it tests the link.
  */
 __intrinsic void
-nfd_cfg_check_pcie_link()
+nfd_cfg_check_pcie_clock()
 {
 #define NFP_PCIEX_CLOCK_RESET_CTRL                  0x44045400
 #define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk     0xf
@@ -1460,6 +1581,23 @@ nfd_cfg_check_pcie_link()
         /* Nothing more to do on this PCIe island, stop the ME */
         halt();
     }
+}
+
+
+/*
+ * Check the link power state and set an initial value in flr_pend_status,
+ * NFD_FLR_PCIE_STATE_ind.
+ *
+ * This function "busy waits" on the PCIe link check to ensure that no other
+ * contexts can execute while it tests the link.
+ */
+__intrinsic void
+nfd_cfg_set_curr_pcie_sts()
+{
+    __xread unsigned int pcie_sts_raw;
+    unsigned int pcie_sts;
+    unsigned int pcie_sts_addr;
+    SIGNAL pcie_sts_sig;
 
     /* Set an initial value for NFD_FLR_PCIE_STATE_ind */
     pcie_sts_addr = NFP_PCIEX_COMPCFG_CNTRLR0;

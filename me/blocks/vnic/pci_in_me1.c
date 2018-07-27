@@ -68,7 +68,7 @@ main(void)
 {
     /* Perform per ME initialisation  */
     if (ctx() == NFD_IN_ISSUE_MANAGER) {
-        nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
+        nfd_cfg_check_pcie_clock(); /* Will halt ME on failure */
 
         nfd_cfg_init_cfg_msg(&cfg_msg, NFD_CFG_RING_NUM(PCIE_ISL, CFG_RING_IN),
                              &cfg_msg_rd, &cfg_msg_sig);

@@ -161,34 +161,17 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
 /**
  * Complete processing of PCIe reset in GATHER ME.
  *
- * In case of PCIe reset, wait for ack of reset config message by APP
- * master by polling appropriate atomic data before pushing updated gather
- * descriptor sequence number to ISSUE DMA ME(s).
+ * This function must only be called once the app master has ACKed the
+ * PCIe reset.
  */
 __intrinsic void
-gather_compl_rst(volatile SIGNAL *poll_sig)
+gather_compl_rst()
 {
     __gpr unsigned int amt;
-    __mem40 char *rst_ack_addr;
-    __xread unsigned int rst_ack_xfer;
 
-    if (signal_test(poll_sig)) {
-        rst_ack_addr = (NFD_FLR_LINK(PCIE_ISL) +
-                          sizeof(int) * NFD_FLR_PF_ind);
-        mem_read_atomic(&rst_ack_xfer, rst_ack_addr,
-                        sizeof(rst_ack_xfer));
-
-        /* If PCIe reset not yet acknowledged, rearm alarm;
-         * otherwise complete processing of reset  by updating and
-         * distributing 'gather_dma_seq_compl'. */
-        if (bit_test(rst_ack_xfer, NFD_FLR_PCIE_RESET_shf)) {
-            set_alarm(NFD_IN_GATHER_POLL_TIME, poll_sig);
-        } else {
-            amt = dma_seq_issued - gather_dma_seq_compl;
-            gather_dma_seq_compl = dma_seq_issued;
-            distr_gather_seqn(amt);
-        }
-    }
+    amt = dma_seq_issued - gather_dma_seq_compl;
+    gather_dma_seq_compl = dma_seq_issued;
+    distr_gather_seqn(amt);
 }
 
 

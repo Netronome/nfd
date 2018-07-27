@@ -89,11 +89,12 @@ main(void)
      * for initialisation to complete
      */
     #define STATUS_INIT_DONE_BIT 0
-    __shared __gpr unsigned int status = 0;
+    #define STATUS_ISL_READY_BIT 1
+    volatile __shared __gpr unsigned int status = 0;
 
     /* Perform per ME initialisation  */
     if (ctx() == 0) {
-        nfd_cfg_check_pcie_link(); /* Will halt ME on failure */
+        nfd_cfg_check_pcie_clock(); /* Will halt ME on failure */
 
         /* Initialisation that does not swap */
         cfg_msg.__raw = 0;
@@ -101,10 +102,6 @@ main(void)
         gather_status_setup();
 
         /* Initialisation that swaps and takes longer */
-#if (NFD_MAX_VFS > 0)
-        nfd_cfg_setup_vf();
-#endif
-
         service_qc_setup();
         distr_gather_setup_shared();
         nfd_cfg_setup();
@@ -114,8 +111,8 @@ main(void)
 
         NFD_INIT_DONE_SET(PCIE_ISL, 1);     /* XXX Remove? */
     } else if (ctx() == 1) {
+        nfd_cfg_pcie_monitor_ver_check();
         nfd_cfg_flr_setup();
-        nfd_cfg_pcie_monitor_stop();        /* Will halt ME on ABI mismatch */
 
     } else {
         gather_setup();
@@ -143,6 +140,12 @@ main(void)
     if (ctx() == 0) {
         /* CTX0 main loop */
         for (;;) {
+            /* CTX1 can block other contexts while waiting for
+             * the PCIe island to be ready */
+            while (!bit_test(status, STATUS_ISL_READY_BIT)) {
+                ctx_swap();
+            }
+
             service_qc();
 
             distr_gather();
@@ -200,17 +203,45 @@ main(void)
         }
     } else if (ctx() == 1) {
         for (;;) {
-            nfd_cfg_check_flr_ap();
+            int rst_ack;
 
-            /* When island in PCIe reset state, complete processing PCIe reset
-             * once app master acknowledges it; otherwise do nothing. */
-            gather_compl_rst(&nfd_in_gather_poll_rst_sig);
+            /* Wait for the link to be ready and finalise PCIe settings */
+            nfd_cfg_pcie_monitor_busy_poll();
 
-            ctx_swap();
+            nfd_cfg_pcie_monitor_stop();
+            nfd_cfg_pci_reconfig();
+            nfd_cfg_set_curr_pcie_sts();
+
+            /* Allow other threads to run */
+            status |= (1<<STATUS_ISL_READY_BIT);
+
+            /* The link is good, start regular processing */
+            while (1) {
+                nfd_cfg_check_flr_ap();
+                rst_ack = nfd_cfg_poll_rst_ack(&nfd_in_gather_poll_rst_sig);
+                if (rst_ack) {
+                    /* We have finished a reset, finalise our ME
+                     * and return to waiting for link */
+                    gather_compl_rst();
+
+                    /* Stop other threads running and then restart
+                     * the PCIe monitor */
+                    status &= ~(1<<STATUS_ISL_READY_BIT);
+                    nfd_cfg_pcie_monitor_start();
+                    break;
+                }
+                ctx_swap();
+            }
         }
     } else {
         /* Worker main loop */
         for (;;) {
+            /* CTX1 can block other contexts while waiting for
+             * the PCIe island to be ready */
+            while (!bit_test(status, STATUS_ISL_READY_BIT)) {
+                ctx_swap();
+            }
+
             gather();
 
             /* Yield thread */
