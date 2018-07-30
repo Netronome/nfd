@@ -1425,9 +1425,11 @@ __intrinsic void
 nfd_cfg_check_pcie_clock()
 {
 #define NFP_PCIEX_CLOCK_RESET_CTRL                  0x44045400
-#define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk     0xf
+#define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk     0xff
 #define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf     16
-#define NFP_PCIEX_CLOCK_RESET_CTRL_ACTIVE           0xf
+/* XXX multihost platforms will use 0xfd for holding PCI.PCI in reset
+ * to indicate that it is temporary. */
+#define NFP_PCIEX_CLOCK_RESET_CTRL_FULL_RESET       0xd
 
     __xread unsigned int pcie_sts_raw;
     unsigned int pcie_sts;
@@ -1446,7 +1448,7 @@ nfd_cfg_check_pcie_clock()
     pcie_sts = ((pcie_sts_raw >> NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf) &
                 NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk);
 
-    if (pcie_sts != NFP_PCIEX_CLOCK_RESET_CTRL_ACTIVE) {
+    if (pcie_sts == NFP_PCIEX_CLOCK_RESET_CTRL_FULL_RESET) {
         /* Write the raw value we read to Mailboxes for debugging purposes */
         local_csr_write(local_csr_mailbox_0, NFD_CFG_PCIE_LINK_DOWN);
         local_csr_write(local_csr_mailbox_1, pcie_sts_raw);
