@@ -46,6 +46,7 @@
 #define NFD_CFG_FLR_EVENT_FILTER 15
 
 #define NFD_CFG_RST_POLL_CYCLES 1000
+#define NFD_CFG_PCIE_RST_SIG    14
 
 
 /* nfd_in */

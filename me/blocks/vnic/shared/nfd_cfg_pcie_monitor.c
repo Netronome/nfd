@@ -32,9 +32,8 @@
 
 #define NFP_BSP_PCIE_MON_CTRL_BASE  0x4010
 #define NFP_BSP_PCIE_MON_ENABLE_shf 0
+#define NFP_BSP_PCIE_MON_SIG_BASE   0x4020
 #define NFP_BSP_PCIE_MON_ISL_STRIDE 0x4
-
-
 
 /**
  * Check that the PCIe monitor is the expected version
@@ -65,6 +64,33 @@ nfd_cfg_pcie_monitor_ver_check()
         /* We have an ABI mismatch with the pcie_monitor, halt. */
         halt();
     }
+}
+
+
+/**
+ * Write the sig we will look for to the PCIe monitor ABI
+ */
+__intrinsic void
+nfd_cfg_pcie_monitor_write_sig(unsigned int sig_no)
+{
+    unsigned int addr_hi;
+    unsigned int addr_lo;
+    struct nfp_mecsr_active_ctx_sts me_info;
+    unsigned int sig_addr;
+    __xwrite unsigned int sig_addr_wr;
+    SIGNAL wr_sig;
+
+    /* Check active context status for ME info and construct signal */
+    me_info.__raw = local_csr_read(local_csr_active_ctx_sts);
+    sig_addr = (me_info.il_id << 24 | me_info.me_id << 9 |
+                me_info.acno << 6 | (sig_no & 15) << 2);
+    sig_addr_wr = sig_addr;
+
+    /* The pcie_monitor lives in the ARM island according to the ABI */
+    addr_hi = (unsigned long long) (__LoadTimeConstant("__addr_arm_cls")) >> 8;
+    addr_lo = (NFP_BSP_PCIE_MON_SIG_BASE +
+               PCIE_ISL * NFP_BSP_PCIE_MON_ISL_STRIDE);
+    __asm cls[write, sig_addr_wr, addr_hi, <<8, addr_lo, 1], ctx_swap[wr_sig];
 }
 
 

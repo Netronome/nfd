@@ -56,6 +56,7 @@ struct nfd_cfg_msg cfg_msg;
 
 /* Signal used to poll for PCIe reset ack */
 volatile SIGNAL nfd_in_gather_poll_rst_sig;
+SIGNAL pcie_monitor_rst_sig;
 
 /* Setup _pf%d_net_app_id */
 NFD_NET_APP_ID_DECLARE(PCIE_ISL);
@@ -112,7 +113,12 @@ main(void)
 
         NFD_INIT_DONE_SET(PCIE_ISL, 1);     /* XXX Remove? */
     } else if (ctx() == 1) {
+        __assign_relative_register(&pcie_monitor_rst_sig,
+                                   NFD_CFG_PCIE_RST_SIG);
+        __implicit_write(&pcie_monitor_rst_sig);
+
         nfd_cfg_pcie_monitor_ver_check();
+        nfd_cfg_pcie_monitor_write_sig(__signal_number(&pcie_monitor_rst_sig));
         nfd_cfg_flr_setup();
 
     } else {
@@ -219,6 +225,8 @@ main(void)
             /* The link is good, start regular processing */
             while (1) {
                 nfd_cfg_check_flr_ap();
+                /* TODO test for ARM PCIe reset requests */
+                __implicit_read(&pcie_monitor_rst_sig);
                 rst_ack = nfd_cfg_poll_rst_ack(&nfd_in_gather_poll_rst_sig);
                 if (rst_ack) {
                     /* We have finished a reset, finalise our ME
