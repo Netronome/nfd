@@ -27,6 +27,7 @@
 #include <vnic/pci_in/issue_dma_status.c>
 #include <vnic/pci_in/precache_bufs.c>
 #include <vnic/shared/nfd_cfg_internal.c>
+#include <vnic/shared/nfd_cfg_pcie_monitor.c>
 #include <vnic/shared/nfd_rst_state.h>
 
 /* Determine which configuration rings to use, and where to send the

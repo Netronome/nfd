@@ -31,6 +31,7 @@
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_cfg_internal.c>
+#include <vnic/shared/nfd_cfg_pcie_monitor.c>
 #include <vnic/shared/nfd_rst_state.h>
 
 #if NFD_CFG_CLASS != NFD_CFG_CLASS_DEFAULT
