@@ -402,6 +402,40 @@ nfd_flr_check_link(unsigned int pcie_isl,
 }
 
 
+
+/* Check whether we are already processing a PCIe reset,
+ * and if not, start one. */
+__intrinsic void
+nfd_flr_throw_link_rst(unsigned int pcie_isl,
+                 __shared __gpr unsigned int *flr_pend_status)
+{
+    __xread unsigned int seen_flr;
+    __mem40 char *atomic_addr;
+    SIGNAL atomic_sig;
+    unsigned int pf_atomic_data = 1 << NFD_FLR_PCIE_RESET_shf;
+
+    atomic_addr = (NFD_FLR_LINK(pcie_isl) +
+                   sizeof pf_atomic_data * NFD_FLR_PF_ind);
+    mem_read_atomic(&seen_flr, atomic_addr, sizeof seen_flr);
+
+    if ((seen_flr & pf_atomic_data) == 0) {
+        /* We have found an unseen PCIe reset, mark it in local and
+         * atomic state. */
+        *flr_pend_status |= (1 << NFD_FLR_PCIE_RESET_ind);
+        *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
+
+        mem_bitset_imm(pf_atomic_data, atomic_addr);
+    }
+
+    /*
+     * We received a GPIO event to say the link is down, so record it
+     * as down in NFD_FLR_PCIE_STATE_ind
+     */
+    *flr_pend_status &= ~(1 << NFD_FLR_PCIE_STATE_ind);
+}
+
+
+
 /** Read the HW FLR and nfd_flr_atomic state
  * @param pcie_isl              PCIe island (0..3)
  * @param flr_pend_status    Internal state for FLR processing

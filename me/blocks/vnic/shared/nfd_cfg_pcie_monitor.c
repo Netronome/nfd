@@ -20,7 +20,6 @@
 #include <nfp.h>
 
 #include <nfp/me.h>
-#include <nfp/remote_me.h>
 #include <nfp/xpb.h>
 
 #include <nfp6000/nfp_me.h>
@@ -34,6 +33,10 @@
 #define NFP_BSP_PCIE_MON_ENABLE_shf 0
 #define NFP_BSP_PCIE_MON_SIG_BASE   0x4020
 #define NFP_BSP_PCIE_MON_ISL_STRIDE 0x4
+
+#define NFP_ARM_MSTR_RST            0x01500000
+#define NFP_ARM_MSTR_RST_shf        4
+
 
 /**
  * Check that the PCIe monitor is the expected version
@@ -95,39 +98,19 @@ nfd_cfg_pcie_monitor_write_sig(unsigned int sig_no)
 
 
 /**
- * Check whether the PCIe monitor has been enabled on our island
+ * Test whether our PCIe link is up according
+ * to PluMasterReset.PCIEn_RESET_OUT_L
+ * Returns true if the link is up
  */
-__intrinsic void
-nfd_cfg_pcie_monitor_busy_poll()
+__intrinsic int
+nfd_cfg_pcie_monitor_link_up()
 {
-#define PCIE_MONITOR_ISL 1
-#define PCIE_MONITOR_ME 1
-#define PCIE_MONITOR_MB NFP_MECSR_MAILBOX_0
-#define PCIE_MONITOR_POLL_CYCLES 4000
+    unsigned int up;
+    unsigned int master_reset_val;
 
-    __xread unsigned int mailbox_val_rd;
-    __xwrite unsigned int mailbox_val_wr;
-    SIGNAL mb_sig;
-
-    do {
-        /* Busy wait reading remote mailbox */
-        __remote_me_reg_read_signal_local(&mailbox_val_rd, PCIE_MONITOR_ISL,
-                                          PCIE_MONITOR_ME, /* csr */ 1,
-                                          PCIE_MONITOR_MB >> 2, 4, sig_done,
-                                          &mb_sig);
-        while (!signal_test(&mb_sig));
-
-        /* Busy sleep to throttle polling rate, and to let PCIe
-         * monitor read the value before we change it */
-        __implicit_write(&mb_sig);
-        set_alarm(PCIE_MONITOR_POLL_CYCLES, &mb_sig);
-        while (!signal_test(&mb_sig));
-    } while ((mailbox_val_rd & (1 << PCIE_ISL)) == 0);
-
-    mailbox_val_wr = mailbox_val_rd & ~(1 << PCIE_ISL);
-    remote_me_reg_write_signal_local(&mailbox_val_wr, PCIE_MONITOR_ISL,
-                                     PCIE_MONITOR_ME, /* csr */ 1,
-                                     PCIE_MONITOR_MB >> 2, 4);
+    master_reset_val = xpb_read(NFP_ARM_MSTR_RST);
+    up = (master_reset_val >> (NFP_ARM_MSTR_RST_shf + PCIE_ISL)) & 1;
+    return up;
 }
 
 

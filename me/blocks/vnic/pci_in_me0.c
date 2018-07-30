@@ -213,7 +213,9 @@ main(void)
             int rst_ack;
 
             /* Wait for the link to be ready and finalise PCIe settings */
-            nfd_cfg_pcie_monitor_busy_poll();
+            while (!nfd_cfg_pcie_monitor_link_up()) {
+                sleep(NFD_CFG_PCIE_POLL_CYCLES);
+            }
 
             nfd_cfg_pcie_monitor_stop();
             nfd_cfg_pci_reconfig();
@@ -225,8 +227,18 @@ main(void)
             /* The link is good, start regular processing */
             while (1) {
                 nfd_cfg_check_flr_ap();
-                /* TODO test for ARM PCIe reset requests */
-                __implicit_read(&pcie_monitor_rst_sig);
+                if (signal_test(&pcie_monitor_rst_sig)) {
+                    /* TEMP integration test
+                     * halt if we find the link up at this point */
+                    if (nfd_cfg_pcie_monitor_link_up()) {
+                        /* Temp error value */
+                        local_csr_write(local_csr_mailbox_0, 0x8aa);
+                        halt();
+                    }
+
+                    nfd_flr_throw_link_rst(PCIE_ISL, &flr_pend_status);
+                }
+
                 rst_ack = nfd_cfg_poll_rst_ack(&nfd_in_gather_poll_rst_sig);
                 if (rst_ack) {
                     /* We have finished a reset, finalise our ME
