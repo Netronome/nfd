@@ -153,14 +153,9 @@ do {                                                                        \
         }                                                                   \
                                                                             \
         /* Handle PCIe island resets */                                     \
-        /* XXX For now this largely replicates the FLR handling code */     \
-        /* In the future we can consider combining with FLR handling */     \
-        /* if that continues to be the case */                              \
         if (cfg_bar_data[1] & NFP_NET_CFG_UPDATE_PCI_RST) {                 \
             /* NB: This function writes ~8K of data */                      \
             nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg.vid));            \
-            nfd_flr_init_cfg_queue(_isl, cfg_msg.vid,                       \
-                                   PCIE_QC_EVENT_NOT_EMPTY);                \
                                                                             \
             if (NFD_VID_IS_PF(cfg_msg.vid)) {                               \
                 nfd_flr_init_pf_cfg_bar(_isl, cfg_msg.vid);                 \
