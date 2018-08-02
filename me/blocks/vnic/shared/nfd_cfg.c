@@ -168,54 +168,6 @@ _nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
 }
 
 
-
-/** Check the value of MasterDropIfDisabled and update if it differs
- * @param pcie_isl      PCIe island (0..3)
- * @param value         Desired value for MasterDropIfDisabled
- *
- * This function performs an XPB read of Cntrlr1 to check the current
- * value of the MasterDropIfDisabled bit.  If the requested value
- * differs, then it performs a modify-write to update the value to
- * the requested value.
- *
- * NB: The caller must ensure that nothing else is trying to modify
- * the Cntrlr1 state at the same time (esp unrelated bits).
- */
-__intrinsic void
-_nfd_flr_update_mstr_drop_if_disabled(unsigned int pcie_isl,
-                                      unsigned int value)
-{
-    __xwrite unsigned int cntrlr1_wr;
-    unsigned int cntrlr1_rd;
-    unsigned int cntrlr1_addr;
-    unsigned int curr_val;
-
-    cntrlr1_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR1) |
-                    (pcie_isl << NFP_PCIEX_ISL_shf));
-    cntrlr1_rd = xpb_read(cntrlr1_addr);
-    curr_val =
-        (cntrlr1_rd >> NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf) & 1;
-
-    /* Check requested value and update the CSR if the current
-     * doesn't match the requested. */
-    if (value) {
-        if (curr_val != 1) {
-            cntrlr1_rd |=
-                (1 << NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf);
-            cntrlr1_wr = cntrlr1_rd;
-            xpb_write(cntrlr1_addr, cntrlr1_wr);
-        }
-    } else {
-        if (curr_val != 0) {
-            cntrlr1_rd &=
-                ~(1 << NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf);
-            cntrlr1_wr = cntrlr1_rd;
-            xpb_write(cntrlr1_addr, cntrlr1_wr);
-        }
-    }
-}
-
-
 __intrinsic void
 nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
                              struct nfd_cfg_msg *cfg_msg,
@@ -277,9 +229,7 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
             /* The app master cannot send link state interrupts
              * at this point, because it should be checking
              * NFP_NET_CFG_LSC, and that has been reset for all
-             * vNICs.  This means we can clear MasterDropIfDisabled
-             * and clear msix_cur_cpp2pci_addr */
-            _nfd_flr_update_mstr_drop_if_disabled(pcie_isl, 0);
+             * vNICs.  This means we can clear msix_cur_cpp2pci_addr */
             msix_rst_curr_cpp2pci_addr(pcie_isl);
 
             /* Only ack the reset on the message for the last VID */

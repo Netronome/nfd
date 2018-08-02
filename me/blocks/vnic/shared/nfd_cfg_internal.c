@@ -768,6 +768,11 @@ nfd_cfg_pci_reconfig()
     /* Setup the DMA configuration registers */
     _nfd_cfg_dma_cfg_reg_setup();
 
+    /* Clear MasterDropIfDisabled, that may have been set while
+     * processing PCIe resets */
+    nfd_flr_update_mstr_drop_if_disabled(PCIE_ISL, 0);
+
+
     /* Enable B0 DMA ByteMask swapping */
 #if __REVISION_MIN >= __REVISION_B0
     _nfd_cfg_dma_enable_DmaByteMaskSwap();
