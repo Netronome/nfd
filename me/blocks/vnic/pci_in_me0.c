@@ -22,6 +22,7 @@
 
 #include <nfp/me.h>
 #include <nfp/remote_me.h>
+#include <nfp/mem_ring.h>   /* TEMP */
 
 #include <nfp6000/nfp_qc.h>
 
@@ -59,6 +60,18 @@ SIGNAL pcie_monitor_rst_sig;
 
 /* Setup _pf%d_net_app_id */
 NFD_NET_APP_ID_DECLARE(PCIE_ISL);
+
+
+/* Journal state transitions */
+DBG_JOURNAL_DECLARE(nfd_cfg_state_jrnl);
+
+#define JRNL_STATE_TRANSITION(_isl, _fault_state, _status, _cnt)  \
+do {                                                              \
+    JDBG(nfd_cfg_state_jrnl, (_isl));                             \
+    JDBG(nfd_cfg_state_jrnl, (_fault_state));                     \
+    JDBG(nfd_cfg_state_jrnl, (_status));                          \
+    JDBG(nfd_cfg_state_jrnl, (_cnt));                             \
+} while (0)
 
 
 /* Data to reflect reset to Notify */
@@ -219,6 +232,9 @@ main(void)
             ctx_swap();
         }
     } else if (ctx() == 1) {
+        unsigned int transition_cnt = (PCIE_ISL << 24);
+        unsigned int transition_time;
+
         /* Setup our initial link status and
          * stop PCIe monitor if the GPIO shows link */
         nfd_cfg_set_curr_pcie_sts();
@@ -231,11 +247,16 @@ main(void)
 
             /* XXX Invert flr_pend_status so set => fault */
             fault_state = ~flr_pend_status & _STATE_msk;
+            transition_time = local_csr_read(local_csr_timestamp_low);
+            JRNL_STATE_TRANSITION(transition_cnt, fault_state, flr_pend_status,
+                                  transition_time);
+            transition_cnt++;
 
             switch (fault_state) {
             case _STATE_RUN:
                 /* Perform PCIe island just in time config, start other threads
                  * then do regular status monitoring */
+                local_csr_write(local_csr_mailbox_1, _STATE_RUN);
                 nfd_cfg_pci_reconfig();
                 status |= (1<<STATUS_ISL_READY_BIT);
 
@@ -263,6 +284,7 @@ main(void)
             case _STATE_FAULT_GPIO:
             case _STATE_FAULT_BOTH:
                 /* GPIO indicates link down, PCIE is don't care */
+                local_csr_write(local_csr_mailbox_1, _STATE_FAULT_GPIO);
                 nfd_cfg_pcie_monitor_start();
                 while (1) {
                     nfd_cfg_ack_flr_ap();
@@ -281,6 +303,7 @@ main(void)
 
             case _STATE_FAULT_PWR:
                 /* PCIe indicates link down */
+                local_csr_write(local_csr_mailbox_1, _STATE_FAULT_PWR);
                 while (1) {
                     nfd_cfg_check_flr_ap(_STATE_CLEAN);
                     nfd_cfg_ack_pending_flr();
