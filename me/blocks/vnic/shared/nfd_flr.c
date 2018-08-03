@@ -351,56 +351,36 @@ nfd_flr_init_vf_cfg_bar(__emem char *vf_cfg_base, unsigned int pcie,
 
 
 /* Functions called from PCI.IN ME0 */
-
-__intrinsic void
-nfd_flr_check_link(unsigned int pcie_isl,
-                 __shared __gpr unsigned int *flr_pend_status)
+/**
+ * Test whether our PCIe link is up according
+ * to PCIeCntrlrConfig0.LinkPowerState
+ * Returns true if the link is up
+ */
+__intrinsic unsigned int
+nfd_flr_link_up()
 {
-    __xread unsigned int seen_flr;
-    __mem40 char *atomic_addr;
-    SIGNAL atomic_sig;
-    __xread unsigned int cntrlr0;
-    unsigned int xpb_addr;
-    SIGNAL xpb_sig;
-    unsigned int pf_atomic_data = 1 << NFD_FLR_PCIE_RESET_shf;
+    __xread unsigned int pcie_sts_raw;
     unsigned int pcie_sts;
+    unsigned int pcie_sts_addr;
+    SIGNAL pcie_sts_sig;
+    unsigned int up;
 
-    /* Read state of FLR hardware and seen atomics */
-    atomic_addr = (NFD_FLR_LINK(pcie_isl) +
-                   sizeof pf_atomic_data * NFD_FLR_PF_ind);
-    xpb_addr = NFP_PCIEX_COMPCFG_CNTRLR0;
+#define NFD_FLR_XPB_TIMEOUT_VAL 0xffffffff
 
-    __mem_read_atomic(&seen_flr, atomic_addr, sizeof seen_flr, sizeof seen_flr,
-                      sig_done, &atomic_sig);
-    __asm ct[xpb_read, cntrlr0, xpb_addr, 0, 1], sig_done[xpb_sig];
-
-    wait_for_all(&atomic_sig, &xpb_sig);
-
-    /* Check for NFD_FLR_PCIE_STATE_ind 1 => 0 transition */
-    pcie_sts =
-        ((cntrlr0 >> NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_shf) &
-         NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_msk);
-    if (pcie_sts != 0) {
-        /* The link is up, just record it in NFD_FLR_PCIE_STATE_ind */
-        *flr_pend_status |= (1 << NFD_FLR_PCIE_STATE_ind);
+    pcie_sts_addr = NFP_PCIEX_COMPCFG_CNTRLR0;
+    __asm ct[xpb_read, pcie_sts_raw, pcie_sts_addr, 0,  \
+             1], ctx_swap[pcie_sts_sig];
+    if (pcie_sts_raw == NFD_FLR_XPB_TIMEOUT_VAL) {
+        up = 0;
     } else {
-        if (*flr_pend_status & (1 << NFD_FLR_PCIE_STATE_ind))
-        {
-            if ((seen_flr & pf_atomic_data) == 0) {
-                /* We have found an unseen PCIe reset, mark it in local and
-                 * atomic state. */
-                *flr_pend_status |= (1 << NFD_FLR_PCIE_RESET_ind);
-                *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
-
-                mem_bitset_imm(pf_atomic_data, atomic_addr);
-            }
-        }
-
-        /* The link is currently down, record it in NFD_FLR_PCIE_STATE_ind */
-        *flr_pend_status &= ~(1 << NFD_FLR_PCIE_STATE_ind);
+        pcie_sts =
+            ((pcie_sts_raw >> NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_shf) &
+             NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_msk);
+        up = pcie_sts;
     }
-}
 
+    return up;
+}
 
 
 /* Check whether we are already processing a PCIe reset,
@@ -426,14 +406,31 @@ nfd_flr_throw_link_rst(unsigned int pcie_isl,
 
         mem_bitset_imm(pf_atomic_data, atomic_addr);
     }
-
-    /*
-     * We received a GPIO event to say the link is down, so record it
-     * as down in NFD_FLR_PCIE_STATE_ind
-     */
-    *flr_pend_status &= ~(1 << NFD_FLR_PCIE_STATE_ind);
 }
 
+
+/* Check and update LinkPowerState value
+ * If link goes down, start PCIe reset */
+__intrinsic void
+nfd_flr_check_link(unsigned int pcie_isl,
+                   __shared __gpr unsigned int *flr_pend_status,
+                   int state_clean)
+{
+    unsigned int link_up;
+
+    link_up = nfd_flr_link_up();
+    if (link_up != 0) {
+        *flr_pend_status |= (1 << NFD_FLR_PCIE_STATE_ind);
+    } else {
+        /* Only try to start a PCIe reset message if we were up,
+         * and in a "clean" processing state */
+        if (!state_clean &&
+            (*flr_pend_status & (1 << NFD_FLR_PCIE_STATE_ind))) {
+            nfd_flr_throw_link_rst(pcie_isl, flr_pend_status);
+        }
+        *flr_pend_status &= ~(1 << NFD_FLR_PCIE_STATE_ind);
+    }
+}
 
 
 /** Read the HW FLR and nfd_flr_atomic state

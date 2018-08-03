@@ -28,7 +28,6 @@
 #include <vnic/pci_out/cache_desc_status.c>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_cfg_internal.c>
-#include <vnic/shared/nfd_cfg_pcie_monitor.c>
 #include <vnic/shared/nfd_rst_state.h>
 
 NFD_INIT_DONE_DECLARE;

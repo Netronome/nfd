@@ -105,6 +105,7 @@
 #define NFD_FLR_PF_ind                  2
 #define NFD_FLR_PCIE_RESET_ind          3
 #define NFD_FLR_PCIE_STATE_ind          4
+#define NFD_FLR_GPIO_STATE_ind          5
 #define NFD_FLR_PF_shf                  0
 #define NFD_FLR_PCIE_RESET_shf          1
 
@@ -152,6 +153,9 @@
 #define NFP_PCIEX_COMPCFG_CFG0                               0x00100000
 #define NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf                 11
 #define NFP_PCIEX_COMPCFG_CFG0_PF_BUS_MSTR_ENABLE_shf        25
+#define NFP_PCIEX_CLOCK_RESET_CTRL                           0x44045400
+#define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk              0xff
+#define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf              16
 
 
 #if defined(__NFP_LANG_MICROC)

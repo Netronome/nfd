@@ -102,7 +102,7 @@ nfd_cfg_pcie_monitor_write_sig(unsigned int sig_no)
  * to PluMasterReset.PCIEn_RESET_OUT_L
  * Returns true if the link is up
  */
-__intrinsic int
+__intrinsic unsigned int
 nfd_cfg_pcie_monitor_link_up()
 {
     unsigned int up;

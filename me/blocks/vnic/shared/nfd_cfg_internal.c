@@ -42,6 +42,7 @@
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
 
+#include <vnic/shared/nfd_cfg_pcie_monitor.c>
 #include <vnic/shared/nfd_flr.c>
 
 #include <nfp_net_ctrl.h>
@@ -831,7 +832,7 @@ nfd_cfg_flr_setup()
  * an FLR.
  */
 void
-nfd_cfg_check_flr_ap()
+nfd_cfg_check_flr_ap(int state_clean)
 {
     if (signal_test(&flr_ap_sig)) {
         __xread unsigned int flr_sent[3];
@@ -847,7 +848,7 @@ nfd_cfg_check_flr_ap()
         local_csr_write(local_csr_mailbox_0, flr_ap_xfer);
 
         /* Call nfd_flr.c API to update the FLR pending state */
-        nfd_flr_check_link(PCIE_ISL, &flr_pend_status);
+        nfd_flr_check_link(PCIE_ISL, &flr_pend_status, state_clean);
         nfd_flr_check_pf(PCIE_ISL, &flr_pend_status);
         nfd_flr_check_vfs(PCIE_ISL, &flr_pend_status, flr_pend_vf);
 
@@ -908,6 +909,101 @@ nfd_cfg_check_flr_ap()
             NFD_CFG_FLR_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_CFG_FLR_EVENT_FILTER);
+    }
+}
+
+
+/**
+ * Ack the FLR autopush, ignoring interrupt and resetting event filter
+ *
+ * When the PCIe monitor is servicing PCIe interrupts, we ignore autopushes
+ * and simply rearm for the next event.
+ */
+__intrinsic void
+nfd_cfg_ack_flr_ap()
+{
+    if (signal_test(&flr_ap_sig)) {
+        local_csr_write(local_csr_mailbox_0, flr_ap_xfer);
+
+        /* Mark the autopush signal and xfer as used
+         * so that the compiler keeps them reserved. */
+        __implicit_write(&flr_ap_sig);
+        __implicit_write(&flr_ap_xfer);
+
+        event_cls_autopush_filter_reset(
+            NFD_CFG_FLR_EVENT_FILTER,
+            NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
+            NFD_CFG_FLR_EVENT_FILTER);
+    }
+}
+
+
+/**
+ * Ack outstanding FLRs without starting CFG messages
+ *
+ * When we are waiting for LinkPowerState to become good, we need
+ * to ensure that any unhandled FLRs are acked.  This is not necessary
+ * if the GPIO indicates we are down, as the ARM resets the PCIe island
+ * before we leave that state.
+ */
+__intrinsic void
+nfd_cfg_ack_pending_flr()
+{
+    int vf;
+
+    /* Our island is in a clean state, so just ack the FLRs */
+    if (bit_test(flr_pend_status, NFD_FLR_PF_ind)) {
+        /* The PF gets priority over VFs */
+        nfd_flr_ack_pf(PCIE_ISL);
+        flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
+
+    } else if (bit_test(flr_pend_status, NFD_FLR_VF_LO_ind)) {
+        vf = _ffs(flr_pend_vf[NFD_FLR_VF_LO_ind]);
+
+        if (vf >= 0) {
+            flr_pend_vf[NFD_FLR_VF_LO_ind] &= ~(1 << vf);
+        } else {
+            flr_pend_status &= ~(1 << NFD_FLR_VF_LO_ind);
+            return -1;
+        }
+
+        nfd_flr_ack_vf(PCIE_ISL, vf);
+
+    } else if (bit_test(flr_pend_status, NFD_FLR_VF_HI_ind)) {
+        vf = _ffs(flr_pend_vf[NFD_FLR_VF_HI_ind]);
+
+        if (vf >= 0) {
+            flr_pend_vf[NFD_FLR_VF_HI_ind] &= ~(1 << vf);
+
+        } else {
+            flr_pend_status &= ~(1 << NFD_FLR_VF_HI_ind);
+            return -1;
+        }
+
+        vf |= 32;
+
+        nfd_flr_ack_vf(PCIE_ISL, vf);
+    }
+}
+
+
+/**
+ * Update the GPIO state in this ME
+ *
+ * If GPIO indicates link down, start PCIe reset
+ */
+__intrinsic void
+nfd_cfg_check_gpio(SIGNAL *gpio_sig, int state_clean)
+{
+    if (signal_test(gpio_sig)) {
+        if (nfd_cfg_pcie_monitor_link_up()) {
+            flr_pend_status |= (1 << NFD_FLR_GPIO_STATE_ind);
+        } else {
+            flr_pend_status &= ~(1 << NFD_FLR_GPIO_STATE_ind);
+            if (!state_clean) {
+                nfd_flr_throw_link_rst(PCIE_ISL, &flr_pend_status);
+            }
+        }
     }
 }
 
@@ -1429,9 +1525,6 @@ nfd_cfg_next_queue(struct nfd_cfg_msg *cfg_msg, unsigned int *queue)
 __intrinsic void
 nfd_cfg_check_pcie_clock()
 {
-#define NFP_PCIEX_CLOCK_RESET_CTRL                  0x44045400
-#define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk     0xff
-#define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf     16
 /* XXX multihost platforms will use 0xfd for holding PCI.PCI in reset
  * to indicate that it is temporary. */
 #define NFP_PCIEX_CLOCK_RESET_CTRL_FULL_RESET       0xd
@@ -1464,12 +1557,10 @@ nfd_cfg_check_pcie_clock()
 }
 
 
+
 /*
- * Check the link power state and set an initial value in flr_pend_status,
- * NFD_FLR_PCIE_STATE_ind.
- *
- * This function "busy waits" on the PCIe link check to ensure that no other
- * contexts can execute while it tests the link.
+ * Check the link power state and GPIO state to set an initial value in
+ * flr_pend_status, NFD_FLR_PCIE_STATE_ind and NFD_FLR_GPIO_STATE_ind
  */
 __intrinsic void
 nfd_cfg_set_curr_pcie_sts()
@@ -1479,21 +1570,32 @@ nfd_cfg_set_curr_pcie_sts()
     unsigned int pcie_sts_addr;
     SIGNAL pcie_sts_sig;
 
-    /* Set an initial value for NFD_FLR_PCIE_STATE_ind */
-    pcie_sts_addr = NFP_PCIEX_COMPCFG_CNTRLR0;
+#define NFP_PCIEX_CLOCK_RESET_CTRL_RESET_bit    1
+
+    /* Test the ClockResetControl for reset removed
+     * and then check LinkPowerState if not in reset */
+    pcie_sts_addr = (NFP_PCIEX_CLOCK_RESET_CTRL |
+                     (PCIE_ISL << NFP_PCIEX_ISL_shf));
     __asm ct[xpb_read, pcie_sts_raw, pcie_sts_addr, 0,  \
-             1], sig_done[pcie_sts_sig];
-
-    /* Busy wait on the read signal to prevent other threads executing */
-    while (!signal_test(&pcie_sts_sig));
-
-    pcie_sts =
-        ((pcie_sts_raw >> NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_shf) &
-         NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_msk);
-
-    if (pcie_sts != 0) {
-        flr_pend_status |= (1 << NFD_FLR_PCIE_STATE_ind);
+             1], ctx_swap[pcie_sts_sig];
+    pcie_sts = ((pcie_sts_raw >> NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf) &
+                NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk);
+    if (pcie_sts & (1 << NFP_PCIEX_CLOCK_RESET_CTRL_RESET_bit)) {
+        /* Test LinkPowerState ASAP after seeing reset removed */
+        if (nfd_flr_link_up()) {
+            flr_pend_status |= (1 << NFD_FLR_PCIE_STATE_ind);
+        } else {
+            flr_pend_status &= ~(1 << NFD_FLR_PCIE_STATE_ind);
+        }
     } else {
+        /* The island is in reset, so mark it down */
         flr_pend_status &= ~(1 << NFD_FLR_PCIE_STATE_ind);
+    }
+
+    /* Set an initial value for NFD_FLR_GPIO_STATE_ind */
+    if (nfd_cfg_pcie_monitor_link_up()) {
+        flr_pend_status |= (1 << NFD_FLR_GPIO_STATE_ind);
+    } else {
+        flr_pend_status &= ~(1 << NFD_FLR_GPIO_STATE_ind);
     }
 }

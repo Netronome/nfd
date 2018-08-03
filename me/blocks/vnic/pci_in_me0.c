@@ -31,7 +31,6 @@
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_cfg_internal.c>
-#include <vnic/shared/nfd_cfg_pcie_monitor.c>
 #include <vnic/shared/nfd_rst_state.h>
 
 #if NFD_CFG_CLASS != NFD_CFG_CLASS_DEFAULT
@@ -81,6 +80,17 @@ pci_in_msg_notify(unsigned int isl_reset)
                                      NFD_IN_NOTIFY_RESET_RD,
                                      sizeof notify_reset_state);
 }
+
+
+/* Helper defines for CTX1 state table */
+#define _STATE_msk (1 << NFD_FLR_PCIE_STATE_ind | 1 << NFD_FLR_GPIO_STATE_ind)
+#define _STATE_RUN          0
+#define _STATE_FAULT_GPIO   (1 << NFD_FLR_GPIO_STATE_ind)
+#define _STATE_FAULT_PWR    (1 << NFD_FLR_PCIE_STATE_ind)
+#define _STATE_FAULT_BOTH   (_STATE_FAULT_GPIO | _STATE_FAULT_PWR)
+
+#define _STATE_CLEAN        1
+#define _STATE_BUSY         0
 
 
 int
@@ -209,49 +219,88 @@ main(void)
             ctx_swap();
         }
     } else if (ctx() == 1) {
-        for (;;) {
-            int rst_ack;
-
-            /* Wait for the link to be ready and finalise PCIe settings */
-            while (!nfd_cfg_pcie_monitor_link_up()) {
-                sleep(NFD_CFG_PCIE_POLL_CYCLES);
-            }
-
+        /* Setup our initial link status and
+         * stop PCIe monitor if the GPIO shows link */
+        nfd_cfg_set_curr_pcie_sts();
+        if (flr_pend_status &  (1 << NFD_FLR_GPIO_STATE_ind)) {
             nfd_cfg_pcie_monitor_stop();
-            nfd_cfg_pci_reconfig();
-            nfd_cfg_set_curr_pcie_sts();
+        }
 
-            /* Allow other threads to run */
-            status |= (1<<STATUS_ISL_READY_BIT);
+        for (;;) {
+            unsigned int fault_state;
 
-            /* The link is good, start regular processing */
-            while (1) {
-                nfd_cfg_check_flr_ap();
-                if (signal_test(&pcie_monitor_rst_sig)) {
-                    /* TEMP integration test
-                     * halt if we find the link up at this point */
-                    if (nfd_cfg_pcie_monitor_link_up()) {
-                        /* Temp error value */
-                        local_csr_write(local_csr_mailbox_0, 0x8aa);
-                        halt();
+            /* XXX Invert flr_pend_status so set => fault */
+            fault_state = ~flr_pend_status & _STATE_msk;
+
+            switch (fault_state) {
+            case _STATE_RUN:
+                /* Perform PCIe island just in time config, start other threads
+                 * then do regular status monitoring */
+                nfd_cfg_pci_reconfig();
+                status |= (1<<STATUS_ISL_READY_BIT);
+
+                while (1) {
+                    int rst_ack;
+
+                    nfd_cfg_check_flr_ap(_STATE_BUSY);
+                    nfd_cfg_check_gpio(&pcie_monitor_rst_sig, _STATE_BUSY);
+
+                    rst_ack = nfd_cfg_poll_rst_ack(&nfd_in_gather_poll_rst_sig);
+                    if (rst_ack) {
+                        /* We have finished a reset, finalise our ME
+                         * and return to waiting for link */
+                        gather_compl_rst();
+
+                        /* Stop other threads running and
+                         * return to state tests */
+                        status &= ~(1<<STATUS_ISL_READY_BIT);
+                        break;
+                    }
+                    ctx_swap();
+                }
+                break;
+
+            case _STATE_FAULT_GPIO:
+            case _STATE_FAULT_BOTH:
+                /* GPIO indicates link down, PCIE is don't care */
+                nfd_cfg_pcie_monitor_start();
+                while (1) {
+                    nfd_cfg_ack_flr_ap();
+                    nfd_cfg_check_gpio(&pcie_monitor_rst_sig, _STATE_CLEAN);
+
+                    if ((~flr_pend_status & _STATE_FAULT_GPIO) == 0) {
+                        /* GPIO indicatess link fault has resolved
+                         * leave GPIO link down state */
+                        nfd_cfg_pcie_monitor_stop();
+                        break;
                     }
 
-                    nfd_flr_throw_link_rst(PCIE_ISL, &flr_pend_status);
+                    ctx_swap();
                 }
+                break;
 
-                rst_ack = nfd_cfg_poll_rst_ack(&nfd_in_gather_poll_rst_sig);
-                if (rst_ack) {
-                    /* We have finished a reset, finalise our ME
-                     * and return to waiting for link */
-                    gather_compl_rst();
+            case _STATE_FAULT_PWR:
+                /* PCIe indicates link down */
+                while (1) {
+                    nfd_cfg_check_flr_ap(_STATE_CLEAN);
+                    nfd_cfg_ack_pending_flr();
+                    nfd_cfg_check_gpio(&pcie_monitor_rst_sig, _STATE_CLEAN);
 
-                    /* Stop other threads running and then restart
-                     * the PCIe monitor */
-                    status &= ~(1<<STATUS_ISL_READY_BIT);
-                    nfd_cfg_pcie_monitor_start();
-                    break;
+                    if (~flr_pend_status & _STATE_FAULT_GPIO) {
+                        /* GPIO indicates a link fault has occurred
+                         * transition to GPIO link down state */
+                        break;
+                    }
+
+                    if ((~flr_pend_status & _STATE_FAULT_PWR) == 0) {
+                        /* LinkPowerState fault has resolved
+                         * transition to running state */
+                        break;
+                    }
+
+                    ctx_swap();
                 }
-                ctx_swap();
+                break;
             }
         }
     } else {
