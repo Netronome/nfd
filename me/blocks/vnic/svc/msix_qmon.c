@@ -711,10 +711,27 @@ msix_imod_check_can_send(const unsigned int pcie_isl, int qnum,
 
     ticks = current_ts - ts;
 
+    /*
+     * limited documentation from
+     * https://github.com/torvalds/linux/blob/v3.13/include/uapi/linux/ethtool.h#L232
+     * this is implemented in the next 2 if blocks:
+     *
+     * (usecs > 0 && time_since_first_completion >= usecs) ||
+     * (max_frames > 0 && completed_frames >= max_frames)
+     */
     if (cfg_irqc_ticks && (ticks >= cfg_irqc_ticks))
         return 0;
 
     if (cfg_irqc_pkts && (pcnt >= cfg_irqc_pkts))
+        return 0;
+
+    /*
+     * usecs = 0 is special, along with max_frames = 1 disables
+     * coalescing, along with max_frames > 1 is undocumented, choosing
+     * to disable coalescing. Both usec and max_frames is illegal so
+     * no need to check for max_frames (cfg_irq_pkts)
+     */
+    if (!cfg_irqc_ticks)
         return 0;
 
     return 1;
