@@ -259,6 +259,8 @@ NFD_CFG_RINGS_DECL(3);
 #define NFD_CFG_BAR_ISL(_isl, _vid )            \
     NFD_CFG_BAR(NFD_CFG_BASE_LINK(_isl), (_vid))
 
+
+
 /**
  * @param isl           PCIe island, in the range 0..3
  * @param vid           vNIC ID
@@ -309,12 +311,112 @@ __intrinsic __emem char *nfd_cfg_bar_base(unsigned int isl, unsigned int vid) {
 err:
     /* XXX we are halting on this error because it indicates a serious error
      * the return won't actually execute, and 0 is as good as any other
-     * value.  0x800 == NFD_CFG_BAR_BASE_ISL_INVALID */
+     * value.  0x809 == NFD_CFG_BAR_BASE_ISL_INVALID */
     local_csr_write(local_csr_mailbox_0, 0x809);
     local_csr_write(local_csr_mailbox_1, isl);
     halt();
     return 0;
 };
+
+
+#if (defined(NFD_USE_TLV_VF) || defined(NFD_USE_TLV_CTRL) || \
+     defined(NFD_USE_TLV_PF))
+
+#ifndef NFD_USE_TLV
+#define NFD_USE_TLV
+#endif
+
+#ifndef NFD_CFG_TLV_BLOCK_SZ
+#error "NFD_CFG_TLV_BLOCK_SZ must be defined if NFD_USE_TLV is set"
+#endif
+
+#if ((NFD_CFG_TLV_BLOCK_SZ % 4) != 0)
+#error "NFD_CFG_TLV_BLOCK_SZ must be a 4B multiple"
+#endif
+
+#ifndef NFD_CFG_TLV_BLOCK_OFF
+#error "NFD_CFG_TLV_BLOCK_OFF must be defined if NFD_USE_TLV is set"
+#endif
+
+#if ((NFD_CFG_TLV_BLOCK_OFF % 4) != 0)
+#error "NFD_CFG_TLV_BLOCK_OFF must be a 4B multiple"
+#endif
+
+#define NFD_TLV_BASE_IND(_x) nfd_cfg_tlv_template##_x
+#define NFD_TLV_BASE(_x) NFD_TLV_BASE_IND(_x)
+
+#define NFD_TLV_BASE_DECLARE(_isl) \
+    _NFP_CHIPRES_ASM(.alloc_mem NFD_TLV_BASE(_isl) emem global	\
+    ((NFD_MAX_VFS + NFD_MAX_CTRL + NFD_MAX_PFS) * NFD_CFG_TLV_BLOCK_SZ) 4)
+
+#define NFD_TLV_BASE_LINK_IND1(_sym)            \
+    ((__emem char *) _link_sym(_sym))
+#define NFD_TLV_BASE_LINK_IND0(_isl)            \
+    NFD_TLV_BASE_LINK_IND1(NFD_TLV_BASE(_isl))
+#define NFD_TLV_BASE_LINK(_isl) NFD_TLV_BASE_LINK_IND0(_isl)
+
+#define NFD_TLV_VID_BASE(_isl, _vid)                            \
+    (NFD_TLV_BASE_LINK(_isl) + (_vid) * NFD_CFG_TLV_BLOCK_SZ)
+
+
+/**
+ * @param isl           PCIe island, in the range 0..3
+ * @param vid           vNIC ID
+ *
+ * This function is not intended for use on the data plane as it is
+ * expensive to extract the BAR pointer.  Supplying an isl not in the
+ * range 0..3 or for a PCIe island not in use with NFD is illegal.
+ * It is caught with a halt().
+ */
+__intrinsic __emem char *nfd_cfg_tlv_tml_base(unsigned int isl,
+                                              unsigned int vid) {
+    __emem char *tlv_base;
+    switch (isl) {
+    case 0:
+        #ifdef NFD_PCIE0_EMEM
+            tlv_base = NFD_TLV_VID_BASE(0, vid);
+        #else
+            goto err;
+        #endif
+        break;
+    case 1:
+        #ifdef NFD_PCIE1_EMEM
+            tlv_base = NFD_TLV_VID_BASE(1, vid);
+        #else
+            goto err;
+        #endif
+        break;
+    case 2:
+        #ifdef NFD_PCIE2_EMEM
+            tlv_base = NFD_TLV_VID_BASE(2, vid);
+        #else
+            goto err;
+        #endif
+        break;
+    case 3:
+        #ifdef NFD_PCIE3_EMEM
+            tlv_base = NFD_TLV_VID_BASE(3, vid);
+        #else
+            goto err;
+        #endif
+        break;
+    default:
+        goto err;
+        break;
+    };
+
+    return tlv_base;
+
+err:
+    /* XXX we are halting on this error because it indicates a serious error
+     * the return won't actually execute, and 0 is as good as any other
+     * value.  0x809 == NFD_CFG_BAR_BASE_ISL_INVALID */
+    local_csr_write(local_csr_mailbox_0, 0x809);
+    local_csr_write(local_csr_mailbox_1, isl);
+    halt();
+    return 0;
+};
+#endif /* NFD_USE_TLV */
 
 
 /**

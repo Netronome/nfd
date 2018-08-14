@@ -52,6 +52,9 @@ struct nfd_cfg_msg cfg_msg0;
 NFD_CFG_BASE_DECLARE(0);
 NFD_VF_CFG_DECLARE(0);
 NFD_VF_CFG_INIT(0);
+#ifdef NFD_USE_TLV
+NFD_TLV_BASE_DECLARE(0);
+#endif
 
 PCIE_C2P_BAR_ALLOC_OFF(nfd_scv_qmon_bar0, me, 0, PCIE_CPP2PCIE_QMON, 1);
 #endif
@@ -65,6 +68,9 @@ struct nfd_cfg_msg cfg_msg1;
 NFD_CFG_BASE_DECLARE(1);
 NFD_VF_CFG_DECLARE(1);
 NFD_VF_CFG_INIT(1);
+#ifdef NFD_USE_TLV
+NFD_TLV_BASE_DECLARE(1);
+#endif
 
 PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar1, me, 1, PCIE_CPP2PCIE_QMON, 1);
 #endif
@@ -78,6 +84,9 @@ struct nfd_cfg_msg cfg_msg2;
 NFD_CFG_BASE_DECLARE(2);
 NFD_VF_CFG_DECLARE(2);
 NFD_VF_CFG_INIT(2);
+#ifdef NFD_USE_TLV
+NFD_TLV_BASE_DECLARE(2);
+#endif
 
 PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar2, me, 2, PCIE_CPP2PCIE_QMON, 1);
 #endif
@@ -91,6 +100,9 @@ struct nfd_cfg_msg cfg_msg3;
 NFD_CFG_BASE_DECLARE(3);
 NFD_VF_CFG_DECLARE(3);
 NFD_VF_CFG_INIT(3);
+#ifdef NFD_USE_TLV
+NFD_TLV_BASE_DECLARE(3);
+#endif
 
 PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar3, me, 3, PCIE_CPP2PCIE_QMON, 1);
 #endif
@@ -122,19 +134,16 @@ do {                                                                    \
                                                                         \
             if (NFD_VID_IS_PF(cfg_msg##_isl.vid)) {                     \
                 /* We have a PF FLR */                                  \
-                nfd_flr_init_pf_cfg_bar(NFD_CFG_BASE_LINK(_isl),        \
-                                        cfg_msg##_isl.vid);             \
+                nfd_flr_init_pf_cfg_bar(_isl, cfg_msg##_isl.vid);       \
                                                                         \
             } else if (NFD_VID_IS_VF(cfg_msg##_isl.vid)) {              \
                 /* We have a VF FLR */                                  \
-                nfd_flr_init_vf_cfg_bar(NFD_CFG_BASE_LINK(_isl),        \
-                                        NFD_VF_CFG_BASE_LINK(_isl),     \
-                                        cfg_msg##_isl.vid);             \
+                nfd_flr_init_vf_cfg_bar(NFD_VF_CFG_BASE_LINK(_isl),     \
+                                        _isl, cfg_msg##_isl.vid);	\
                                                                         \
             } else {                                                    \
                 /* We have a PF/CTRL FLR */                             \
-                nfd_flr_init_ctrl_cfg_bar(NFD_CFG_BASE_LINK(_isl),      \
-                                          cfg_msg##_isl.vid);           \
+                nfd_flr_init_ctrl_cfg_bar(_isl, cfg_msg##_isl.vid);     \
                                                                         \
             }                                                           \
         }                                                               \

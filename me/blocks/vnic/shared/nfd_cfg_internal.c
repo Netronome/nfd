@@ -501,6 +501,10 @@ _nfd_cfg_init_vf_cfg_bar(unsigned int vid)
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
                                     NFD_RSS_HASH_FUNC};
+#ifdef NFD_USE_TLV_VF
+    __xwrite unsigned int tlv_wr = (NFP_NET_CFG_TLV_TYPE_RESERVED << 16) | \
+        (NFD_CFG_TLV_BLOCK_OFF - NFP_NET_CFG_TLV_BASE - 4);
+#endif
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
@@ -511,6 +515,13 @@ _nfd_cfg_init_vf_cfg_bar(unsigned int vid)
     mem_write8(&cfg2,
                NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_RX_OFFSET,
                sizeof cfg2);
+
+#ifdef NFD_USE_TLV_VF
+    mem_write32(&tlv_wr,
+        NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_TLV_BASE,
+        sizeof(tlv_wr));
+#endif
+
 #endif
 }
 
@@ -530,6 +541,11 @@ _nfd_cfg_init_ctrl_cfg_bar(unsigned int vid)
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
                                     NFD_RSS_HASH_FUNC};
+#ifdef NFD_USE_TLV_CTRL
+    __xwrite unsigned int tlv_wr = (NFP_NET_CFG_TLV_TYPE_RESERVED << 16) | \
+        (NFD_CFG_TLV_BLOCK_OFF - NFP_NET_CFG_TLV_BASE - 4);
+#endif
+
 
     mem_write64(&cfg, NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_VERSION,
                 sizeof cfg);
@@ -539,6 +555,12 @@ _nfd_cfg_init_ctrl_cfg_bar(unsigned int vid)
 
     mem_write8(&cfg2, NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_RX_OFFSET,
                sizeof cfg2);
+
+#ifdef NFD_USE_TLV_CTRL
+    mem_write32(&tlv_wr,
+        NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_TLV_BASE,
+        sizeof(tlv_wr));
+#endif
 
 }
 
@@ -558,6 +580,11 @@ _nfd_cfg_init_pf_cfg_bar(unsigned int vid)
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
                                     NFD_RSS_HASH_FUNC};
+#ifdef NFD_USE_TLV_PF
+    __xwrite unsigned int tlv_wr = (NFP_NET_CFG_TLV_TYPE_RESERVED << 16) | \
+        (NFD_CFG_TLV_BLOCK_OFF - NFP_NET_CFG_TLV_BASE - 4);
+#endif
+
 #ifdef NFD_BPF_CAPABLE
 #ifndef NFD_BPF_ABI
 #define NFD_BPF_ABI (NFP_NET_BPF_ABI)
@@ -601,6 +628,12 @@ _nfd_cfg_init_pf_cfg_bar(unsigned int vid)
     mem_write8(&bpf_cfg,
                NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_BPF_ABI,
                sizeof bpf_cfg);
+#endif
+
+#ifdef NFD_USE_TLV_PF
+    mem_write32(&tlv_wr,
+        NFD_CFG_BAR_ISL(PCIE_ISL, vid) + NFP_NET_CFG_TLV_BASE,
+        sizeof(tlv_wr));
 #endif
 }
 

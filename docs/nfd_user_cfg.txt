@@ -192,6 +192,18 @@
  *                          default NFP_NET_CFG_RSS_TOEPLITZ
  */
 
+/**
+ * TLV defines
+ * @NFD_USE_TLV             Maybe set by the user, otherwise set by
+ *                          NFD  in nfd_cfg.h (microC) if
+ *                          NFD_USE_TLV_XYZ is defined.
+ * @NFD_USE_TLV_XYZ         Specify which vNIC types use TLVs.
+ *                          "XYZ" can be PF,  CTRL, or VF.
+ * @NFD_CFG_TLV_BLOCK_SZ    Number of bytes in TLV block.  Must be
+ *                          4B multiple.
+ * @NFD_CFG_TLV_BLOCK_OFF   Start offset of TLV block in vNIC BAR.
+ *                          Must be 4B multiple.
+ */
 
 /**
  * NFD user context within PCIe island

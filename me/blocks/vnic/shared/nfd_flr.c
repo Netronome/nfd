@@ -153,18 +153,53 @@ nfd_flr_init_cfg_queue(unsigned int pcie_isl, unsigned int vid,
 }
 
 
-/** Init the non-zero parts of the PF control BAR
- * @param isl_base      start address of the CFG BARs for the PCIe island
+/** Init the TLVs in the CFG BAR from the template
+ * @param pcie          PCIe island, in the range 0..3
  * @param vid           vid number on the PCIe island
  *
- * "isl_base" should be obtained via the appropriate API,
- * e.g. NFD_CFG_BASE_LINK.
+ */
+#ifdef NFD_USE_TLV
+void
+nfd_flr_init_tlv(const unsigned int pcie, unsigned int vid)
+{
+    __xwrite unsigned int tlv_wr = (NFP_NET_CFG_TLV_TYPE_RESERVED << 16) | \
+        (NFD_CFG_TLV_BLOCK_SZ - NFP_NET_CFG_TLV_BASE - 4);
+    __emem char *bar_base = nfd_cfg_bar_base(pcie, vid);
+    __emem char *tlv_base = nfd_cfg_tlv_tml_base(pcie, vid);
+
+    unsigned int i, offset, size;
+    __xread unsigned int read_block[16];
+    __xwrite unsigned int write_block[16];
+
+    mem_write32(&tlv_wr, tlv_base + NFP_NET_CFG_TLV_BASE, sizeof(tlv_wr));
+
+    for (offset = 0; offset < NFD_CFG_TLV_BLOCK_SZ;
+         offset += sizeof(read_block)) {
+        mem_read32(read_block, tlv_base + offset, sizeof(read_block));
+
+        reg_cp(write_block, read_block, sizeof(read_block));
+
+        size = NFD_CFG_TLV_BLOCK_SZ - offset;
+        if (size > sizeof(write_block))
+            size = sizeof(write_block);
+
+        mem_write32(write_block, bar_base + NFD_CFG_TLV_BLOCK_OFF + offset,
+                    size);
+    }
+}
+#endif
+
+/** Init the non-zero parts of the PF control BAR
+ * @param pcie          PCIe island, in the range 0..3
+ * @param vid           vid number on the PCIe island
+ *
  */
 void
-nfd_flr_init_pf_cfg_bar(__emem char *isl_base, unsigned int vid)
+nfd_flr_init_pf_cfg_bar(unsigned int pcie, unsigned int vid)
 {
 #if (NFD_MAX_PFS != 0)
     unsigned int q_base = NFD_VID2NATQ(vid, 0);
+    __emem char *bar_base = nfd_cfg_bar_base(pcie, vid);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION(PF),
                                    (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
                                     << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
@@ -176,6 +211,7 @@ nfd_flr_init_pf_cfg_bar(__emem char *isl_base, unsigned int vid)
     __xwrite unsigned int exn_lsc = 0xffffffff;
     __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
                                     NFD_RSS_HASH_FUNC};
+
 #ifdef NFD_BPF_CAPABLE
 #ifndef NFD_BPF_ABI
 #define NFD_BPF_ABI (NFP_NET_BPF_ABI)
@@ -206,37 +242,36 @@ nfd_flr_init_pf_cfg_bar(__emem char *isl_base, unsigned int vid)
             NFD_LAST_PF_MAX_QUEUES;
     }
 #endif
-    mem_write64(&cfg,
-                NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_VERSION,
-                sizeof cfg);
+    mem_write64(&cfg, bar_base + NFP_NET_CFG_VERSION, sizeof cfg);
 
-    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vid) +
-               NFP_NET_CFG_LSC, sizeof exn_lsc);
+    mem_write8(&exn_lsc, bar_base + NFP_NET_CFG_LSC, sizeof exn_lsc);
 
-    mem_write8(&cfg2,
-               NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_RX_OFFSET,
-               sizeof cfg2);
+    mem_write8(&cfg2, bar_base + NFP_NET_CFG_RX_OFFSET, sizeof cfg2);
 #ifdef NFD_BPF_CAPABLE
-    mem_write8(&bpf_cfg,
-               NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_BPF_ABI,
-               sizeof bpf_cfg);
+    mem_write8(&bpf_cfg, bar_base + NFP_NET_CFG_BPF_ABI, sizeof bpf_cfg);
 #endif
+
+#ifdef NFD_USE_TLV_PF
+    nfd_flr_init_tlv(pcie, vid);
+#endif
+
 #endif
 }
 
 
 /** Init the non-zero parts of the CTRL control BAR
- * @param isl_base      start address of the CFG BARs for the PCIe island
+ * @param pcie          PCIe island, in the range 0..3
  * @param vid           vid number on the PCIe island
  *
  * "isl_base" should be obtained via the appropriate API,
  * e.g. NFD_CFG_BASE_LINK.
  */
 void
-nfd_flr_init_ctrl_cfg_bar(__emem char *isl_base, unsigned int vid)
+nfd_flr_init_ctrl_cfg_bar(unsigned int pcie, unsigned int vid)
 {
 #ifdef NFD_USE_CTRL
     unsigned int q_base = NFD_VID2NATQ(vid, 0);
+    __emem char *bar_base = nfd_cfg_bar_base(pcie, vid);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION(CTRL),
                                    (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
                                     << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
@@ -249,30 +284,30 @@ nfd_flr_init_ctrl_cfg_bar(__emem char *isl_base, unsigned int vid)
     __xwrite unsigned int cfg2[] = {NFD_OUT_RX_OFFSET,
                                     NFD_RSS_HASH_FUNC};
 
-    mem_write64(&cfg,
-                NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_VERSION,
-                sizeof cfg);
+    mem_write64(&cfg, bar_base + NFP_NET_CFG_VERSION, sizeof cfg);
 
-    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vid) +
-               NFP_NET_CFG_LSC, sizeof exn_lsc);
+    mem_write8(&exn_lsc, bar_base + NFP_NET_CFG_LSC, sizeof exn_lsc);
 
-    mem_write8(&cfg2,
-               NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_RX_OFFSET,
-               sizeof cfg2);
+    mem_write8(&cfg2, bar_base + NFP_NET_CFG_RX_OFFSET, sizeof cfg2);
+
+#ifdef NFD_USE_TLV_CTRL
+    nfd_flr_init_tlv(pcie, vid);
+#endif
+
 #endif
 }
 
 
 
 /** Init the non-zero parts of the VF control BAR
- * @param isl_base      start address of the CFG BARs for the PCIe island
+ * @param vf_cfg_base   start address of the VF CFG symbol for the PCIe island
+ * @param pcie          PCIe island, in the range 0..3
  * @param vid           vid number on the PCIe island
  *
- * "isl_base" should be obtained via the appropriate API,
- * e.g. NFD_CFG_BASE_LINK.
  */
 void
-nfd_flr_init_vf_cfg_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsigned int vid)
+nfd_flr_init_vf_cfg_bar(__emem char *vf_cfg_base, unsigned int pcie,
+                        unsigned int vid)
 {
 #if ((NFD_MAX_VFS != 0) && (NFD_MAX_VF_QUEUES != 0))
 #ifdef NFD_NO_ISOLATION
@@ -280,6 +315,7 @@ nfd_flr_init_vf_cfg_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsigne
 #else
     unsigned int q_base = 0;
 #endif
+    __emem char *bar_base = nfd_cfg_bar_base(pcie, vid);
     __xwrite unsigned int cfg[] = {NFD_CFG_VERSION(VF),
                                    (NFP_NET_CFG_STS_LINK_RATE_UNSUPPORTED
                                     << NFP_NET_CFG_STS_LINK_RATE_SHIFT) | 0,
@@ -294,21 +330,21 @@ nfd_flr_init_vf_cfg_bar(__emem char *isl_base, __emem char *vf_cfg_base, unsigne
     __xread unsigned int vf_cfg_rd[2];
     __xwrite unsigned int vf_cfg_wr[2];
 
-    mem_write64(&cfg, NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_VERSION,
-                sizeof cfg);
+    mem_write64(&cfg, bar_base + NFP_NET_CFG_VERSION, sizeof cfg);
 
-    mem_write8(&exn_lsc, NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_LSC,
-               sizeof exn_lsc);
+    mem_write8(&exn_lsc, bar_base + NFP_NET_CFG_LSC, sizeof exn_lsc);
 
-    mem_write8(&cfg2, NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_RX_OFFSET,
-               sizeof cfg2);
+    mem_write8(&cfg2, bar_base + NFP_NET_CFG_RX_OFFSET, sizeof cfg2);
 
     /* XXX should vid technically be vf below? */
     mem_read8(&vf_cfg_rd, NFD_VF_CFG_ADDR(vf_cfg_base, vid),
               NFD_VF_CFG_MAC_SZ);
     reg_cp(vf_cfg_wr, vf_cfg_rd, sizeof vf_cfg_rd);
-    mem_write8(&vf_cfg_wr, NFD_CFG_BAR(isl_base, vid) + NFP_NET_CFG_MACADDR,
-              NFD_VF_CFG_MAC_SZ);
+    mem_write8(&vf_cfg_wr, bar_base + NFP_NET_CFG_MACADDR, NFD_VF_CFG_MAC_SZ);
+
+#ifdef NFD_USE_TLV_VF
+    nfd_flr_init_tlv(pcie, vid);
+#endif
 
 #endif
 }
