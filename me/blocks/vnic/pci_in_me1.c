@@ -101,7 +101,8 @@ main(void)
      * Work loop
      */
     if (ctx() == 0) {
-        SIGNAL distr0, distr1;
+        __xwrite unsigned int distr_wr0, distr_wr1;
+        SIGNAL distr_sig0, distr_sig1;
         SIGNAL_MASK distr_wait_msk = 0;
 
         /* CTX0 main loop */
@@ -147,14 +148,15 @@ main(void)
 
             precache_bufs();
 
-            distr_precache_bufs(&distr_wait_msk, &distr0, &distr1);
+            distr_precache_bufs(&distr_wr0, &distr_wr1, &distr_wait_msk,
+                                &distr_sig0, &distr_sig1);
 
             precache_bufs_compute_seq_safe();
 
             wait_sig_mask(distr_wait_msk);
             distr_wait_msk = 0;
-            __implicit_read(&distr0);
-            __implicit_read(&distr1);
+            __implicit_read(&distr_sig0);
+            __implicit_read(&distr_sig1);
         }
     } else {
         /* Worker main loop */

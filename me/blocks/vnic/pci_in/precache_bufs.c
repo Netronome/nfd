@@ -568,8 +568,9 @@ distr_precache_bufs_setup_shared()
  * extra DMAs and packet buffers are not used.
  */
 __intrinsic void
-distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *data_sig,
-                    SIGNAL *jumbo_sig)
+distr_precache_bufs(__xwrite unsigned int *data_wr,
+                    __xwrite unsigned int *jumbo_wr, SIGNAL_MASK * wait_msk,
+                    SIGNAL *data_sig, SIGNAL *jumbo_sig)
 {
     if (signal_test(&nfd_in_data_served_refl_sig)) {
         data_dma_seq_served = nfd_in_data_served_refl_in;
@@ -595,7 +596,7 @@ distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *data_sig,
             NFD_IN_DATA_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_IN_DATA_EVENT_FILTER,
-            sig_done, data_sig);
+            data_wr, sig_done, data_sig);
         *wait_msk |= __signals(data_sig);
 
     }
@@ -610,7 +611,7 @@ distr_precache_bufs(SIGNAL_MASK * wait_msk, SIGNAL *data_sig,
             NFD_IN_JUMBO_EVENT_FILTER,
             NFP_CLS_AUTOPUSH_STATUS_MONITOR_ONE_SHOT_ACK,
             NFD_IN_JUMBO_EVENT_FILTER,
-            sig_done, jumbo_sig);
+            jumbo_wr, sig_done, jumbo_sig);
         *wait_msk |= __signals(jumbo_sig);
 
     }
