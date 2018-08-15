@@ -65,7 +65,8 @@ nfd_cfg_pcie_monitor_ver_check()
         local_csr_write(local_csr_mailbox_1, chk_val);
 
         /* We have an ABI mismatch with the pcie_monitor, halt. */
-        halt();
+        /* TODO confirm behaviour with BSP team when finalising new ABI */
+        /* halt(); */
     }
 }
 
