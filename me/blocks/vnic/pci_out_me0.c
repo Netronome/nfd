@@ -97,11 +97,10 @@ main(void)
                 cache_desc_vnic_setup((void *) &cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
-                    nfd_cfg_complete_cfg_msg(&cfg_msg,
+                    nfd_cfg_complete_cfg_msg(&cfg_msg, &nfd_cfg_sig_pci_out,
                                              &NFD_CFG_SIG_NEXT_ME,
                                              NFD_CFG_NEXT_ME,
-                                             NFD_CFG_RING_NUM(PCIE_ISL, 3),
-                                             NFD_CFG_RING_NUM(PCIE_ISL, 2));
+                                             NFD_CFG_RING_NUM(PCIE_ISL, 3));
                 }
             }
 

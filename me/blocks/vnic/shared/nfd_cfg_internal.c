@@ -914,53 +914,6 @@ nfd_cfg_start_cfg_msg(struct nfd_cfg_msg *cfg_msg,
 
 
 /**
- * Pass this message to the next stage, and check for a new message
- * @param cfg_msg           completed message, refilled with new message
- * @param cfg_sig_remote    signal to set for next recipient
- * @param next_me           ME to signal
- * @param rnum_out          output ring number
- * @param rbase_out         output ring address
- * @param rnum_in           input ring number
- * @param rbase_in          input ring address
- */
-__intrinsic void
-nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
-                          __remote SIGNAL *cfg_sig_remote,
-                          unsigned int next_me, unsigned int rnum_out,
-                          unsigned int rnum_in)
-{
-    struct nfd_cfg_msg cfg_msg_tmp;
-    __xrw struct nfd_cfg_msg cfg_msg_wr;
-    __xread struct nfd_cfg_msg cfg_msg_rd;
-    mem_ring_addr_t ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
-    SIGNAL journal_sig;
-    SIGNAL_PAIR get_sig;
-
-    /* Clear the internal state fields and set msg_valid before sending  */
-    cfg_msg_tmp.__raw = 0;
-    cfg_msg_tmp.msg_valid = 1;
-    cfg_msg_tmp.error = cfg_msg->error;
-    cfg_msg_tmp.vid = cfg_msg->vid;
-    cfg_msg_wr.__raw = cfg_msg_tmp.__raw;
-
-    /* Journal is guaranteed to not overflow by design (it is larger than
-     * the number of possible vNICs). */
-    __mem_ring_journal(rnum_out, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr,
-                       sizeof cfg_msg_wr, sig_done, &journal_sig);
-    __mem_ring_get(rnum_in, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd,
-                   sizeof cfg_msg_rd, sig_done, &get_sig);
-    wait_for_all_single(&journal_sig, &get_sig.even);
-
-    if (!signal_test(&get_sig.odd)) {
-        *cfg_msg = cfg_msg_rd;
-    }
-
-    send_interthread_sig(next_me, 0,
-                         __signal_number(cfg_sig_remote, next_me));
-}
-
-
-/**
  * Select the next FLR to respond to
  * @param cfg_msg       message to populate with FLR information
  *

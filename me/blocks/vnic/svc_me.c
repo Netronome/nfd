@@ -150,11 +150,11 @@ do {                                                                    \
                                                                         \
         /* Complete the message */                                      \
         cfg_msg##_isl.msg_valid = 0;                                    \
-        nfd_cfg_svc_complete_cfg_msg(&cfg_msg##_isl,                    \
-                                     &NFD_CFG_SIG_NEXT_ME##_isl,        \
-                                     NFD_CFG_NEXT_ME##_isl,             \
-                                     NFD_CFG_RING_NUM(_isl, 5),         \
-                                     NFD_CFG_RING_NUM(_isl, 4));        \
+        nfd_cfg_complete_cfg_msg(&cfg_msg##_isl,                        \
+                                 &nfd_cfg_sig_svc_me##_isl,             \
+                                 &NFD_CFG_SIG_NEXT_ME##_isl,            \
+                                 NFD_CFG_NEXT_ME##_isl,                 \
+                                 NFD_CFG_RING_NUM(_isl, 5));            \
     }                                                                   \
 } while (0)
 

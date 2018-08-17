@@ -498,19 +498,19 @@ __intrinsic void nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
                                               SIGNAL *cfg_sig);
 
 /**
- * Pass this message to the next stage, and check for a new message
- * @param cfg_msg           completed message, refilled with new message
+ * Pass this message to the next stage, and flag to check for new msg
+ * @param cfg_msg           completed message
+ * @param cfg_sig           signal for this ME to check for new message
  * @param cfg_sig_remote    signal to set for next recipient
  * @param next_me           ME to signal
  * @param rnum_out          output ring number
- * @param rbase_out         output ring address
- * @param rnum_in           input ring number
- * @param rbase_in          input ring address
  */
-__intrinsic void nfd_cfg_svc_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
-                          __remote SIGNAL *cfg_sig_remote,
-                          unsigned int next_me, unsigned int rnum_out,
-                          unsigned int rnum_in);
+__intrinsic void nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
+                                          SIGNAL *cfg_sig,
+                                          __remote SIGNAL *cfg_sig_remote,
+                                          unsigned int next_me,
+                                          unsigned int rnum_out);
+
 
 #endif /* __NFP_LANG_MICROC */
 

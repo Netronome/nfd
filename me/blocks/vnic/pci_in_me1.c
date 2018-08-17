@@ -125,14 +125,12 @@ main(void)
                 issue_dma_vnic_setup((void *) &cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
-                    nfd_cfg_complete_cfg_msg(&cfg_msg,
+                    nfd_cfg_complete_cfg_msg(&cfg_msg, &CFG_SIG_IN,
                                              &CFG_SIG_OUT,
                                              NFD_CFG_NEXT_ME(PCIE_ISL,
                                                              CFG_NEXT_ME),
                                              NFD_CFG_RING_NUM(PCIE_ISL,
-                                                              CFG_RING_OUT),
-                                             NFD_CFG_RING_NUM(PCIE_ISL,
-                                                              CFG_RING_IN));
+                                                              CFG_RING_OUT));
                 }
             }
 

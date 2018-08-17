@@ -216,17 +216,14 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
 
 
 __intrinsic void
-nfd_cfg_svc_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
-                          __remote SIGNAL *cfg_sig_remote,
-                          unsigned int next_me, unsigned int rnum_out,
-                          unsigned int rnum_in)
+nfd_cfg_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg, SIGNAL *cfg_sig,
+                         __remote SIGNAL *cfg_sig_remote,
+                         unsigned int next_me, unsigned int rnum_out)
 {
     struct nfd_cfg_msg cfg_msg_tmp;
     __xwrite struct nfd_cfg_msg cfg_msg_wr;
-    __xread struct nfd_cfg_msg cfg_msg_rd;
     mem_ring_addr_t ring_addr = (unsigned long long) NFD_CFG_EMEM >> 8;
     SIGNAL journal_sig;
-    SIGNAL_PAIR get_sig;
 
     /* Clear the internal state fields and set msg_valid before sending  */
     cfg_msg_tmp.__raw = 0;
@@ -239,15 +236,13 @@ nfd_cfg_svc_complete_cfg_msg(struct nfd_cfg_msg *cfg_msg,
      * the number of possible vNICs). */
     __mem_ring_journal(rnum_out, ring_addr, &cfg_msg_wr, sizeof cfg_msg_wr,
                        sizeof cfg_msg_wr, sig_done, &journal_sig);
-    __mem_ring_get(rnum_in, ring_addr, &cfg_msg_rd, sizeof cfg_msg_rd,
-                   sizeof cfg_msg_rd, sig_done, &get_sig);
-    wait_for_all_single(&journal_sig, &get_sig.even);
+    wait_for_all(&journal_sig);
 
-    if (!signal_test(&get_sig.odd)) {
-        *cfg_msg = cfg_msg_rd;
-    }
-
+    /* Signal the next ME in the message chain */
     send_interthread_sig(next_me, 0,
                          __signal_number(cfg_sig_remote, next_me));
+
+    /* Set cfg_sig so that "nfd_cfg_check_cfg_msg()" runs again */
+    signal_ctx(0, __signal_number(cfg_sig));
 }
 
