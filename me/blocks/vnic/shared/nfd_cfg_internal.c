@@ -890,10 +890,10 @@ nfd_cfg_check_flr_ap(int state_clean)
 
         /* Recheck InterruptManager.Status  */
         int_mgr_status = xpb_read(NFP_PCIEX_PCIE_INT_MGR_STATUS);
-        if ((int_mgr_status & ~NFP_PCIEX_PCIE_INT_MGR_STATUS_FLR_msk) != 0) {
-            /* We have a non-zero status that is NOT due to outstanding FLRs.
-             * Therefore, we flag the AP signal again so that the interrupt
-             * status is rechecked.
+        if ((int_mgr_status & NFP_PCIEX_PCIE_INT_MGR_STATUS_RECHK_msk) != 0) {
+            /* We have a non-zero status that is NOT due to outstanding FLRs
+             * or unexpected events that we can't handle.  Therefore, we flag
+             * the AP signal again so that the interrupt status is rechecked.
              * The FLR bits are excluded as they take time to complete, and
              * the FLR acknowledgement methods reset the AP signal as well.
              */

@@ -149,7 +149,10 @@
 #define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc
 #define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk         0x7f
 #define NFP_PCIEX_PCIE_INT_MGR_STATUS                        0x00130000
-#define NFP_PCIEX_PCIE_INT_MGR_STATUS_FLR_msk                0x300
+/* XXX define the PCIe interrupts we expect and ACK in regular operation,
+ * see table "Interrupt Manager PCIe Status Mapping" in databook
+ * FLR interrupts are excluded as they take longer to processes */
+#define NFP_PCIEX_PCIE_INT_MGR_STATUS_RECHK_msk              0xc00f4
 #define NFP_PCIEX_COMPCFG_CFG0                               0x00100000
 #define NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf                 11
 #define NFP_PCIEX_COMPCFG_CFG0_PF_BUS_MSTR_ENABLE_shf        25
