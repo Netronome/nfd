@@ -544,10 +544,10 @@ nfd_flr_check_vfs(unsigned int pcie_isl,
  * NFP_NET_CFG_UPDATE is set to the value specified in "update".  The
  * defines NFD_FLR_UPDATE_FLR or NFD_FLR_UPDATE_PCI_RST should be used.
  * They both specify "NFP_NET_CFG_UPDATE_GEN | NFP_NET_CFG_UPDATE_MSIX"
- * so that MEs can respond to it as simply a vNIC being downed.  In addition,
- * they set either NFP_NET_CFG_UPDATE_RESET or NFP_NET_CFG_UPDATE_PCI_RST
- * so that MEs can also test for FLR and PCIe resets and perform other
- * behaviour.
+ * so that MEs can respond to it as simply a vNIC being downed.  For FLRs,
+ * NFP_NET_CFG_UPDATE_RESET is set as well.  For PCIe resets, a bit in the
+ * cfg_msg is used to indicate the reset (so malicious hosts or VMs can't
+ * fake a reset).
  *
  * This method can be called for both the PF and the VFs, with suitable
  * vnic values.
@@ -555,8 +555,7 @@ nfd_flr_check_vfs(unsigned int pcie_isl,
 #define NFD_FLR_UPDATE_FLR      (NFP_NET_CFG_UPDATE_GEN |   \
                                  NFP_NET_CFG_UPDATE_RESET | \
                                  NFP_NET_CFG_UPDATE_MSIX)
-#define NFD_FLR_UPDATE_PCI_RST  (NFP_NET_CFG_UPDATE_GEN |       \
-                                 NFP_NET_CFG_UPDATE_PCI_RST |   \
+#define NFD_FLR_UPDATE_PCI_RST  (NFP_NET_CFG_UPDATE_GEN |   \
                                  NFP_NET_CFG_UPDATE_MSIX)
 __intrinsic void
 nfd_flr_write_cfg_msg(__emem char *isl_base, unsigned int vid,

@@ -144,7 +144,6 @@
 #define   NFP_NET_CFG_UPDATE_MACADDR	  (0x1 << 11) /* MAC address change */
 #define   NFP_NET_CFG_UPDATE_MBOX	  (0x1 << 12) /* Mailbox update */
 #define   NFP_NET_CFG_UPDATE_VF		  (0x1 << 13) /* VF settings change */
-#define   NFP_NET_CFG_UPDATE_PCI_RST	  (0x1 << 14) /* PCIe reset update */
 #define   NFP_NET_CFG_UPDATE_ERR	  (0x1 << 31) /* A error occurred */
 #define NFP_NET_CFG_TXRS_ENABLE		0x0008
 #define NFP_NET_CFG_RXRS_ENABLE		0x0010

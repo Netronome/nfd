@@ -153,7 +153,7 @@ do {                                                                        \
         }                                                                   \
                                                                             \
         /* Handle PCIe island resets */                                     \
-        if (cfg_bar_data[1] & NFP_NET_CFG_UPDATE_PCI_RST) {                 \
+        if (cfg_msg.pci_reset) {                                            \
             /* NB: This function writes ~8K of data */                      \
             nfd_flr_clr_bar(NFD_CFG_BAR_ISL(_isl, cfg_msg.vid));            \
                                                                             \

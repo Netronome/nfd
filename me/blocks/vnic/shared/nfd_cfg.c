@@ -221,7 +221,7 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
     }
 
     /* Check for and handle PCIe island resets */
-    if (update_request & NFP_NET_CFG_UPDATE_PCI_RST) {
+    if (cfg_msg->pci_reset) {
         if (cfg_msg->vid == NFD_LAST_PF) {
             /* All vNICs on this island have started and completed
              * PCIe resets. */
