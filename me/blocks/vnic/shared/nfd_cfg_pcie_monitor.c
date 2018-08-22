@@ -28,6 +28,7 @@
 /* Values defined by the pcie_monitor ABI */
 #define NFP_BSP_PCIE_MON_ABI_BASE   0x4000
 #define NFP_BSP_PCIE_MON_ABI_CHK    0x50434900
+#define NFP_BSP_PCIE_MON_ABI_msk    0xfffffff0  /* Ignore minor ABI version */
 
 #define NFP_BSP_PCIE_MON_CTRL_BASE  0x4010
 #define NFP_BSP_PCIE_MON_ENABLE_shf 0
@@ -59,14 +60,13 @@ nfd_cfg_pcie_monitor_ver_check()
     addr_lo = NFP_BSP_PCIE_MON_ABI_BASE;
     __asm cls[read, chk_val, addr_hi, <<8, addr_lo, 1], ctx_swap[chk_sig];
 
-    if (chk_val != NFP_BSP_PCIE_MON_ABI_CHK) {
+    if ((chk_val & NFP_BSP_PCIE_MON_ABI_msk) != NFP_BSP_PCIE_MON_ABI_CHK) {
         /* Write the raw value we read to Mailboxes for debugging purposes */
         local_csr_write(local_csr_mailbox_0, NFD_CFG_PCIE_MON_ABI_MISMATCH);
         local_csr_write(local_csr_mailbox_1, chk_val);
 
         /* We have an ABI mismatch with the pcie_monitor, halt. */
-        /* TODO confirm behaviour with BSP team when finalising new ABI */
-        /* halt(); */
+        halt();
     }
 }
 
