@@ -35,6 +35,14 @@
  */
 
 /**
+ * Platform type defines
+ * @NFD_USE_MULTI_HOST  Support connecting a single NFP to multiple
+ *                      separate hosts
+ */
+
+
+
+/**
  * The app ID is a value that the firmware advertises to the host PF
  * driver via a run time symbol so that the host can specialise the
  * driver behaviour for the particular firmware.  The value must be

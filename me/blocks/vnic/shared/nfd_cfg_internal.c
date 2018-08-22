@@ -1525,9 +1525,13 @@ nfd_cfg_next_queue(struct nfd_cfg_msg *cfg_msg, unsigned int *queue)
 __intrinsic void
 nfd_cfg_check_pcie_clock()
 {
-/* XXX multihost platforms will use 0xfd for holding PCI.PCI in reset
- * to indicate that it is temporary. */
-#define NFP_PCIEX_CLOCK_RESET_CTRL_FULL_RESET       0xd
+#define RESET_CTRL_CORE_msk     0x1
+#define RESET_CTRL_PCI_msk      0x2
+#define RESET_CTRL_MEG0_msk     0x4
+#define RESET_CTRL_MEG1_msk     0x8
+#define RESET_CTRL_NON_PCI_msk  (RESET_CTRL_CORE_msk | \
+                                 RESET_CTRL_MEG0_msk | \
+                                 RESET_CTRL_MEG1_msk)
 
     __xread unsigned int pcie_sts_raw;
     unsigned int pcie_sts;
@@ -1546,7 +1550,7 @@ nfd_cfg_check_pcie_clock()
     pcie_sts = ((pcie_sts_raw >> NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf) &
                 NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk);
 
-    if (pcie_sts == NFP_PCIEX_CLOCK_RESET_CTRL_FULL_RESET) {
+    if ((pcie_sts & RESET_CTRL_NON_PCI_msk) != RESET_CTRL_NON_PCI_msk) {
         /* Write the raw value we read to Mailboxes for debugging purposes */
         local_csr_write(local_csr_mailbox_0, NFD_CFG_PCIE_LINK_DOWN);
         local_csr_write(local_csr_mailbox_1, pcie_sts_raw);
@@ -1554,6 +1558,17 @@ nfd_cfg_check_pcie_clock()
         /* Nothing more to do on this PCIe island, stop the ME */
         halt();
     }
+
+#ifndef NFD_USE_MULTI_HOST
+    if ((pcie_sts & RESET_CTRL_PCI_msk) != RESET_CTRL_PCI_msk) {
+        /* Write the raw value we read to Mailboxes for debugging purposes */
+        local_csr_write(local_csr_mailbox_0, NFD_CFG_PCIE_LINK_DOWN);
+        local_csr_write(local_csr_mailbox_1, pcie_sts_raw);
+
+        /* Nothing more to do on this PCIe island, stop the ME */
+        halt();
+    }
+#endif
 }
 
 
