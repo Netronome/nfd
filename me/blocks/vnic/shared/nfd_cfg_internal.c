@@ -1585,7 +1585,8 @@ nfd_cfg_set_curr_pcie_sts()
     unsigned int pcie_sts_addr;
     SIGNAL pcie_sts_sig;
 
-#define NFP_PCIEX_CLOCK_RESET_CTRL_RESET_bit    1
+#define RESET_CTRL_PCI_msk      0x2
+
 
     /* Test the ClockResetControl for reset removed
      * and then check LinkPowerState if not in reset */
@@ -1595,7 +1596,7 @@ nfd_cfg_set_curr_pcie_sts()
              1], ctx_swap[pcie_sts_sig];
     pcie_sts = ((pcie_sts_raw >> NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf) &
                 NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk);
-    if (pcie_sts & (1 << NFP_PCIEX_CLOCK_RESET_CTRL_RESET_bit)) {
+    if (pcie_sts & RESET_CTRL_PCI_msk) {
         /* Test LinkPowerState ASAP after seeing reset removed */
         if (nfd_flr_link_up()) {
             flr_pend_status |= (1 << NFD_FLR_PCIE_STATE_ind);
