@@ -46,7 +46,10 @@
 
 
 /* Journal CFG messages that the service ME sees */
-DBG_JOURNAL_DECLARE(nfd_cfg_msg_jrnl);
+#ifndef NFD_CFG_MSG_JRNL_SZ
+#define NFD_CFG_MSG_JRNL_SZ 65536
+#endif
+MEM_RING_INIT(nfd_cfg_msg_jrnl, NFD_CFG_MSG_JRNL_SZ);
 
 
 
