@@ -66,7 +66,7 @@ NFD_NET_APP_ID_DECLARE(PCIE_ISL);
 #ifndef NFD_CFG_STATE_JRNL_SZ
 #define NFD_CFG_STATE_JRNL_SZ 65536
 #endif
-MEM_RING_INIT(nfd_cfg_state_jrnl, NFD_CFG_STATE_JRNL_SZ);
+MEM_RING_INIT(nfd_cfg_state_jrnl, (NFD_CFG_STATE_JRNL_SZ));
 
 
 #define JRNL_STATE_TRANSITION(_isl, _fault_state, _status, _cnt)  \

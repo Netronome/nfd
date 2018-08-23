@@ -49,7 +49,7 @@
 #ifndef NFD_CFG_MSG_JRNL_SZ
 #define NFD_CFG_MSG_JRNL_SZ 65536
 #endif
-MEM_RING_INIT(nfd_cfg_msg_jrnl, NFD_CFG_MSG_JRNL_SZ);
+MEM_RING_INIT(nfd_cfg_msg_jrnl, (NFD_CFG_MSG_JRNL_SZ));
 
 
 
