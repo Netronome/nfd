@@ -96,6 +96,18 @@
  *
  * @NFD_IN_NUM_WQS              Number of output work queues to
  *                              initialise, recommended value 1.
+ *
+ * @NFD_IN_WQ_SHARED            All PCIe islands add TX descriptors to
+ *                              a single (set of) work queue(s), see
+ *                              also NFD_IN_NUM_WQS above.  The value
+ *                              of the define must be the memory unit
+ *                              to use for the shared work queue(s).
+ *                              This should be set when applications
+ *                              want to wait on a single source for
+ *                              all NFD packets, rather than assigning
+ *                              MEs or contexts to service particular
+ *                              PCIe islands.
+ *
  * @NFD_IN_ADD_SEQN             Insert a sequence number into PCI.IN
  *                              packet descriptor.
  * @NFD_IN_NUM_SEQRS            Number of sequencers to use if
