@@ -33,9 +33,12 @@
 #define NFP_NET_RX_OFFSET		32
 
 /**
- * Maximum header size supported for LSO frames
+ * LSO parameters
+ * %NFP_NET_LSO_MAX_HDR_SZ:	Maximum header size supported for LSO frames
+ * %NFP_NET_LSO_MAX_SEGS:	Maximum number of segments LSO frame can produce
  */
 #define NFP_NET_LSO_MAX_HDR_SZ		255
+#define NFP_NET_LSO_MAX_SEGS		64
 
 /**
  * Prepend field types
@@ -99,6 +102,7 @@
 #define   NFP_NET_CFG_CTRL_GATHER	  (0x1 <<  9) /* Gather DMA */
 #define   NFP_NET_CFG_CTRL_LSO		  (0x1 << 10) /* LSO/TSO (version 1) */
 #define   NFP_NET_CFG_CTRL_CTAG_FILTER	  (0x1 << 11) /* VLAN CTAG filtering */
+#define   NFP_NET_CFG_CTRL_CMSG_DATA	  (0x1 << 12) /* RX cmsgs on data Qs */
 #define   NFP_NET_CFG_CTRL_RINGCFG	  (0x1 << 16) /* Ring runtime changes */
 #define   NFP_NET_CFG_CTRL_RSS		  (0x1 << 17) /* RSS (version 1) */
 #define   NFP_NET_CFG_CTRL_IRQMOD	  (0x1 << 18) /* Interrupt moderation */
