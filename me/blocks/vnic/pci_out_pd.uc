@@ -446,7 +446,6 @@ ctm_only#:
     #endif /* NFD_OUT_RX_OFFSET > 0 */
     wsm_extract(tmp, in_work,  SB_WQ_RID)
     sm_set_noclr(word, PCIE_DMA_RID, tmp)
-    wsm_extract(len, in_work, SB_WQ_DATALEN)
 
     // Gambling on being fast enough to beat the DMA pull from these registers
     #pragma warning(disable:5117)
@@ -458,7 +457,7 @@ ctm_only#:
     #pragma warning(default:5117)
     // This wait() always has 2 defer slots following it
     wait_br_next_state(in_wait_sig0, in_wait_sig1, LABEL, defer[2])
-    alu[len, len, -, 1]
+    alu[len, g_neg_one, +16, in_work[SB_WQ_DATALEN_wrd]]
     sm_set_noclr_to(out_dma0[3], word, PCIE_DMA_XLEN, len, 1)
     #pragma warning(default:4701)
     #pragma warning(default:5009)
@@ -992,6 +991,7 @@ main#:
     .reg volatile g_pcie_addr_hi
     .reg volatile g_dma_max
     .reg volatile g_num_ticket_errors
+    .reg volatile g_neg_one
 
     .reg @ndequeued
     .init @ndequeued SB_WQ_CREDIT_BATCH
@@ -1146,7 +1146,7 @@ main#:
     move(g_pcie_addr_hi, (PCIE_ISL << 30))
     move(g_dma_max, PCIE_DMA_MAX_LEN)
     move(g_num_ticket_errors, 0)
-
+    move(g_neg_one, -1)
 
 
     /*
