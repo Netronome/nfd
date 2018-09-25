@@ -193,6 +193,10 @@
  *                              choice depends on application details,
  *                              hence a compile time option is
  *                              provided.
+ * @NFD_OUT_ALWAYS_HAS_CTM      Skip tests for MU only packets.
+ *                              Applications may enable this option
+ *                              if they always send NFD packets with
+ *                              a CTM buffer to free.
  */
 
 /**

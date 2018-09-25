@@ -492,9 +492,11 @@ not_ctm_only#:
     // (3) the total data length to send
     wsm_extract(len, in_work, SB_WQ_DATALEN)
 
+#ifndef NFD_OUT_ALWAYS_HAS_CTM
     // Knock MU only packets off the fall through path
     wsm_extract(isl, in_work, SB_WQ_CTM_ISL)
     beq[mu_only_dma#]
+#endif
 
 
 ctm_and_mu_dma#:
@@ -840,7 +842,9 @@ add_wq_credits#:
     alu[$ticket, g_seq_mask, AND, io_work[SB_WQ_SEQ_wrd], >>SB_WQ_SEQ_shf]
 
     wsm_extract(isl, io_work, SB_WQ_CTM_ISL)
+#ifndef NFD_OUT_ALWAYS_HAS_CTM
     beq[no_ctm_buffer#], defer[1]
+#endif
     alu[ring_num, SB_WQ_BLS_msk, AND, io_work[SB_WQ_BLS_wrd], >>SB_WQ_BLS_shf]
 
     // Free CTM buffer
