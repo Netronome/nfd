@@ -422,8 +422,7 @@ ctm_only#:
     alu[out_dma0[0], word, OR, 1, <<31] // Packet format bit
 
     // Word 1
-    wsm_extract(word, in_work, SB_WQ_CTM_ISL)
-    alu[word, word, OR, g_dma_word1_vals]
+    alu[word, g_dma_word1_vals, OR, in_work[SB_WQ_CTM_ISL_wrd], >>SB_WQ_CTM_ISL_shf]
     alu[out_dma0[1], word, OR, (&dma_sig), <<PCIE_DMA_SIGNUM_shf]
 
     // Word 2
@@ -522,8 +521,7 @@ ctm_and_mu_dma#:
     alu[out_dma0[0], word, OR, 1, <<31] // Packet format bit
 
     // DMA0 Word 1: CTM address hi and signals, computation as for ctm_only
-    wsm_extract(word, in_work, SB_WQ_CTM_ISL)
-    alu[word, word, OR, 0x80]                   ; Direct access
+    alu[word, 0x80, OR, in_work[SB_WQ_CTM_ISL_wrd], >>SB_WQ_CTM_ISL_shf] ; Dir acc
     alu[out_dma0[1], word, OR, PCIE_DMA_WORD1_NOSIG_val, <<PCIE_DMA_WORD1_NOSIG_shf]
 
     // DMA0 Word 2: PCIe addresses
