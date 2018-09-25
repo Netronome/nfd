@@ -200,6 +200,11 @@ static __gpr unsigned int dst_q;
 /* Add sequence numbers, using a shared GPR to store */
 static __shared __gpr unsigned int dst_q_seqn = 0;
 
+/* No prep required for a single sequencer */
+#define NFD_IN_ADD_SEQN_PREP                                            \
+do {                                                                    \
+} while (0)
+
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
     pkt_desc_tmp.seq_num = dst_q_seqn;                                  \
@@ -208,21 +213,22 @@ do {                                                                    \
 
 #else /* (NFD_IN_NUM_SEQRS == 1) */
 
+#define NFD_IN_SEQN_PTR *l$index3
+
 /* Add sequence numbers, using a LM to store */
 static __shared __lmem unsigned int seq_nums[NFD_IN_NUM_SEQRS];
 
-/*
- * XXX this ugly bit of code was the best way I could find to make the
- * compiler generate intelligent assembly here.  This should just be
- * a shift + AND operation to get the LM address.  But if I use the
- * NFD_IN_SEQR_NUM(q), I get 2-4 extra instructions and this is on the
- * fast path in a potentially down-clocked ME.
- */
+#define NFD_IN_ADD_SEQN_PREP                                            \
+do {                                                                    \
+    local_csr_write(                                                    \
+        local_csr_active_lm_addr_3,                                     \
+        (uint32_t) &seq_nums[NFD_IN_SEQR_NUM(batch_in.pkt0.__raw[0])]); \
+} while (0)
+
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
-    pkt_desc_tmp.seq_num =                                              \
-        seq_nums[(pkt_desc_tmp.__raw[0] >> NFD_IN_SEQR_QSHIFT) &        \
-                 (NFD_IN_NUM_SEQRS - 1)]++;                             \
+    __asm { ld_field[pkt_desc_tmp.__raw[0], 6, NFD_IN_SEQN_PTR, <<8] }  \
+    __asm { alu[NFD_IN_SEQN_PTR, NFD_IN_SEQN_PTR, +, 1] }               \
 } while (0)
 
 #endif /* (NFD_IN_NUM_SEQRS == 1) */
@@ -230,6 +236,10 @@ do {                                                                    \
 #else /* NFD_IN_ADD_SEQN */
 
 /* Null sequence number add */
+#define NFD_IN_ADD_SEQN_PREP                                            \
+do {                                                                    \
+} while (0)
+
 #define NFD_IN_ADD_SEQN_PROC                                            \
 do {                                                                    \
 } while (0)
@@ -670,7 +680,9 @@ _notify(__shared __gpr unsigned int *complete,
         /* Interface and queue info are the same for all packets in batch */
         pkt_desc_tmp.intf = PCIE_ISL;
         pkt_desc_tmp.q_num = batch_in.pkt0.q_num;
-#ifndef NFD_IN_ADD_SEQN
+#ifdef NFD_IN_ADD_SEQN
+        NFD_IN_ADD_SEQN_PREP;
+#else
         pkt_desc_tmp.seq_num = 0;
 #endif
 
@@ -730,7 +742,9 @@ _notify(__shared __gpr unsigned int *complete,
         /* Interface and queue info is the same for all packets in batch */
         pkt_desc_tmp.intf = PCIE_ISL;
         pkt_desc_tmp.q_num = batch_in.pkt0.q_num;
-#ifndef NFD_IN_ADD_SEQN
+#ifdef NFD_IN_ADD_SEQN
+        NFD_IN_ADD_SEQN_PREP;
+#else
         pkt_desc_tmp.seq_num = 0;
 #endif
 
