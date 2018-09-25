@@ -860,7 +860,11 @@ no_ctm_buffer#:
     mem[fast_journal, --, g_blm_addr_hi, <<8, addr_lo], indirect_ref
 
 ticket_ready#:
+#ifndef NFD_OUT_ADD_ZERO_TKT
+    // XXX Minimise atomic OPs for ticket release add, at the expense of
+    // cycles for test and branch taken
     br=byte[$ticket, 0, 0, complete_done#]
+#endif
     br=byte[$ticket, 0, TICKET_ERROR, ticket_error#]
 
     alu[--, g_add_imm_iref, OR, $ticket, <<16]

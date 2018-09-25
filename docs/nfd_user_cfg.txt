@@ -185,6 +185,14 @@
  *                              have passed since last sending
  *                              descriptors from this queue, default
  *                              value 5000.
+ * @NFD_OUT_ADD_ZERO_TKT        Remove test to suppress mem[add_imm]
+ *                              for PCI.OUT PD ticket releases that
+ *                              return zero.  There is a trade off
+ *                              between cycles saved not testing and
+ *                              the atomic engine load.  The optimal
+ *                              choice depends on application details,
+ *                              hence a compile time option is
+ *                              provided.
  */
 
 /**
