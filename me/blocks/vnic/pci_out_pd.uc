@@ -847,6 +847,10 @@ add_wq_credits#:
 #endif
     alu[ring_num, SB_WQ_BLS_msk, AND, io_work[SB_WQ_BLS_wrd], >>SB_WQ_BLS_shf]
 
+#ifdef NFD_OUT_SKIP_FREE_BLQ
+    br=byte[ring_num, 0, NFD_OUT_SKIP_FREE_BLQ, no_ctm_buffer#]
+#endif
+
     // Free CTM buffer
     alu[addr_hi, g_pkt_free_hi, OR, isl, <<24]
     alu[addr_lo, g_pkt_num_mask, AND, io_work[SB_WQ_PKT_NUM_wrd], >>SB_WQ_PKT_NUM_shf]
