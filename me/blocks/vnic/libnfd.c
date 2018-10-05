@@ -27,5 +27,6 @@
 #include "pci_out.c"
 #include "pci_in.c"
 #include "shared/nfd_cfg.c"
+#include "svc/msix.c"
 
 #endif /* !_BLOCKS__VNIC_LIBNFD_C_ */

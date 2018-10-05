@@ -39,7 +39,6 @@
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/svc/msix.h>
-#include <vnic/svc/msix.c>
 #include <vnic/utils/qcntl.h>
 
 
