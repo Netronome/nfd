@@ -603,7 +603,6 @@ _notify(__shared __gpr unsigned int *complete,
 {
 
     unsigned int n_batch;
-    unsigned int q_batch;
     unsigned int qc_queue;
     unsigned int num_avail;
 
@@ -660,7 +659,6 @@ _notify(__shared __gpr unsigned int *complete,
          * all the packets should also be zero, so that notify will
          * essentially skip the batch.
          */
-        q_batch = batch_in.pkt0.q_num;
         n_batch = batch_in.pkt0.num_batch;
 
 #ifdef NFD_VNIC_DBG_CHKS
@@ -671,7 +669,7 @@ _notify(__shared __gpr unsigned int *complete,
 
         /* Interface and queue info are the same for all packets in batch */
         pkt_desc_tmp.intf = PCIE_ISL;
-        pkt_desc_tmp.q_num = q_batch;
+        pkt_desc_tmp.q_num = batch_in.pkt0.q_num;
 #ifndef NFD_IN_ADD_SEQN
         pkt_desc_tmp.seq_num = 0;
 #endif
@@ -692,7 +690,8 @@ _notify(__shared __gpr unsigned int *complete,
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
-        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(q_batch), NFD_IN_TX_QUEUE);
+        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(batch_in.pkt0.q_num),
+                               NFD_IN_TX_QUEUE);
         __qc_add_to_ptr_wr(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
                            &batch_out.pkt0.__raw[0], sig_done, &qc_sig);
 
@@ -723,13 +722,14 @@ _notify(__shared __gpr unsigned int *complete,
         /* This is the first message in the batch. Do not wait for
          * signals that will not be set while processing a partial
          * batch and store batch info. */
-        q_batch = batch_in.pkt0.q_num;
         n_batch = batch_in.pkt0.num_batch;
+        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(batch_in.pkt0.q_num),
+                               NFD_IN_TX_QUEUE);
         wait_msk = __signals(&msg_sig0, &wq_sig0);
 
         /* Interface and queue info is the same for all packets in batch */
         pkt_desc_tmp.intf = PCIE_ISL;
-        pkt_desc_tmp.q_num = q_batch;
+        pkt_desc_tmp.q_num = batch_in.pkt0.q_num;
 #ifndef NFD_IN_ADD_SEQN
         pkt_desc_tmp.seq_num = 0;
 #endif
@@ -792,9 +792,7 @@ _notify(__shared __gpr unsigned int *complete,
          * lock out other threads. */
         reorder_done_opt(&next_ctx, &msg_order_sig);
 
-        /* Map batch.queue to a QC queue and increment the TX_R pointer
-         * for that queue by n_batch */
-        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(q_batch), NFD_IN_TX_QUEUE);
+        /* Increment the TX_R pointer for this queue by n_batch */
         __qc_add_to_ptr_wr(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
                            &batch_out.pkt0.__raw[0], sig_done, &qc_sig);
 
