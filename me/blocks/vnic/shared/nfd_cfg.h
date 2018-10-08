@@ -536,12 +536,10 @@ __intrinsic void nfd_cfg_check_cfg_msg(struct nfd_cfg_msg *cfg_msg,
  * @param pcie_isl      PCIe island that the message relates to
  * @param cfg_msg       message listing the queue that has been configured
  * @param isl_base      start address of the CFG BAR for this PCIe island
- * @param cfg_sig       signal to trigger a check for new messages
  */
 __intrinsic void nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
                                               struct nfd_cfg_msg *cfg_msg,
-                                              __dram void *isl_base,
-                                              SIGNAL *cfg_sig);
+                                              __dram void *isl_base);
 
 /**
  * Pass this message to the next stage

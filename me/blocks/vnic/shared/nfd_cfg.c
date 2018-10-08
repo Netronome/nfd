@@ -171,8 +171,7 @@ _nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
 __intrinsic void
 nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
                              struct nfd_cfg_msg *cfg_msg,
-                             __dram void *isl_base,
-                             SIGNAL *cfg_sig)
+                             __dram void *isl_base)
 {
     __xwrite unsigned int result;
     __dram char *addr = (__dram char *) isl_base;
