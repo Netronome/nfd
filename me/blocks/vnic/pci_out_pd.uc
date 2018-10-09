@@ -840,7 +840,8 @@ add_wq_credits#:
     alu[$ticket, g_seq_mask, AND, io_work[SB_WQ_SEQ_wrd], >>SB_WQ_SEQ_shf]
 
     wsm_extract(isl, io_work, SB_WQ_CTM_ISL)
-    beq[no_ctm_buffer#]
+    beq[no_ctm_buffer#], defer[1]
+    alu[ring_num, SB_WQ_BLS_msk, AND, io_work[SB_WQ_BLS_wrd], >>SB_WQ_BLS_shf]
 
     // Free CTM buffer
     alu[addr_hi, g_pkt_free_hi, OR, isl, <<24]
@@ -850,10 +851,9 @@ add_wq_credits#:
 no_ctm_buffer#:
     mem[release_ticket, $ticket, 0, bitmap_lo, 1], sig_done[ticket_sig]
 
-    wsm_extract(addr_lo, io_work, SB_WQ_MUBUF)
     ctx_arb[ticket_sig], defer[2]
+    wsm_extract(addr_lo, io_work, SB_WQ_MUBUF)
     alu[cntr_addr_lo, NFD_OUT_ATOMICS_DMA_DONE, OR, qnum, <<4]
-    wsm_extract(ring_num, io_work, SB_WQ_BLS)
 
     // Free the MU buffer
     alu[-- , g_blm_iref, OR, ring_num, <<16]
