@@ -256,7 +256,7 @@ struct nfd_in_tx_desc {
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+-------------------------------+---+-----------+
- *    0  |S|    offset   |            seq_num            |itf|   q_num   |
+ *    0  |N|    offset   |            seq_num            |itf|   q_num   |
  *       +-+-+-+---------+-------------------------------+---+-----------+
  *    1  |I|J|S|                       buf_addr                          |
  *       +-+-+-+---------+---------------+-+-+---------------------------+
@@ -265,9 +265,10 @@ struct nfd_in_tx_desc {
  *    3  |            data_len           |       vlan [L4/L3 off]        |
  *       +-------------------------------+-------------------------------+
  *
+ *    N -> is_nfd
  *    itf -> intf
  *    L -> Last packet in a series of LSO packets
- *    S -> sp0, sp1, and sp2 (spare)
+ *    S -> sp1 and sp2 (spare)
  */
 /**
  * NFD-to-App (TX) packet descriptor
@@ -275,7 +276,8 @@ struct nfd_in_tx_desc {
 struct nfd_in_pkt_desc {
     union {
         struct {
-            unsigned int sp0:1;         /**< Spare bit (unused) */
+            unsigned int is_nfd:1;      /**< Flag packet is from NFD, test
+                                         *   against NFD_IN_IS_NFD_TRUE_VAL */
             unsigned int offset:7;      /**< Offset of packet data from start
                                          *   of buffer + NFD_IN_DATA_OFFSET.
                                          *   aka (prepended metadata length) */
@@ -306,6 +308,11 @@ struct nfd_in_pkt_desc {
         unsigned int __raw[4];          /**< Direct access to struct words */
     };
 };
+
+/**
+ * Test value for comparison against the "is_nfd" bit in nfd_in_pkt_desc
+ */
+#define NFD_IN_IS_NFD_TRUE_VAL  1
 
 
 /**

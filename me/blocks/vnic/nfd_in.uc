@@ -100,7 +100,7 @@
  * Bit    3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
  * -----\ 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
  * Word  +-+-------------+-------------------------------+---+-----------+
- *    0  |S|    offset   |           reserved            |itf|   q_num   |
+ *    0  |N|    offset   |           reserved            |itf|   q_num   |
  *       +-+-+-+---------+-------------------------------+---+-----------+
  *    1  |I|J|S|                       buf_addr                          |
  *       +-+-+-+---------+---------------+-+-+---------------------------+
@@ -126,9 +126,11 @@
  *       25  ENCAP   -> PCIE_DESC_TX_ENCAP
  *       24  OIP4_CS -> PCIE_DESC_TX_O_IP4_CSUM
  *
- *      S -> sp0 (spare)
+ *      N -> is_nfd
+ *      S -> spare
  *    itf -> intf
  */
+#define NFD_IN_IS_NFD_fld       0, 31, 31
 #define NFD_IN_OFFSET_fld       0, 30, 24
 #define NFD_IN_SEQN_fld         0, 23, 8
 #define NFD_IN_INTF_fld         0, 7, 6
@@ -162,7 +164,7 @@
 #define NFD_IN_RING_LO_fld      0, 11, 0
 
 #define NFD_IN_RING_INFO_ITEM_SZ   4
-
+#define NFD_IN_IS_NFD_TRUE_VAL  1
 
 /* Define the default maximum length in bytes of prepended chained metadata.
  * Assume one 32-bit word is used to encode the metadata types in a chain and

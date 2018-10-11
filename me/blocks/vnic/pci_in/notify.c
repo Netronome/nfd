@@ -448,7 +448,7 @@ do {                                                                         \
                              NFD_IN_LSO_CNTR_T_NOTIFY_NON_LSO_PKT_DESC);     \
         __critical_path();                                                   \
         _NOTIFY_MU_CHK(_pkt);                                                \
-        pkt_desc_tmp.sp0 = batch_in.pkt##_pkt##.eop;                         \
+        pkt_desc_tmp.is_nfd = batch_in.pkt##_pkt##.eop;                      \
         pkt_desc_tmp.offset = batch_in.pkt##_pkt##.offset;                   \
         NFD_IN_ADD_SEQN_PROC;                                                \
         batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];              \
@@ -533,7 +533,7 @@ do {                                                                         \
                     halt();                                                  \
                 }                                                            \
                                                                              \
-                pkt_desc_tmp.sp0 = lso_pkt.desc.eop;                         \
+                pkt_desc_tmp.is_nfd = lso_pkt.desc.eop;                      \
                 pkt_desc_tmp.offset = lso_pkt.desc.offset;                   \
                 NFD_IN_ADD_SEQN_PROC;                                        \
                 batch_out.pkt##_pkt##.__raw[0] = pkt_desc_tmp.__raw[0];      \
