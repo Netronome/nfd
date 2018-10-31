@@ -33,22 +33,39 @@
 #include <vnic/utils/qc.h>
 #include <vnic/shared/nfd_cfg.h>
 
+
 extern __intrinsic uint64_t swapw64(uint64_t val);
 
+#ifndef NFD_OUT_CNTRS0_MEM
+#define NFD_OUT_CNTRS0_MEM __imem_n(0)
+#endif
+
+#ifndef NFD_OUT_CNTRS1_MEM
+#define NFD_OUT_CNTRS1_MEM __imem_n(0)
+#endif
+
+#ifndef NFD_OUT_CNTRS2_MEM
+#define NFD_OUT_CNTRS2_MEM __imem_n(1)
+#endif
+
+#ifndef NFD_OUT_CNTRS3_MEM
+#define NFD_OUT_CNTRS3_MEM __imem_n(1)
+#endif
+
 #ifdef NFD_PCIE0_EMEM
-    PKTS_CNTRS_DECLARE(nfd_out_cntrs0, NFD_OUT_MAX_QUEUES, __imem_n(0));
+    PKTS_CNTRS_DECLARE(nfd_out_cntrs0, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS0_MEM);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
-    PKTS_CNTRS_DECLARE(nfd_out_cntrs1, NFD_OUT_MAX_QUEUES, __imem_n(0));
+    PKTS_CNTRS_DECLARE(nfd_out_cntrs1, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS1_MEM);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
-    PKTS_CNTRS_DECLARE(nfd_out_cntrs2, NFD_OUT_MAX_QUEUES, __imem_n(1));
+    PKTS_CNTRS_DECLARE(nfd_out_cntrs2, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS2_MEM);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
-    PKTS_CNTRS_DECLARE(nfd_out_cntrs3, NFD_OUT_MAX_QUEUES, __imem_n(1));
+    PKTS_CNTRS_DECLARE(nfd_out_cntrs3, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS3_MEM);
 #endif
 
 
