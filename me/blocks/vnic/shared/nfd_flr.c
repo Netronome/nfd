@@ -163,7 +163,7 @@ void
 nfd_flr_init_tlv(const unsigned int pcie, unsigned int vid)
 {
     __xwrite unsigned int tlv_wr = (NFP_NET_CFG_TLV_TYPE_RESERVED << 16) | \
-        (NFD_CFG_TLV_BLOCK_SZ - NFP_NET_CFG_TLV_BASE - 4);
+        (NFD_CFG_TLV_BLOCK_OFF - NFP_NET_CFG_TLV_BASE - 4);
     __emem char *bar_base = nfd_cfg_bar_base(pcie, vid);
     __emem char *tlv_base = nfd_cfg_tlv_tml_base(pcie, vid);
 
@@ -171,7 +171,7 @@ nfd_flr_init_tlv(const unsigned int pcie, unsigned int vid)
     __xread unsigned int read_block[16];
     __xwrite unsigned int write_block[16];
 
-    mem_write32(&tlv_wr, tlv_base + NFP_NET_CFG_TLV_BASE, sizeof(tlv_wr));
+    mem_write32(&tlv_wr, bar_base + NFP_NET_CFG_TLV_BASE, sizeof(tlv_wr));
 
     for (offset = 0; offset < NFD_CFG_TLV_BLOCK_SZ;
          offset += sizeof(read_block)) {
