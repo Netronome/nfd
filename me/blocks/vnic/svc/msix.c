@@ -256,7 +256,7 @@ msix_vf_send(unsigned int pcie_nr, unsigned int bar_nr, unsigned int vid,
 
     /* Check if we need to re-configure the CPP2PCI BAR */
     /* XXX vid is equal to VF num currently */
-    bar_addr = pcie_c2p_barcfg_val(addr_hi, addr_lo, (vid + 64));
+    bar_addr = pcie_c2p_barcfg_val(addr_hi, addr_lo, vid + NFD_CFG_VF_OFFSET);
     if (bar_addr != msix_cur_cpp2pci_addr[pcie_nr]) {
         pcie_c2p_barcfg_set_expl(pcie_nr, bar_nr, bar_addr);
         msix_cur_cpp2pci_addr[pcie_nr] = bar_addr;

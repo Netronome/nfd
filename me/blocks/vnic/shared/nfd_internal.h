@@ -41,7 +41,6 @@
 /* #define NFD_CFG_EVENT_DATA      (1<<4) */
 /* #define NFD_CFG_EVENT_FILTER    14 */
 #define NFD_CFG_RING_SZ         (4 * 512)
-#define NFD_CFG_VF_OFFSET       64
 
 #define NFD_CFG_FLR_EVENT_FILTER 15
 
