@@ -17,12 +17,12 @@
  * @brief         NFP CTM ring interface
  */
 
+#include <nfp6000/nfp_ctm.h>
+#include <nfp6000/nfp_me.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <types.h>
-
-#include <nfp6000/nfp_ctm.h>
-#include <nfp6000/nfp_me.h>
 
 #include <vnic/utils/ctm_ring.h>
 

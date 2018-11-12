@@ -17,6 +17,9 @@
  * @brief         Fill the local (LM) cache of MU buffers
  */
 
+#include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_me.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <nfp_chipres.h>
@@ -26,12 +29,10 @@
 #include <std/event.h>
 #include <std/reg_utils.h>
 
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_me.h>
-
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_rst_state.h>
 #include <vnic/utils/dma_seqn.h>
+
 
 #ifndef PCI_IN_ISSUE_DMA_IDX
 #warning "PCI_IN_ISSUE_DMA_IDX not defined.  Defaulting to 0.  Make sure there is only one instance"

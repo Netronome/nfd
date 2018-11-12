@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2012-2018,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,17 @@
  * @brief         NFP CLS ring interface
  */
 
+#include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_me.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <types.h>
 
 #include <nfp/cls.h>
 
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_me.h>
-
 #include <vnic/utils/cls_ring.h>
+
 
 /* Override the length field on the NFP6000
  * XXX replace with values from nfp6000/nfp_me.h*/

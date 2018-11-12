@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2019,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,11 @@
 #ifndef _BLOCKS__VNIC_UTILS_QCNTL_H_
 #define _BLOCKS__VNIC_UTILS_QCNTL_H_
 
+#include <nfp6000/nfp_qc.h>
+
 #include <nfp.h>
 #include <types.h>
 
-#include <nfp6000/nfp_qc.h>
 
 /**
  * Queue configuration struct, ideally containing constants

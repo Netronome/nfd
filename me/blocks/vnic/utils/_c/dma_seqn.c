@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2018,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@
  *
  */
 
+#include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_pcie.h>
+
 #include <assert.h>
 #include <nfp.h>
 
 #include <std/event.h>
-
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_pcie.h>
 
 #include <vnic/utils/dma_seqn.h>
 

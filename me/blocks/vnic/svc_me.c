@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2015-2019,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,16 @@
  * @file   svc_me.c
  * @brief  Main entry point for the service ME
  */
+
+#include <nfp6000/nfp_me.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <nfp_chipres.h>
 
 #include <nfp/me.h>
 #include <nfp/mem_bulk.h>
-#include <nfp/mem_ring.h>   /* TEMP */
-
-#include <nfp6000/nfp_me.h>
+#include <nfp/mem_ring.h>
 
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_flr.c>

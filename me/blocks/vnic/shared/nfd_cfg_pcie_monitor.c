@@ -17,12 +17,12 @@
  * @brief         An internal API to access interact with PCIe monitor
  */
 
+#include <nfp6000/nfp_me.h>
+
 #include <nfp.h>
 
 #include <nfp/me.h>
 #include <nfp/xpb.h>
-
-#include <nfp6000/nfp_me.h>
 
 
 /* Values defined by the pcie_monitor ABI */

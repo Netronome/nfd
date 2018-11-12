@@ -19,6 +19,8 @@
 #ifndef _BLOCKS__VNIC_SVC_MSIX_QMON_C_
 #define _BLOCKS__VNIC_SVC_MSIX_QMON_C_
 
+#include <nfp6000/nfp_me.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <nfp_chipres.h>
@@ -29,10 +31,7 @@
 #include <nfp/me.h>
 #include <nfp/mem_bulk.h>
 #include <nfp/mem_atomic.h>
-
 #include <std/reg_utils.h>
-
-#include <nfp6000/nfp_me.h>
 
 #include <vnic/nfd_common.h>
 #include <vnic/pci_out.h>
@@ -40,7 +39,6 @@
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/svc/msix.h>
 #include <vnic/utils/qcntl.h>
-
 
 #include <nfp_net_ctrl.h>
 

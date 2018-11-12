@@ -17,6 +17,8 @@
  * @brief         An internal API to perform NFD FLR resets
  */
 
+#include <nfp6000/nfp_qc.h>
+
 #include <assert.h>
 #include <nfp.h>
 
@@ -28,15 +30,12 @@
 
 #include <std/reg_utils.h>
 
-#include <nfp6000/nfp_qc.h>
-
 #include <vnic/nfd_common.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_vf_cfg_iface.h>
 #include <vnic/utils/qcntl.h>
-
 
 #include <nfp_net_ctrl.h>
 

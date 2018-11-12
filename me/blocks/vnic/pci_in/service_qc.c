@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2019,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,13 @@
  *                controller
  */
 
+#include <nfp6000/nfp_event.h>
+
 #include <assert.h>
 #include <nfp.h>
 
-#include <nfp6000/nfp_event.h>
-
-#include <vnic/pci_in.h>
-
 #include <vnic/nfd_common.h>
+#include <vnic/pci_in.h>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_internal.h>

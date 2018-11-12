@@ -17,15 +17,14 @@
  * @brief         Code to notify host and app that packet was transmitted
  */
 
+#include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_me.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <nfp_chipres.h>
 
 #include <nfp/me.h>
-
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_me.h>
-
 #include <nfp/mem_ring.h>
 
 #include <vnic/nfd_common.h>
@@ -36,6 +35,7 @@
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
 #include <vnic/utils/qcntl.h>
+
 
 /* TODO: get NFD_PCIE_ISL_BASE from a common header file */
 #define NOTIFY_RING_ISL (PCIE_ISL + 4)

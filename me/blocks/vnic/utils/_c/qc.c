@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2019,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,17 @@
  * @brief         An API to manage queue controller accesses in NFD
  */
 
+#include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_me.h>
+
 #include <assert.h>
 #include <nfp.h>
 
 #include <nfp/me.h>
 #include <std/reg_utils.h>
 
-#include <nfp6000/nfp_cls.h>
-
 #include <vnic/nfd_common.h>
 #include <vnic/utils/qc.h>
-
-/*
- * Temporary header includes
- */
-#include <nfp6000/nfp_me.h> /* TEMP */
 
 
 /* Compress quad-spaced queues to a compact bitmask in the low 8 bits

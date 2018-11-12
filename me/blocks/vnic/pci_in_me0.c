@@ -22,17 +22,16 @@
 
 #include <nfp/me.h>
 #include <nfp/remote_me.h>
-#include <nfp/mem_ring.h>   /* TEMP */
-
-#include <nfp6000/nfp_qc.h>
+#include <nfp/mem_ring.h>
 
 #include <vnic/pci_in/gather.c>
 #include <vnic/pci_in/gather_status.c>
 #include <vnic/pci_in/service_qc.c>
 #include <vnic/shared/nfd_cfg.h>
-#include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_cfg_internal.c>
+#include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_rst_state.h>
+
 
 #if NFD_CFG_CLASS != NFD_CFG_CLASS_DEFAULT
 #pragma message( "Non-zero (default) NFD_CFG_CLASS set!" )

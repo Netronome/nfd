@@ -17,16 +17,15 @@
  * @brief         Implement "packet DMA" (PD) task for PCI.OUT
  */
 
-
 #ifndef __PCI_OUT_PD_UC
 #define __PCI_OUT_PD_UC
+
+#include <nfp6000/nfp_pcie.h>
 
 #include <stdmac.uc>
 #include <cycle.uc>
 
 #include <blm/blm_api.uc>
-
-#include <nfp6000/nfp_pcie.h>
 
 #include "wsm.uc"
 #include "pci_out_sb.h"

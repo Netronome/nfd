@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2019,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,13 +22,12 @@
 
 #include <nfp/me.h>
 
-#include <nfp6000/nfp_qc.h>
-
 #include <vnic/pci_out/cache_desc.c>
 #include <vnic/pci_out/cache_desc_status.c>
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_cfg_internal.c>
 #include <vnic/shared/nfd_rst_state.h>
+
 
 NFD_INIT_DONE_DECLARE;
 

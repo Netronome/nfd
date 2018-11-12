@@ -17,6 +17,11 @@
  * @brief         An internal API to access to NFD configuration data
  */
 
+#include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
+#include <nfp6000/nfp_qc.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <nfp_chipres.h>
@@ -28,11 +33,6 @@
 #include <nfp/pcie.h>
 #include <nfp/xpb.h>
 #include <std/event.h>
-
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
-#include <nfp6000/nfp_qc.h>
 
 #include <vnic/nfd_common.h>
 #include <vnic/shared/nfd.h>

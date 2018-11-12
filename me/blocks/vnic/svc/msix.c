@@ -36,15 +36,18 @@
  *
  */
 
+#include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <stdint.h>
 #include <types.h>
+
 #include <nfp/me.h>
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
 #include <nfp/mem_bulk.h>
 #include <nfp/pcie.h>
+
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/svc/msix.h>
 

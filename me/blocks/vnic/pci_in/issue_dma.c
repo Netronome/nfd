@@ -17,6 +17,9 @@
  * @brief         Code to DMA packet data to the NFP
  */
 
+#include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <nfp_chipres.h>
@@ -28,8 +31,6 @@
 #include <nfp/pcie.h>
 #include <std/reg_utils.h>
 #include <std/cntrs.h>
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
 
 #include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
@@ -42,6 +43,7 @@
 #include <vnic/utils/ctm_ring.h>
 #include <vnic/utils/ordering.h>
 #include <vnic/utils/qc.h>
+
 
 #ifndef _link_sym
 #define _link_sym(x) __link_sym(#x)

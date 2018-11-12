@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2019,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,15 @@
  * @file          blocks/vnic/utils/_c/qcntl.c
  * @brief         Configure and access the queue controller peripheral
  */
-#include <assert.h>
-#include <nfp.h>
 
 #include <nfp6000/nfp_pcie.h>
 #include <nfp6000/nfp_qc.h>
 
+#include <assert.h>
+#include <nfp.h>
+
 #include <vnic/utils/qcntl.h>
+
 
 /* XXX This method could possibly be generalised and moved to libnfp.h */
 __intrinsic void

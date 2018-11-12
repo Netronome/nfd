@@ -17,16 +17,16 @@
  * @brief         Code to gather PCI.IN descriptors from pending queues
  */
 
+#include <nfp6000/nfp_cls.h>
+#include <nfp6000/nfp_me.h>
+#include <nfp6000/nfp_pcie.h>
+
 #include <assert.h>
 #include <nfp.h>
 #include <nfp_chipres.h>
 
 #include <nfp/pcie.h>
 #include <std/event.h>
-
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
 
 #include <vnic/pci_in.h>
 #include <vnic/shared/nfd.h>
@@ -37,6 +37,7 @@
 
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_rst_state.h>
+
 
 #ifndef NFD_IN_ISSUE_DMA_QSHIFT
 #define NFD_IN_ISSUE_DMA_QSHIFT 0

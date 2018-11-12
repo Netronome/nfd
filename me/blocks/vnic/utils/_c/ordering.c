@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2019,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,12 @@
  * @brief         NFP next neighbour ring interface
  */
 
+#include <nfp6000/nfp_me.h>
+
 #include <assert.h>
 #include <nfp.h>
 
 #include <nfp/me.h>
-
-#include <nfp6000/nfp_me.h>
 
 #include <vnic/utils/ordering.h>
 
