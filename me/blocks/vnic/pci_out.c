@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2018,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,35 +47,35 @@ extern __intrinsic uint64_t swapw64(uint64_t val);
 #endif
 
 #ifndef NFD_OUT_CNTRS0_MEM
-#define NFD_OUT_CNTRS0_MEM __imem_n(0)
+#define NFD_OUT_CNTRS0_MEM PKT_CNTR_LOC(0)
 #endif
 
 #ifndef NFD_OUT_CNTRS1_MEM
-#define NFD_OUT_CNTRS1_MEM __imem_n(0)
+#define NFD_OUT_CNTRS1_MEM PKT_CNTR_LOC(0)
 #endif
 
 #ifndef NFD_OUT_CNTRS2_MEM
-#define NFD_OUT_CNTRS2_MEM __imem_n(1)
+#define NFD_OUT_CNTRS2_MEM PKT_CNTR_LOC(1)
 #endif
 
 #ifndef NFD_OUT_CNTRS3_MEM
-#define NFD_OUT_CNTRS3_MEM __imem_n(1)
+#define NFD_OUT_CNTRS3_MEM PKT_CNTR_LOC(1)
 #endif
 
 #ifdef NFD_PCIE0_EMEM
-    PKTS_CNTRS_DECLARE(nfd_out_cntrs0, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS0_MEM);
+    PKT_CNTR_ALLOC_SYM(nfd_out_cntrs0, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS0_MEM);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
-    PKTS_CNTRS_DECLARE(nfd_out_cntrs1, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS1_MEM);
+    PKT_CNTR_ALLOC_SYM(nfd_out_cntrs1, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS1_MEM);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
-    PKTS_CNTRS_DECLARE(nfd_out_cntrs2, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS2_MEM);
+    PKT_CNTR_ALLOC_SYM(nfd_out_cntrs2, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS2_MEM);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
-    PKTS_CNTRS_DECLARE(nfd_out_cntrs3, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS3_MEM);
+    PKT_CNTR_ALLOC_SYM(nfd_out_cntrs3, NFD_OUT_MAX_QUEUES, NFD_OUT_CNTRS3_MEM);
 #endif
 
 
@@ -97,22 +97,22 @@ nfd_out_send_init()
 {
 #ifdef NFD_PCIE0_EMEM
     NFD_OUT_RING_LINK(0);
-    nfd_out_cntrs_base[0] = NFD_OUT_CNTR_ADDR(nfd_out_cntrs0);
+    nfd_out_cntrs_base[0] = PKT_CNTR_GET_ADDR_SYM(nfd_out_cntrs0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
     NFD_OUT_RING_LINK(1);
-    nfd_out_cntrs_base[1] = NFD_OUT_CNTR_ADDR(nfd_out_cntrs1);
+    nfd_out_cntrs_base[1] = PKT_CNTR_GET_ADDR_SYM(nfd_out_cntrs1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
     NFD_OUT_RING_LINK(2);
-    nfd_out_cntrs_base[2] = NFD_OUT_CNTR_ADDR(nfd_out_cntrs2);
+    nfd_out_cntrs_base[2] = PKT_CNTR_GET_ADDR_SYM(nfd_out_cntrs2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
     NFD_OUT_RING_LINK(3);
-    nfd_out_cntrs_base[3] = NFD_OUT_CNTR_ADDR(nfd_out_cntrs3);
+    nfd_out_cntrs_base[3] = PKT_CNTR_GET_ADDR_SYM(nfd_out_cntrs3);
 #endif
 }
 

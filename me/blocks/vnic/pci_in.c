@@ -43,35 +43,36 @@
 #endif
 
 #ifndef NFD_IN_CNTRS0_MEM
-#define NFD_IN_CNTRS0_MEM __imem_n(0)
+#define NFD_IN_CNTRS0_MEM PKT_CNTR_LOC(0)
 #endif
 
 #ifndef NFD_IN_CNTRS1_MEM
-#define NFD_IN_CNTRS1_MEM __imem_n(0)
+#define NFD_IN_CNTRS1_MEM PKT_CNTR_LOC(0)
 #endif
 
 #ifndef NFD_IN_CNTRS2_MEM
-#define NFD_IN_CNTRS2_MEM __imem_n(1)
+#define NFD_IN_CNTRS2_MEM PKT_CNTR_LOC(1)
 #endif
 
 #ifndef NFD_IN_CNTRS3_MEM
-#define NFD_IN_CNTRS3_MEM __imem_n(1)
+#define NFD_IN_CNTRS3_MEM PKT_CNTR_LOC(1)
+
 #endif
 
 #ifdef NFD_PCIE0_EMEM
-    PKTS_CNTRS_DECLARE(nfd_in_cntrs0, NFD_IN_MAX_QUEUES, NFD_IN_CNTRS0_MEM);
+    PKT_CNTR_ALLOC_SYM(nfd_in_cntrs0, NFD_IN_MAX_QUEUES, NFD_IN_CNTRS0_MEM);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
-    PKTS_CNTRS_DECLARE(nfd_in_cntrs1, NFD_IN_MAX_QUEUES, NFD_IN_CNTRS1_MEM);
+    PKT_CNTR_ALLOC_SYM(nfd_in_cntrs1, NFD_IN_MAX_QUEUES, NFD_IN_CNTRS1_MEM);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
-    PKTS_CNTRS_DECLARE(nfd_in_cntrs2, NFD_IN_MAX_QUEUES, NFD_IN_CNTRS2_MEM);
+    PKT_CNTR_ALLOC_SYM(nfd_in_cntrs2, NFD_IN_MAX_QUEUES, NFD_IN_CNTRS2_MEM);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
-    PKTS_CNTRS_DECLARE(nfd_in_cntrs3, NFD_IN_MAX_QUEUES, NFD_IN_CNTRS3_MEM);
+    PKT_CNTR_ALLOC_SYM(nfd_in_cntrs3, NFD_IN_MAX_QUEUES, NFD_IN_CNTRS3_MEM);
 #endif
 
 #ifdef NFD_IN_WQ_SHARED
@@ -114,22 +115,22 @@ nfd_in_recv_init()
 {
 #ifdef NFD_PCIE0_EMEM
     NFD_IN_RING_LINK(0);
-    nfd_in_cntrs_base[0] = NFD_IN_CNTR_ADDR(nfd_in_cntrs0);
+    nfd_in_cntrs_base[0] = PKT_CNTR_GET_ADDR_SYM(nfd_in_cntrs0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
     NFD_IN_RING_LINK(1);
-    nfd_in_cntrs_base[1] = NFD_IN_CNTR_ADDR(nfd_in_cntrs1);
+    nfd_in_cntrs_base[1] = PKT_CNTR_GET_ADDR_SYM(nfd_in_cntrs1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
     NFD_IN_RING_LINK(2);
-    nfd_in_cntrs_base[2] = NFD_IN_CNTR_ADDR(nfd_in_cntrs2);
+    nfd_in_cntrs_base[2] = PKT_CNTR_GET_ADDR_SYM(nfd_in_cntrs2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
     NFD_IN_RING_LINK(3);
-    nfd_in_cntrs_base[3] = NFD_IN_CNTR_ADDR(nfd_in_cntrs3);
+    nfd_in_cntrs_base[3] = PKT_CNTR_GET_ADDR_SYM(nfd_in_cntrs3);
 #endif
 }
 
