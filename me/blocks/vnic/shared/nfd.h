@@ -92,16 +92,9 @@
 #endif
 
 
-/* For NFP6000 chips < revision B0 a software workaround is used
- * to ensure that the final bytes of a packet that is not a 4B
- * multiple in size are byte swapped correctly.  This workaround
- * is incompatible with gather support.  If the capabilities
- * advertise gather, throw an error. */
-#if __REVISION_MIN < __REVISION_B0
-#if (NFD_CFG_VF_CAP & NFP_NET_CFG_CTRL_GATHER) || \
-    (NFD_CFG_PF_CAP & NFP_NET_CFG_CTRL_GATHER)
-#error "NFP_NET_CFG_CTRL_GATHER not supported for A0 chips"
-#endif
+/* NFP6XXX A0 chips have errata related to byte swapping on DMAs */
+#if defined(__NFP_IS_6XXX) && (__REVISION_MIN < __REVISION_B0)
+#error "NFP6XXX A0 chips not supported"
 #endif
 
 /* Debug defines */

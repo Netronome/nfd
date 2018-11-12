@@ -773,9 +773,8 @@ nfd_cfg_pci_reconfig()
      * processing PCIe resets */
     nfd_flr_update_mstr_drop_if_disabled(PCIE_ISL, 0);
 
-
-    /* Enable B0 DMA ByteMask swapping */
-#if __REVISION_MIN >= __REVISION_B0
+#if defined(__NFP_IS_6XXX)
+    /* Enable NFP6XXX B0 DMA ByteMask swapping */
     _nfd_cfg_dma_enable_DmaByteMaskSwap();
 #endif
 }

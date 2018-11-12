@@ -1715,11 +1715,6 @@ DECLARE_PROC_DOWN(6);
 DECLARE_PROC_DOWN(7);
 
 
-#if __REVISION_MIN < __REVISION_B0
-#error "A0 chips not supported"
-#endif
-
-
 /* Setup _ISSUE_PROC_JUMBO_TEST, a fast path test value to identify
  * jumbo frames.  We may branch off the fast path to swap out a
  * buf_store buffer for a jumbo_store buffer, or to issue separate
