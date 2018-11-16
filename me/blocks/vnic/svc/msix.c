@@ -138,7 +138,7 @@ msix_pf_send(unsigned int pcie_nr, unsigned int bar_nr,
 
     /* Calculate address for MSI-X table entry in PCIe SRAM */
     entry_addr_hi = pcie_nr << 30;
-    entry_addr_lo = NFP_PCIE_SRAM_BASE;
+    entry_addr_lo = NFP_PCIE_SRAM_BASE + NFD_PF_MSIX_TABLE_OFF;
     entry_addr_lo += PCI_MSIX_TBL_ENTRY_OFF(entry_nr);
 
     /* Check if the entry is currently masked */

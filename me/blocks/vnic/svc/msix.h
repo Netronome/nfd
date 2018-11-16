@@ -54,9 +54,10 @@
 #define PCIE_MSIX_MAX_ISL               4
 
 /*
- * Offset of the MSI-X table in the VF control BAR
+ * Offset of the MSI-X table for VFs (in control BAR) and PFs (in PCIe SRAM)
  */
 #define NFD_VF_MSIX_TABLE_OFF   0x2000
+#define NFD_PF_MSIX_TABLE_OFF   0x0000
 
 
 #if defined(__NFP_LANG_MICROC)
