@@ -297,7 +297,7 @@
      * using them in this context currently results in spurious
      * warnings */
     #if (NFD_MAX_PFS > 0 || defined(NFD_USE_CTRL))
-        immed[rid, 0]
+        immed[rid, NFD_CFG_PF_OFFSET]
     #endif
     #if (NFD_MAX_VFS > 0)
     .if (NFD_VID_IS_VF(in_vid))

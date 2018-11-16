@@ -54,8 +54,9 @@
 #error "NFD_CFG_RING_EMEM must be defined by the user"
 #endif
 
-/* VF offset (used by NFD MEs, potentially app_master). */
+/* VF and PF function offsets */
 #define NFD_CFG_VF_OFFSET 64
+#define NFD_CFG_PF_OFFSET 0
 
 /* Configuration mechanism memory and ring defines */
 #define NFD_CFG_TOTAL_RINGS     32

@@ -389,7 +389,7 @@ issue_dma_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         queue_data[bmsk_queue].sp0 = 0;
         queue_data[bmsk_queue].lso_offhdr = 0;
         queue_data[bmsk_queue].lso_seq_cnt = 0;
-        queue_data[bmsk_queue].rid = 0;
+        queue_data[bmsk_queue].rid = NFD_CFG_PF_OFFSET;
         if (NFD_VID_IS_VF(cfg_msg->vid)) {
             queue_data[bmsk_queue].rid = cfg_msg->vid + NFD_CFG_VF_OFFSET;
         }
