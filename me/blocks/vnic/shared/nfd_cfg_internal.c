@@ -400,32 +400,25 @@ nfd_cfg_setup_pf()
     SIGNAL sig;
 
     /* BAR0 (resource0) config mem */
-    bar_tmp.map_type = NFP_PCIE_BARCFG_P2C_MAP_TYPE_BULK;
-    bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_64BIT;
     bar_tmp.target = 7; /* MU CPP target */
     bar_tmp.token = 0;
+    bar_tmp.map_type = NFP_PCIE_BARCFG_P2C_MAP_TYPE_BULK;
+    bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_64BIT;
+    bar_base_addr = NFP_PCIE_BARCFG_P2C(0, 0);
     _bar_addr(&bar_tmp, NFD_CFG_BASE_LINK(PCIE_ISL));
     bar = bar_tmp;
 
-    bar_base_addr = NFP_PCIE_BARCFG_P2C(0, 0);
     __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
         ctx_swap[sig];
 
     /* BAR1 (resource2) PCI.IN queues  */
-    bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_32BIT;
     bar_tmp.target = 0; /* Internal PCIe Target */
+    bar_tmp.token = 0;
+    bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_32BIT;
     _bar_addr(&bar_tmp, 0x80000);
-    bar = bar_tmp;
 
     bar_base_addr = NFP_PCIE_BARCFG_P2C(1, 0);
-    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
-        ctx_swap[sig];
-
-    /* BAR2 (resource4) PCI.OUT queues */
-    _bar_addr(&bar_tmp, 0x80000 + 128 * 0x800);
     bar = bar_tmp;
-
-    bar_base_addr = NFP_PCIE_BARCFG_P2C(2, 0);
     __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
         ctx_swap[sig];
 }
