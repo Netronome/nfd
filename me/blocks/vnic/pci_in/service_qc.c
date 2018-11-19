@@ -18,7 +18,13 @@
  *                controller
  */
 
-#include <nfp6000/nfp_event.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_event.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_event.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <assert.h>
 #include <nfp.h>

@@ -20,7 +20,13 @@
 #ifndef _BLOCKS__VNIC_UTILS_QCNTL_H_
 #define _BLOCKS__VNIC_UTILS_QCNTL_H_
 
-#include <nfp6000/nfp_qc.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_qc.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_qc.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <nfp.h>
 #include <types.h>

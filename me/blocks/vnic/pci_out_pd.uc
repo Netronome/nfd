@@ -20,7 +20,13 @@
 #ifndef __PCI_OUT_PD_UC
 #define __PCI_OUT_PD_UC
 
-#include <nfp6000/nfp_pcie.h>
+#if (IS_NFPTYPE(__NFP6000))
+    #include <nfp6000/nfp_pcie.h>
+#elif (IS_NFPTYPE(__NFP3800))
+    #include <nfp3800/nfp_pcie.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <stdmac.uc>
 #include <cycle.uc>
@@ -221,8 +227,6 @@
 #define PCIE_DMA_WORD1_NOSIG_val \
     (NFD_OUT_DATA_CFG_REG | (NFD_OUT_DATA_DMA_TOKEN << 4))
 #define PCIE_DMA_WORD1_NOSIG_shf 8
-
-#define NFP_PCIE_DMA_TOPCI_LO   0x40040
 
 
 /**

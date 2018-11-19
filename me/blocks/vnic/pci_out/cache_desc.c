@@ -17,11 +17,21 @@
  * @brief         Code to cache FL descriptors from pending queues
  */
 
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_event.h>
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
-#include <nfp6000/nfp_qc.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_cls.h>
+    #include <nfp6000/nfp_event.h>
+    #include <nfp6000/nfp_me.h>
+    #include <nfp6000/nfp_pcie.h>
+    #include <nfp6000/nfp_qc.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_cls.h>
+    #include <nfp3800/nfp_event.h>
+    #include <nfp3800/nfp_me.h>
+    #include <nfp3800/nfp_pcie.h>
+    #include <nfp3800/nfp_qc.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <assert.h>
 #include <nfp.h>
@@ -881,7 +891,18 @@ _start_send(__gpr unsigned int *queue)
     }
 
     /* Wait on the DMA enqueue signal via a mask in case it wasn't issued */
+#if defined(__NFP_IS_6XXX)
     wait_sig_mask(dma_sig_msk);
+#else
+    if (dma_sig_msk) {
+        wait_sig_mask(dma_sig_msk);
+    } else {
+        /* XXX the NFP6000 interprets wait_sig_msk(0) as
+         * ctx_arb[voluntary].  On later chips the CTX won't
+         * wake again */
+        ctx_swap();
+    }
+#endif
     __implicit_read(&dma_sig);
 }
 

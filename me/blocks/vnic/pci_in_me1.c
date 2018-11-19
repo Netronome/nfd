@@ -158,8 +158,20 @@ main(void)
 
             precache_bufs_compute_seq_safe();
 
+#if defined(__NFP_IS_6XXX)
             wait_sig_mask(distr_wait_msk);
             distr_wait_msk = 0;
+#else
+            if (distr_wait_msk) {
+                wait_sig_mask(distr_wait_msk);
+                distr_wait_msk = 0;
+            } else {
+                /* XXX the NFP6000 interprets wait_sig_msk(0) as
+                 * ctx_arb[voluntary].  On later chips the CTX won't
+                 * wake again */
+                ctx_swap();
+            }
+#endif
             __implicit_read(&distr_sig0);
             __implicit_read(&distr_sig1);
         }

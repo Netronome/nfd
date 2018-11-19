@@ -17,7 +17,13 @@
  * @brief         An internal API to perform NFD FLR resets
  */
 
-#include <nfp6000/nfp_qc.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_qc.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_qc.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <assert.h>
 #include <nfp.h>

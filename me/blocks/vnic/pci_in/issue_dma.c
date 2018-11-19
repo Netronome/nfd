@@ -17,8 +17,15 @@
  * @brief         Code to DMA packet data to the NFP
  */
 
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_me.h>
+    #include <nfp6000/nfp_pcie.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_me.h>
+    #include <nfp3800/nfp_pcie.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <assert.h>
 #include <nfp.h>

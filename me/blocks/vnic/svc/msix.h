@@ -57,7 +57,13 @@
  * Offset of the MSI-X table for VFs (in control BAR) and PFs (in PCIe SRAM)
  */
 #define NFD_VF_MSIX_TABLE_OFF   0x2000
-#define NFD_PF_MSIX_TABLE_OFF   0x0000
+#if defined(__NFP_IS_6XXX)
+    #define NFD_PF_MSIX_TABLE_OFF   0x0000
+#elif defined(__NFP_IS_38XX)
+    #define NFD_PF_MSIX_TABLE_OFF   0xc000
+#else
+    #error "Unsupported chip type"
+#endif
 
 
 #if defined(__NFP_LANG_MICROC)

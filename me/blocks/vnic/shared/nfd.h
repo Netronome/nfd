@@ -23,8 +23,11 @@
 #include <nfd_user_cfg.h>
 
 /* Set defines */
+#if defined(__NFP_IS_38XX)
+#define NFD_MAX_ISL     1   /* Maximum number of PCIe islands NFD may support */
+#else
 #define NFD_MAX_ISL     4   /* Maximum number of PCIe islands NFD may support */
-
+#endif
 
 /* User define consistency checks */
 #ifndef NFD_MAX_VF_QUEUES

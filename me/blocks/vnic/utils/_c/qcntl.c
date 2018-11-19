@@ -17,9 +17,17 @@
  * @brief         Configure and access the queue controller peripheral
  */
 
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
-#include <nfp6000/nfp_qc.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_pcie.h>
+    #include <nfp6000/nfp_qc.h>
+    #include <nfp6000/nfp_me.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_pcie.h>
+    #include <nfp3800/nfp_qc.h>
+    #include <nfp3800/nfp_me.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <assert.h>
 #include <nfp.h>
@@ -109,7 +117,10 @@ qc_init_queue(unsigned char pcie_isl, unsigned int queue,
 
     /* Setup low config first, including ptr */
     config_lo_tmp.rptr_enable = 1;
+#if defined(__NFP_IS_6XXX)
+    /* Note: Event data only supported by NFP 6XXX. */
     config_lo_tmp.event_data     = cfg->event_data;
+#endif
     config_lo_tmp.event_type     = cfg->event_type;
     config_lo_tmp.readptr        = cfg->ptr;
     config_lo = config_lo_tmp;
@@ -142,7 +153,10 @@ __qc_ping_queue(unsigned char pcie_isl, unsigned int queue,
 
     /* Initialise variables */
     config_lo_tmp.__raw = 0;
+#if defined(__NFP_IS_6XXX)
+    /* Note: Event data only supported by NFP 6XXX. */
     config_lo_tmp.event_data = event_data;
+#endif
     config_lo_tmp.event_type = event_type;
     *xfer = config_lo_tmp.__raw;
 

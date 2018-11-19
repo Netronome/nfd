@@ -65,7 +65,11 @@
 #endif
 
 /* VF and PF function offsets */
-#define NFD_CFG_VF_OFFSET 64
+#if defined(__NFP_IS_6XXX)
+    #define NFD_CFG_VF_OFFSET 64
+#else
+    #define NFD_CFG_VF_OFFSET 4
+#endif
 #define NFD_CFG_PF_OFFSET 0
 
 /* Configuration mechanism memory and ring defines */

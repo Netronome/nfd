@@ -17,10 +17,19 @@
  * @brief         Code to gather PCI.IN descriptors from pending queues
  */
 
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
-#include <nfp6000/nfp_qc.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_cls.h>
+    #include <nfp6000/nfp_me.h>
+    #include <nfp6000/nfp_pcie.h>
+    #include <nfp6000/nfp_qc.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_cls.h>
+    #include <nfp3800/nfp_me.h>
+    #include <nfp3800/nfp_pcie.h>
+    #include <nfp3800/nfp_qc.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <assert.h>
 #include <nfp.h>

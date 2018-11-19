@@ -17,7 +17,13 @@
  * @brief         NFP next neighbour ring interface
  */
 
-#include <nfp6000/nfp_me.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_me.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_me.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <assert.h>
 #include <nfp.h>
@@ -25,6 +31,7 @@
 #include <nfp/me.h>
 
 #include <vnic/utils/ordering.h>
+
 
 __intrinsic void
 reorder_start(unsigned int start_ctx, SIGNAL *sig)

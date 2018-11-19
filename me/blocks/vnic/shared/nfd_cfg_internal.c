@@ -17,10 +17,19 @@
  * @brief         An internal API to access to NFD configuration data
  */
 
-#include <nfp6000/nfp_cls.h>
-#include <nfp6000/nfp_me.h>
-#include <nfp6000/nfp_pcie.h>
-#include <nfp6000/nfp_qc.h>
+#if defined(__NFP_IS_6XXX)
+    #include <nfp6000/nfp_cls.h>
+    #include <nfp6000/nfp_me.h>
+    #include <nfp6000/nfp_pcie.h>
+    #include <nfp6000/nfp_qc.h>
+#elif defined(__NFP_IS_38XX)
+    #include <nfp3800/nfp_cls.h>
+    #include <nfp3800/nfp_me.h>
+    #include <nfp3800/nfp_pcie.h>
+    #include <nfp3800/nfp_qc.h>
+#else
+    #error "Unsupported chip type"
+#endif
 
 #include <assert.h>
 #include <nfp.h>
@@ -342,7 +351,11 @@ _get_ring_sz(struct nfd_cfg_msg *cfg_msg)
 
 /* XXX TEMP compute BAR address fields for PF */
 __intrinsic void
+#if defined(__NFP_IS_6XXX)
 _bar_addr(struct nfp_pcie_barcfg_p2c *bar, unsigned long long data)
+#else
+_bar_addr(struct nfp_pcie_barcfg_pf_p2c_bar_sub *bar, unsigned long long data)
+#endif
 {
     unsigned int addr_tmp = (data >> 19) & 0x1FFFFF;
     bar->actaddr = addr_tmp >> 16;
@@ -382,29 +395,50 @@ nfd_cfg_setup_pf()
 {
     __gpr unsigned int addr_hi =  PCIE_ISL << 30;
     unsigned int bar_base_addr;
+#if defined(__NFP_IS_6XXX)
     struct nfp_pcie_barcfg_p2c bar_tmp;
     __xwrite struct nfp_pcie_barcfg_p2c bar;
+#else
+    struct nfp_pcie_barcfg_pf_p2c_bar_sub bar_tmp;
+    __xwrite struct nfp_pcie_barcfg_pf_p2c_bar_sub bar;
+#endif
     SIGNAL sig;
 
     /* BAR0 (resource0) config mem */
     bar_tmp.target = 7; /* MU CPP target */
     bar_tmp.token = 0;
+
+#if defined(__NFP_IS_6XXX)
     bar_tmp.map_type = NFP_PCIE_BARCFG_P2C_MAP_TYPE_BULK;
     bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_64BIT;
     bar_base_addr = NFP_PCIE_BARCFG_P2C(0, 0);
+#else
+    bar_tmp.map_type = NFP_PCIE_BARCFG_PF_P2C_BAR_SUB_MAP_TYPE_BULK;
+    bar_tmp.len = NFP_PCIE_BARCFG_PF_P2C_BAR_SUB_LEN_64BIT;
+    /* XXX Only one PF is supported. */
+    bar_base_addr = NFP_PCIE_BARCFG_PF_P2C(NFD_CFG_PF_OFFSET) +
+                    NFP_PCIE_BARCFG_PF_P2C_BAR_SUB(0, 0);
+#endif
+
     _bar_addr(&bar_tmp, NFD_CFG_BASE_LINK(PCIE_ISL));
     bar = bar_tmp;
-
     __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
         ctx_swap[sig];
 
     /* BAR1 (resource2) PCI.IN queues  */
     bar_tmp.target = 0; /* Internal PCIe Target */
     bar_tmp.token = 0;
+#if defined(__NFP_IS_6XXX)
     bar_tmp.len = NFP_PCIE_BARCFG_P2C_LEN_32BIT;
     _bar_addr(&bar_tmp, 0x80000);
-
     bar_base_addr = NFP_PCIE_BARCFG_P2C(1, 0);
+#else
+    bar_tmp.len = NFP_PCIE_BARCFG_PF_P2C_BAR_SUB_LEN_32BIT;
+    _bar_addr(&bar_tmp, 0x400000);
+    /* XXX Only one PF is supported. */
+    bar_base_addr = NFP_PCIE_BARCFG_PF_P2C(NFD_CFG_PF_OFFSET) +
+                    NFP_PCIE_BARCFG_PF_P2C_BAR_SUB(1, 0);
+#endif
     bar = bar_tmp;
     __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
         ctx_swap[sig];
@@ -416,37 +450,101 @@ nfd_cfg_setup_vf()
 {
     __gpr unsigned int addr_hi =  PCIE_ISL << 30;
     unsigned int bar_base_addr;
+#if defined(__NFP_IS_6XXX)
     struct nfp_pcie_barcfg_vf_p2c bar_tmp;
     __xwrite struct nfp_pcie_barcfg_vf_p2c bar;
+#else
+    struct nfp_pcie_barcfg_vf_p2c_bar_sub bar_tmp;
+    __xwrite struct nfp_pcie_barcfg_vf_p2c_bar_sub bar;
+    struct nfp_pcie_vf_cfg_lut lut_tmp;
+    __xwrite struct nfp_pcie_vf_cfg_lut lut;
+    unsigned int vf;
+#endif
     SIGNAL sig;
 
     /* Clean start state */
     bar_tmp.__raw = 0;
 
     /* BAR0 (resource0) config mem */
-    bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_LEN_64BIT;
     bar_tmp.target = 7; /* MU CPP target */
     bar_tmp.token = 0;
-    /* XXX this is A0 specific */
+#if defined(__NFP_IS_6XXX)
+    bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_LEN_64BIT;
     bar_tmp.base =
         ((unsigned long long) NFD_CFG_BASE_LINK(PCIE_ISL)) >> (40 - 19);
     bar = bar_tmp;
-
     bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(0);
+#else
+    bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_BAR_SUB_LEN_64BIT;
+    bar_tmp.base =
+        ((unsigned long long) NFD_CFG_BASE_LINK(PCIE_ISL)) >> (40 - 22);
+    /* XXX Only one PF is supported. */
+    bar_base_addr = NFP_PCIE_BARCFG_PF_P2C(NFD_CFG_PF_OFFSET) +
+                    NFP_PCIE_BARCFG_VF_P2C_BAR_SUB(0, 0);
+#endif
+    bar = bar_tmp;
     __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
         ctx_swap[sig];
+
+#if defined(__NFP_IS_38XX)
+    /* Configure both VF sub-BARs, or BAR slices to the same value
+     * until we have a use for the other slice.  This minimised the
+     * potential attack surface exposed to the VF. */
+    bar_base_addr = NFP_PCIE_BARCFG_PF_P2C(NFD_CFG_PF_OFFSET) +
+                    NFP_PCIE_BARCFG_VF_P2C_BAR_SUB(0, 1);
+    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
+        ctx_swap[sig];
+#endif
 
     /* BAR1 (resource2) PCI.IN queues  */
-    bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_LEN_32BIT;
     bar_tmp.target = 0; /* Internal PCIe Target */
-    /* Both the A0 workaround and the B0 enhancement require base = 0
-     * to access the QC. */
-    bar_tmp.base = 0;
-    bar = bar_tmp;
-
+    bar_tmp.base = 0;   /* Base is ignored when accessing the QC */
+#if defined(__NFP_IS_6XXX)
+    bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_LEN_32BIT;
     bar_base_addr = NFP_PCIE_BARCFG_VF_P2C(1);
+#else
+    bar_tmp.len = NFP_PCIE_BARCFG_VF_P2C_BAR_SUB_LEN_32BIT;
+    bar_tmp.map_type = NFP_PCIE_BARCFG_VF_P2C_BAR_SUB_MAP_TYPE_QCTL;
+    /* XXX Only one PF is supported. */
+    bar_base_addr = NFP_PCIE_BARCFG_PF_P2C(NFD_CFG_PF_OFFSET) +
+                    NFP_PCIE_BARCFG_VF_P2C_BAR_SUB(1, 0);
+#endif
+     bar = bar_tmp;
     __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
         ctx_swap[sig];
+
+#if defined(__NFP_IS_38XX)
+    /* Configure both VF sub-BARs, or BAR slices to the same value
+     * until we have a use for the other slice.  This minimised the
+     * potential attack surface exposed to the VF. */
+    bar_base_addr = NFP_PCIE_BARCFG_PF_P2C(NFD_CFG_PF_OFFSET) +
+                    NFP_PCIE_BARCFG_VF_P2C_BAR_SUB(1, 1);
+    __asm pcie[write_pci, bar, addr_hi, <<8, bar_base_addr, 1],    \
+        ctx_swap[sig];
+
+
+    /* Config LUT entries for used VFs. */
+    lut_tmp.__raw      = 0;
+    lut_tmp.pf_num     = NFD_CFG_PF_OFFSET;
+    lut_tmp.queue_cnt  = NFD_MAX_VF_QUEUES * 4; /* 4 QC pts per NFD queue */
+    lut_tmp.valid      = 1;
+
+    for (vf = 0; vf < NFD_MAX_VFS; vf++) {
+        lut_tmp.queue_base = vf * NFD_MAX_VF_QUEUES * 4;
+        bar_base_addr = NFP_PCIE_VF_CFG_LUT(vf);
+        lut.__raw = lut_tmp.__raw;
+        __asm pcie[write_pci, lut, addr_hi, <<8, bar_base_addr, 1], \
+            ctx_swap[sig];
+    }
+
+    /* Config LUT entries for unused VFs to disabled. */
+    lut.__raw = 0;
+    for (; vf < 64; vf++) {
+        bar_base_addr = NFP_PCIE_VF_CFG_LUT(vf);
+        __asm pcie[write_pci, lut, addr_hi, <<8, bar_base_addr, 1], \
+            ctx_swap[sig];
+    }
+#endif
 }
 
 

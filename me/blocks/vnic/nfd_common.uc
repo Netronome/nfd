@@ -26,7 +26,11 @@
 #include <vnic/nfd_common.h>
 #include <vnic/shared/nfd_cfg.uc>
 
+#if defined(__NFP_IS_38XX)
+#define NFD_MAX_ISL             1
+#else
 #define NFD_MAX_ISL             4
+#endif
 
 #define __NFD_EMU_BASE_ISL      24
 #define __NFD_DIRECT_ACCESS     0x80

@@ -20,7 +20,11 @@
 #define _BLOCKS__SHARED_NFD_INTERNAL_H_
 
 #if (defined(NFD_IN_LSO_CNTR_ENABLE) && defined(__NFP_LANG_MICROC))
+#if defined(__NFP_IS_6XXX)
 #include <nfp6000/nfp_me.h>
+#elif define(__NFP_IS_38XX)
+#include <nfp3800/nfp_me.h>
+#endif
 #include <std/cntrs.h>
 #endif
 
@@ -29,11 +33,12 @@
 #include <nfd_user_cfg.h>
 #endif
 
+
 /* Tuning constants */
 
 /* NFD event filter defines */
 
-#define NFD_EVENT_DATA          (1<<4)
+#define NFD_EVENT_DATA          0
 #define NFD_EVENT_FILTER_START  0
 
 /* nfd_cfg */
@@ -53,7 +58,11 @@
 #define NFD_IN_MAX_BATCH_SZ     8
 #define NFD_IN_FAST_PATH_BATCH_SZ 8
 #define NFD_IN_MAX_NON_FAST_PATH_BATCH_SZ 4
-#define NFD_IN_DESC_BATCH_Q_SZ  128
+#if defined(__NFP_IS_6XXX)
+    #define NFD_IN_DESC_BATCH_Q_SZ  128
+#else
+    #define NFD_IN_DESC_BATCH_Q_SZ 64
+#endif
 #define NFD_IN_ISSUED_RING0_SZ  128
 #define NFD_IN_ISSUED_RING0_RES 32
 #define NFD_IN_ISSUED_RING0_NUM 14

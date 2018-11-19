@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2014-2018,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,7 +46,13 @@
         #error "expecting each statistic to take up at least 256 bytes"
     #endif
 
-    .alloc_mem NAME imem global __STATSZ __STATSZ
+    #if (IS_NFPTYPE(__NFP6000))
+        .alloc_mem NAME imem global __STATSZ __STATSZ
+    #elif (IS_NFPTYPE(__NFP3800))
+        .alloc_mem NAME emem global __STATSZ __STATSZ
+    #else
+        #error "Unsupported chip type."
+    #endif
 
     #undef __STATSZ
 
