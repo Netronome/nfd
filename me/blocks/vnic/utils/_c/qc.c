@@ -384,7 +384,7 @@ __intrinsic void
 set_Qctl8bitQnum()
 {
     /*
-     * XPB address of ECCSramCntl10
+     * XPB address of ECC SRAMTimingControl10.Qctl8bitQnum
      * We want to do a read-modify-write setting bit 31 only.
      */
     unsigned int addr = 0x110018;
