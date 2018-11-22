@@ -28,6 +28,7 @@
 #include <vnic/nfd_common.h>
 #include <vnic/shared/nfd.h>
 #include <vnic/shared/nfd_cfg.h>
+#include <vnic/shared/nfd_xpb.h>
 #include <vnic/svc/msix.h>
 
 #include <nfp_net_ctrl.h>
@@ -115,9 +116,9 @@ _nfd_flr_ack_pf(unsigned int pcie_isl)
     __mem40 char *atomic_addr;
 
 
-    flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
+    flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_FLR_CSR) |
             (pcie_isl << NFP_PCIEX_ISL_shf));
-    flr_data = (1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE_shf);
+    flr_data = (1 << NFP_PCIEX_FLR_CSR_PF_FLR_DONE_shf);
 
     atomic_addr = (NFD_FLR_LINK(pcie_isl) +
                    sizeof atomic_data * NFD_FLR_PF_ind);
@@ -147,11 +148,11 @@ _nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
     __xwrite unsigned int atomic_data;
     __mem40 char *atomic_addr;
 
-    flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
+    flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_FLR_CSR) |
             (pcie_isl << NFP_PCIEX_ISL_shf));
-    flr_data = (1 << NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_shf);
-    flr_data |= ((vf & NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk) <<
-                 NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf);
+    flr_data = (1 << NFP_PCIEX_FLR_CSR_VF_FLR_DONE_shf);
+    flr_data |= ((vf & NFP_PCIEX_FLR_CSR_VF_FLR_DONE_CHANNEL_msk) <<
+                 NFP_PCIEX_FLR_CSR_VF_FLR_DONE_CHANNEL_shf);
 
     /* nfd_flr_seen is a 64bit mask, sorted from LSB to MSB by NFP
      * address definitions.  This places VFs 0..31 in the 4B from

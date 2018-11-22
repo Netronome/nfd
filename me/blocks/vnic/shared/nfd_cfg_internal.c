@@ -212,19 +212,6 @@ _NFP_CHIPRES_ASM(.alloc_mem _abi_pcie_error_cnt emem global 64 64)
 #define NFD_CFG_PCIE_ERROR_LOCAL        0xc
 
 
-/* /\* XXX temp defines that loosely match the BSP pcie_monitor_api.h *\/ */
-/* #define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c */
-/* #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk    0x3f */
-/* #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf    16 */
-/* #define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_shf            15 */
-/* #define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE_shf               14 */
-/* #define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf        13 */
-/* #define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0           0x00100080 */
-/* #define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1           0x00100084 */
-/* #define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc */
-/* #define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk         0x7f */
-
-
 NFD_FLR_DECLARE;
 
 
@@ -845,39 +832,38 @@ nfd_cfg_check_flr_ap(int state_clean)
         nfd_flr_check_vfs(PCIE_ISL, &flr_pend_status, flr_pend_vf);
 
         /* Acknowledge PCIE vendor defined messages */
-        vendor_msg = xpb_read(NFP_PCIEX_COMPCFG_CFG0);
-        if (vendor_msg & (1 << NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf)) {
+        vendor_msg = xpb_read(NFP_PCIEX_VENDOR_MSG);
+        if (vendor_msg & (1 << NFP_PCIEX_VENDOR_MSG_VALID_shf)) {
             /* "PcieMsgValid" is write one to clear */
-            vendor_msg |= (1 << NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf);
-            xpb_write(NFP_PCIEX_COMPCFG_CFG0, vendor_msg);
+            vendor_msg |= (1 << NFP_PCIEX_VENDOR_MSG_VALID_shf);
+            xpb_write(NFP_PCIEX_VENDOR_MSG, vendor_msg);
         }
 
         /* Acknowledge PCIe state changes */
-        state_change_ack = xpb_read(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT);
-        state_change_ack &= NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk;
+        state_change_ack = xpb_read(NFP_PCIEX_PCIE_STATE_CHANGE_STAT);
+        state_change_ack &= NFP_PCIEX_PCIE_STATE_CHANGE_STAT_msk;
         if (state_change_ack) {
-            xpb_write(NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT,
-                      state_change_ack);
+            xpb_write(NFP_PCIEX_PCIE_STATE_CHANGE_STAT, state_change_ack);
         }
 
         /* Count and acknowledge PCIe errors */
-        pcie_error_ack = xpb_read(NFP_PCIEX_COMPCFG_CNTRLR2);
-        pcie_error_ack &= NFP_PCIEX_COMPCFG_CNTRLR2_msk;
+        pcie_error_ack = xpb_read(NFP_PCIEX_PCIE_ERR);
+        pcie_error_ack &= NFP_PCIEX_PCIE_ERR_msk;
         if (pcie_error_ack) {
             __emem char *error_cnt;
 
             error_cnt = (__emem char *) _link_sym(_abi_pcie_error_cnt);
             error_cnt += PCIE_ISL * NFD_CFG_PCIE_ERROR_ISL_SZ;
-            mem_add32_imm(NFP_PCIEX_COMPCFG_CNTRLR2_CORR(pcie_error_ack),
+            mem_add32_imm(NFP_PCIEX_PCIE_ERR_CORR(pcie_error_ack),
                           error_cnt + NFD_CFG_PCIE_ERROR_CORR);
-            mem_add32_imm(NFP_PCIEX_COMPCFG_CNTRLR2_NON_FATAL(pcie_error_ack),
+            mem_add32_imm(NFP_PCIEX_PCIE_ERR_NON_FATAL(pcie_error_ack),
                           error_cnt + NFD_CFG_PCIE_ERROR_NON_FATAL);
-            mem_add32_imm(NFP_PCIEX_COMPCFG_CNTRLR2_FATAL(pcie_error_ack),
+            mem_add32_imm(NFP_PCIEX_PCIE_ERR_FATAL(pcie_error_ack),
                           error_cnt + NFD_CFG_PCIE_ERROR_FATAL);
-            mem_add32_imm(NFP_PCIEX_COMPCFG_CNTRLR2_LOCAL(pcie_error_ack),
+            mem_add32_imm(NFP_PCIEX_PCIE_ERR_LOCAL(pcie_error_ack),
                           error_cnt + NFD_CFG_PCIE_ERROR_LOCAL);
 
-            xpb_write(NFP_PCIEX_COMPCFG_CNTRLR2, pcie_error_ack);
+            xpb_write(NFP_PCIEX_PCIE_ERR, pcie_error_ack);
         }
 
         /* Recheck InterruptManager.Status  */

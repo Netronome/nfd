@@ -35,6 +35,7 @@
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_vf_cfg_iface.h>
+#include <vnic/shared/nfd_xpb.h>
 #include <vnic/utils/qcntl.h>
 
 #include <nfp_net_ctrl.h>
@@ -366,15 +367,15 @@ nfd_flr_link_up()
 
 #define NFD_FLR_XPB_TIMEOUT_VAL 0xffffffff
 
-    pcie_sts_addr = NFP_PCIEX_COMPCFG_CNTRLR0;
+    pcie_sts_addr = NFP_PCIEX_LINK_POWER_STATE;
     __asm ct[xpb_read, pcie_sts_raw, pcie_sts_addr, 0,  \
              1], ctx_swap[pcie_sts_sig];
     if (pcie_sts_raw == NFD_FLR_XPB_TIMEOUT_VAL) {
         up = 0;
     } else {
         pcie_sts =
-            ((pcie_sts_raw >> NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_shf) &
-             NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_msk);
+            ((pcie_sts_raw >> NFP_PCIEX_LINK_POWER_STATE_shf) &
+             NFP_PCIEX_LINK_POWER_STATE_msk);
         up = pcie_sts;
     }
 
@@ -446,7 +447,7 @@ nfd_flr_check_pf(unsigned int pcie_isl,
     __xread unsigned int seen_flr;
     __mem40 char *atomic_addr;
     SIGNAL atomic_sig;
-    __xread unsigned int cntrlr3;
+    __xread unsigned int flr_data;
     unsigned int xpb_addr;
     SIGNAL xpb_sig;
     unsigned int pf_atomic_data = 1 << NFD_FLR_PF_shf;
@@ -454,16 +455,16 @@ nfd_flr_check_pf(unsigned int pcie_isl,
     /* Read state of FLR hardware and seen atomics */
     atomic_addr = (NFD_FLR_LINK(pcie_isl) +
                    sizeof pf_atomic_data * NFD_FLR_PF_ind);
-    xpb_addr = NFP_PCIEX_COMPCFG_CNTRLR3;
+    xpb_addr = NFP_PCIEX_FLR_CSR;
 
     __mem_read_atomic(&seen_flr, atomic_addr, sizeof seen_flr, sizeof seen_flr,
                       sig_done, &atomic_sig);
-    __asm ct[xpb_read, cntrlr3, xpb_addr, 0, 1], sig_done[xpb_sig];
+    __asm ct[xpb_read, flr_data, xpb_addr, 0, 1], sig_done[xpb_sig];
 
     wait_for_all(&atomic_sig, &xpb_sig);
 
     /* Test state for an unseen PF FLR */
-    if (cntrlr3 & (1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf)) {
+    if (flr_data & (1 << NFP_PCIEX_FLR_CSR_PF_FLR_IN_PROGRESS_shf)) {
         if ((seen_flr & pf_atomic_data) == 0) {
             /* We have found an unseen PF FLR, mark it in local and
              * atomic state. */
@@ -493,7 +494,6 @@ nfd_flr_check_vfs(unsigned int pcie_isl,
     __xread unsigned int hw_flr[2];
     __mem40 char *atomic_addr;
     SIGNAL atomic_sig;
-    __xread unsigned int cntrlr3;
     unsigned int xpb_addr;
     SIGNAL xpb_sig0, xpb_sig1;
 
@@ -504,9 +504,9 @@ nfd_flr_check_vfs(unsigned int pcie_isl,
     atomic_addr = NFD_FLR_LINK(pcie_isl);
     __mem_read_atomic(seen_flr, atomic_addr, sizeof seen_flr, sizeof seen_flr,
                       sig_done, &atomic_sig);
-    xpb_addr = NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0;
+    xpb_addr = NFP_PCIEX_PCIE_VF_FLR_IN_PROGRESS0;
     __asm ct[xpb_read, hw_flr + 0, xpb_addr, 0, 1], sig_done[xpb_sig0];
-    xpb_addr = NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1;
+    xpb_addr = NFP_PCIEX_PCIE_VF_FLR_IN_PROGRESS1;
     __asm ct[xpb_read, hw_flr + 4, xpb_addr, 0, 1], sig_done[xpb_sig1];
 
     wait_for_all(&atomic_sig, &xpb_sig0, &xpb_sig1);
@@ -604,9 +604,9 @@ nfd_flr_ack_pf(unsigned int pcie_isl)
     __mem40 char *atomic_addr;
 
 
-    flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
+    flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_FLR_CSR) |
             (pcie_isl << NFP_PCIEX_ISL_shf));
-    flr_data = (1 << NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE_shf);
+    flr_data = (1 << NFP_PCIEX_FLR_CSR_PF_FLR_DONE_shf);
 
     atomic_addr = (NFD_FLR_LINK(pcie_isl) +
                    sizeof atomic_data * NFD_FLR_PF_ind);
@@ -639,11 +639,11 @@ nfd_flr_ack_vf(unsigned int pcie_isl, unsigned int vf)
     __xwrite unsigned int atomic_data;
     __mem40 char *atomic_addr;
 
-    flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR3) |
+    flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_FLR_CSR) |
             (pcie_isl << NFP_PCIEX_ISL_shf));
-    flr_data = (1 << NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_shf);
-    flr_data |= ((vf & NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk) <<
-                 NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf);
+    flr_data = (1 << NFP_PCIEX_FLR_CSR_VF_FLR_DONE_shf);
+    flr_data |= ((vf & NFP_PCIEX_FLR_CSR_VF_FLR_DONE_CHANNEL_msk) <<
+                 NFP_PCIEX_FLR_CSR_VF_FLR_DONE_CHANNEL_shf);
 
     /* nfd_flr_seen is a 64bit mask, sorted from LSB to MSB by NFP
      * address definitions.  This places VFs 0..31 in the 4B from
@@ -679,32 +679,32 @@ __intrinsic void
 nfd_flr_update_mstr_drop_if_disabled(unsigned int pcie_isl,
                                      unsigned int value)
 {
-    __xwrite unsigned int cntrlr1_wr;
-    unsigned int cntrlr1_rd;
-    unsigned int cntrlr1_addr;
+    __xwrite unsigned int bus_mstr_wr;
+    unsigned int bus_mstr_rd;
+    unsigned int bus_mstr_addr;
     unsigned int curr_val;
 
-    cntrlr1_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_COMPCFG_CNTRLR1) |
+    bus_mstr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_BUS_MSTR_DISABLED_CFG) |
                     (pcie_isl << NFP_PCIEX_ISL_shf));
-    cntrlr1_rd = xpb_read(cntrlr1_addr);
+    bus_mstr_rd = xpb_read(bus_mstr_addr);
     curr_val =
-        (cntrlr1_rd >> NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf) & 1;
+        (bus_mstr_rd >> NFP_PCIEX_BUS_MSTR_DROP_IF_DISABLED_shf) & 1;
 
     /* Check requested value and update the CSR if the current
      * doesn't match the requested. */
     if (value) {
         if (curr_val != 1) {
-            cntrlr1_rd |=
-                (1 << NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf);
-            cntrlr1_wr = cntrlr1_rd;
-            xpb_write(cntrlr1_addr, cntrlr1_wr);
+            bus_mstr_rd |=
+                (1 << NFP_PCIEX_BUS_MSTR_DROP_IF_DISABLED_shf);
+            bus_mstr_wr = bus_mstr_rd;
+            xpb_write(bus_mstr_addr, bus_mstr_wr);
         }
     } else {
         if (curr_val != 0) {
-            cntrlr1_rd &=
-                ~(1 << NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf);
-            cntrlr1_wr = cntrlr1_rd;
-            xpb_write(cntrlr1_addr, cntrlr1_wr);
+            bus_mstr_rd &=
+                ~(1 << NFP_PCIEX_BUS_MSTR_DROP_IF_DISABLED_shf);
+            bus_mstr_wr = bus_mstr_rd;
+            xpb_write(bus_mstr_addr, bus_mstr_wr);
         }
     }
 }

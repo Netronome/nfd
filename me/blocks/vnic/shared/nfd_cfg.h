@@ -121,48 +121,6 @@
 #define NFD_CFG_FLR_AP_CTX_NO       1
 #define NFD_CFG_ISL_MASTER_BASE     0x45
 
-/*
- * Defines to use to access FLR hardware CSRs
- */
-#define NFP_PCIEX_ISL_BASE                                   0x04000000
-#define NFP_PCIEX_ISL_shf                                    24
-/* XXX temp defines that loosely match the BSP pcie_monitor_api.h */
-#define NFP_PCIEX_COMPCFG_CNTRLR0                            0x00100060
-#define NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_msk       0xf
-#define NFP_PCIEX_COMPCFG_CNTRLR0_LINK_POWER_STATE_shf       8
-#define NFP_PCIEX_COMPCFG_CNTRLR0_LINK_STATUS_msk            0x3
-#define NFP_PCIEX_COMPCFG_CNTRLR0_LINK_STATUS_shf            6
-#define NFP_PCIEX_COMPCFG_CNTRLR1                            0x00100064
-#define NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_HOLD_IF_DISABLED_shf  6
-#define NFP_PCIEX_COMPCFG_CNTRLR1_MSTR_DROP_IF_DISABLED_shf  4
-#define NFP_PCIEX_COMPCFG_CNTRLR2                            0x00100068
-#define NFP_PCIEX_COMPCFG_CNTRLR2_msk                        0x21c
-#define NFP_PCIEX_COMPCFG_CNTRLR2_CORR(x)                    (1 & ((x) >> 2))
-#define NFP_PCIEX_COMPCFG_CNTRLR2_NON_FATAL(x)               (1 & ((x) >> 3))
-#define NFP_PCIEX_COMPCFG_CNTRLR2_FATAL(x)                   (1 & ((x) >> 4))
-#define NFP_PCIEX_COMPCFG_CNTRLR2_LOCAL(x)                   (1 & ((x) >> 9))
-#define NFP_PCIEX_COMPCFG_CNTRLR3                            0x0010006c
-#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_msk    0x3f
-#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_CHANNEL_shf    16
-#define NFP_PCIEX_COMPCFG_CNTRLR3_VF_FLR_DONE_shf            15
-#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_DONE_shf               14
-#define NFP_PCIEX_COMPCFG_CNTRLR3_FLR_IN_PROGRESS_shf        13
-#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS0           0x00100080
-#define NFP_PCIEX_COMPCFG_PCIE_VF_FLR_IN_PROGRESS1           0x00100084
-#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT             0x001000cc
-#define NFP_PCIEX_COMPCFG_PCIE_STATE_CHANGE_STAT_msk         0x7f
-#define NFP_PCIEX_PCIE_INT_MGR_STATUS                        0x00130000
-/* XXX define the PCIe interrupts we expect and ACK in regular operation,
- * see table "Interrupt Manager PCIe Status Mapping" in databook
- * FLR interrupts are excluded as they take longer to processes */
-#define NFP_PCIEX_PCIE_INT_MGR_STATUS_RECHK_msk              0xc00f4
-#define NFP_PCIEX_COMPCFG_CFG0                               0x00100000
-#define NFP_PCIEX_COMPCFG_CFG0_MSG_VALID_shf                 11
-#define NFP_PCIEX_COMPCFG_CFG0_PF_BUS_MSTR_ENABLE_shf        25
-#define NFP_PCIEX_CLOCK_RESET_CTRL                           0x44045400
-#define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_msk              0xff
-#define NFP_PCIEX_CLOCK_RESET_CTRL_RM_RESET_shf              16
-
 
 #if defined(__NFP_LANG_MICROC)
 
