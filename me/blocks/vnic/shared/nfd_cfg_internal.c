@@ -220,6 +220,12 @@ _NFP_CHIPRES_ASM(.alloc_mem _abi_pcie_error_cnt emem global 64 64)
 #define NFD_CFG_PCIE_ERROR_FATAL        0x8
 #define NFD_CFG_PCIE_ERROR_LOCAL        0xc
 
+#if defined(__NFP_IS_38XX)
+    _NFP_CHIPRES_ASM(.alloc_mem _abi_cfg_lut_error_cnt emem global 64 64)
+#define NFD_CFG_CFG_LUT_ERROR_ISL_SZ    16
+#define NFD_CFG_CFG_LUT_ERROR_INIT      0x0
+#endif
+
 
 NFD_FLR_DECLARE;
 
@@ -963,6 +969,29 @@ nfd_cfg_check_flr_ap(int state_clean)
             xpb_write(NFP_PCIEX_PCIE_ERR, pcie_error_ack);
         }
 
+#if defined(__NFP_IS_38XX)
+        /* Count and acknowledge CfgLUT errors along with acknowledging
+         * MSIX vector and mask changes, in the same CSR */
+        ctassert(NFP_PCIEX_CFG_LUT_ERR == NFP_PCIEX_MSIX_CHANGE);
+        pcie_error_ack = xpb_read(NFP_PCIEX_CFG_LUT_ERR);
+        pcie_error_ack &=
+            ((NFP_PCIEX_CFG_LUT_ERR_msk << NFP_PCIEX_CFG_LUT_ERR_shf) |
+             (NFP_PCIEX_MSIX_CHANGE_PF_MASK_msk <<
+              NFP_PCIEX_MSIX_CHANGE_PF_MASK_shf) |
+             (NFP_PCIEX_MSIX_CHANGE_VECTOR_msk <<
+              NFP_PCIEX_MSIX_CHANGE_VECTOR_shf));
+        if (pcie_error_ack) {
+            __emem char *error_cnt;
+
+            error_cnt = (__emem char *) _link_sym(_abi_cfg_lut_error_cnt);
+            error_cnt += PCIE_ISL * NFD_CFG_CFG_LUT_ERROR_ISL_SZ;
+            mem_add32_imm(NFP_PCIEX_CFG_LUT_ERR_INIT(pcie_error_ack),
+                          error_cnt + NFD_CFG_CFG_LUT_ERROR_INIT);
+
+            xpb_write(NFP_PCIEX_CFG_LUT_ERR, pcie_error_ack);
+        }
+#endif
+
         /* Recheck InterruptManager.Status  */
         int_mgr_status = xpb_read(NFP_PCIEX_PCIE_INT_MGR_STATUS);
         if ((int_mgr_status & NFP_PCIEX_PCIE_INT_MGR_STATUS_RECHK_msk) != 0) {
@@ -1029,7 +1058,7 @@ nfd_cfg_ack_pending_flr()
     /* Our island is in a clean state, so just ack the FLRs */
     if (bit_test(flr_pend_status, NFD_FLR_PF_ind)) {
         /* The PF gets priority over VFs */
-        nfd_flr_ack_pf(PCIE_ISL);
+        nfd_flr_ack_pf(PCIE_ISL, NFD_CFG_PF_OFFSET);
         flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
 
     } else if (bit_test(flr_pend_status, NFD_FLR_VF_LO_ind)) {
@@ -1299,7 +1328,7 @@ nfd_cfg_next_flr(struct nfd_cfg_msg *cfg_msg)
 
 #else
             /* We're not using the PF, just ACK. */
-            nfd_flr_ack_pf(PCIE_ISL);
+            nfd_flr_ack_pf(PCIE_ISL, NFD_CFG_PF_OFFSET);
             flr_pend_status &= ~(1 << NFD_FLR_PF_ind);
 #endif
 

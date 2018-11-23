@@ -439,6 +439,10 @@ nfd_flr_check_link(unsigned int pcie_isl,
 }
 
 
+#if defined(__NFP_IS_6XXX)
+/* XXX for the NFP6000, we need to check separate CSRs for
+ * the PF and VF FLRs so we have separate functions */
+
 /** Read the HW FLR and nfd_flr_atomic state
  * @param pcie_isl              PCIe island (0..3)
  * @param flr_pend_status    Internal state for FLR processing
@@ -558,6 +562,96 @@ nfd_flr_check_flr(unsigned int pcie_isl,
 }
 
 
+#elif defined(__NFP_IS_38XX)
+/* XXX for the NFP3800, we need to check the same CSRs for
+ * the PF and VF FLRs, so we have a single function.  For
+ * now we populate FLR state in the same way as for the NFP6000. */
+
+/** Read the HW FLR and nfd_flr_atomic state for PFs and VFs
+ * @param pcie_isl          PCIe island (0..3)
+ * @param flr_pend_status   Internal state for FLR processing
+ * @param flr_pend_vf       VF specific internal FLR state
+ *
+ * See nfd_cfg_internal.c for a description of the format of
+ * "flr_pend_status" and "flr_pend_vf".
+ */
+__intrinsic void
+nfd_flr_check_flr(unsigned int pcie_isl,
+                  __shared __gpr unsigned int *flr_pend_status,
+                  __shared __gpr unsigned int flr_pend_vf[2])
+{
+    __xread unsigned int seen_flr[3];
+    __xread unsigned int hw_flr[3];
+    __gpr unsigned int hw_flr_cp;
+    __mem40 char *atomic_addr;
+    SIGNAL atomic_sig;
+    unsigned int xpb_addr;
+    SIGNAL xpb_sig;
+
+    unsigned int new_flr;
+    __xwrite unsigned int new_flr_wr[3];
+    unsigned int pf;
+
+    /* Read state of FLR hardware and seen atomics */
+    atomic_addr = NFD_FLR_LINK(pcie_isl);
+    __mem_read_atomic(seen_flr, atomic_addr, sizeof seen_flr, sizeof seen_flr,
+                      sig_done, &atomic_sig);
+    xpb_addr = NFP_PCIEX_PCIE_FLR_IN_PROGRESS_BASE;
+    __asm ct[xpb_read, hw_flr + 0, xpb_addr, 0, 3], sig_done[xpb_sig];
+
+    wait_for_all(&atomic_sig, &xpb_sig);
+
+    /* Handle VFs 0 to 31 */
+    hw_flr_cp = hw_flr[1];
+    __asm dbl_shf[new_flr, hw_flr_cp, hw_flr[0], >>NFD_CFG_VF_OFFSET];
+    new_flr &= ~seen_flr[NFD_FLR_VF_LO_ind];
+    flr_pend_vf[NFD_FLR_VF_LO_ind] |= new_flr;
+    if (flr_pend_vf[NFD_FLR_VF_LO_ind] != 0) {
+        *flr_pend_status |= (1 << NFD_FLR_VF_LO_ind);
+        *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
+    }
+    new_flr_wr[NFD_FLR_VF_LO_ind] = new_flr;
+
+    /* Handle VFs 32 to 63 */
+    __asm dbl_shf[new_flr, hw_flr[2], hw_flr_cp, >>NFD_CFG_VF_OFFSET];
+    new_flr &= ~seen_flr[NFD_FLR_VF_HI_ind];
+    flr_pend_vf[NFD_FLR_VF_HI_ind] |= new_flr;
+    if (flr_pend_vf[NFD_FLR_VF_HI_ind] != 0) {
+        *flr_pend_status |= (1 << NFD_FLR_VF_HI_ind);
+        *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
+    }
+    new_flr_wr[NFD_FLR_VF_HI_ind] = new_flr;
+
+
+    /* Handle the PF we use */
+    /* Test state for an unseen PF FLR */
+    new_flr_wr[NFD_FLR_PF_ind] = 0;
+    if (hw_flr[0] & (1 << NFD_CFG_PF_OFFSET)) {
+        if ((seen_flr[NFD_FLR_PF_ind] & (1 << NFD_FLR_PF_shf)) == 0) {
+            /* We have found an unseen PF FLR, mark it in local and
+             * atomic state. */
+            *flr_pend_status |= (1 << NFD_FLR_PF_ind);
+            *flr_pend_status |= (1 << NFD_FLR_PEND_BUSY_shf);
+            new_flr_wr[NFD_FLR_PF_ind] = (1 << NFD_FLR_PF_shf);
+        }
+    }
+
+    /* Update the nfd_flr_seen atomic */
+    mem_bitset(new_flr_wr, atomic_addr, sizeof new_flr_wr);
+
+    /* Ack FLRs on PFs that we are not using */
+    for (pf = 0; pf < NFD_CFG_VF_OFFSET; pf++) {
+        if ((hw_flr[0] & (1 << pf)) & (pf != NFD_CFG_PF_OFFSET)) {
+            nfd_flr_ack_pf(pcie_isl, pf);
+        }
+    }
+}
+
+#else
+    #error "Unsupported chip type"
+#endif
+
+
 
 /** Write the CFG BAR to indicate an FLR is in process
  * @param isl_base      start address of the CFG BARs for the PCIe island
@@ -614,15 +708,16 @@ nfd_flr_ack_link_reset(unsigned int pcie_isl)
 
 /** Acknowledge the FLR to the hardware, and clear "nfd_flr_seen" bit
  * @param pcie_isl      PCIe island (0..3)
+ * @param pf            PF number on the PCIe island
  *
  * This method issues an XPB write to acknowledge the FLR and an
  * atomic bit clear back-to-back to minimise the likelihood of
  * PCI.IN ME0 seeing an intermediate state.
  */
 __intrinsic void
-nfd_flr_ack_pf(unsigned int pcie_isl)
+nfd_flr_ack_pf(unsigned int pcie_isl, unsigned int pf)
 {
-    __xwrite unsigned int flr_data;
+    unsigned int flr_data;
     unsigned int flr_addr;
 
     unsigned int atomic_data;
@@ -631,7 +726,16 @@ nfd_flr_ack_pf(unsigned int pcie_isl)
 
     flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_FLR_CSR) |
             (pcie_isl << NFP_PCIEX_ISL_shf));
+#if defined(__NFP_IS_6XXX)
     flr_data = (1 << NFP_PCIEX_FLR_CSR_PF_FLR_DONE_shf);
+#elif defined(__NFP_IS_38XX)
+    flr_data = (1 << NFP_PCIEX_FLR_CSR_PF_FLR_DONE_shf);
+    flr_data |=
+        ((pf & NFP_PCIEX_FLR_CSR_VF_FLR_DONE_CHANNEL_msk) <<
+         NFP_PCIEX_FLR_CSR_VF_FLR_DONE_CHANNEL_shf);
+#else
+    #error "Unsupported chip type"
+#endif
 
     atomic_addr = (NFD_FLR_LINK(pcie_isl) +
                    sizeof atomic_data * NFD_FLR_PF_ind);
@@ -640,7 +744,10 @@ nfd_flr_ack_pf(unsigned int pcie_isl)
     /* Issue the FLR ack and then the atomic clear.  This ensures that
      * the atomic is set until the VF FLR in progress bit is cleared. */
     xpb_write(flr_addr, flr_data);
-    mem_bitclr_imm(atomic_data, atomic_addr);
+    if (pf == NFD_CFG_PF_OFFSET) {
+        /* This is the PF we're using, clear the atomic bit */
+        mem_bitclr_imm(atomic_data, atomic_addr);
+    }
 
     /* Set NFD_CFG_FLR_AP_SIG_NO so that we recheck the FLR state */
     signal_ctx(NFD_CFG_FLR_AP_CTX_NO, NFD_CFG_FLR_AP_SIG_NO);

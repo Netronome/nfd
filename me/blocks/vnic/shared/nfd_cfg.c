@@ -101,15 +101,16 @@ _nfd_flr_ack_link_reset(unsigned int pcie_isl)
 
 /** Acknowledge the FLR to the hardware, and clear "nfd_flr_seen" bit
  * @param pcie_isl      PCIe island (0..3)
+ * @param pf            PF number on the PCIe island
  *
  * This method issues an XPB write to acknowledge the FLR and an
  * atomic bit clear back-to-back to minimise the likelihood of
  * PCI.IN ME0 seeing an intermediate state.
  */
 __intrinsic void
-_nfd_flr_ack_pf(unsigned int pcie_isl)
+_nfd_flr_ack_pf(unsigned int pcie_isl, unsigned int pf)
 {
-    __xwrite unsigned int flr_data;
+    unsigned int flr_data;
     unsigned int flr_addr;
 
     unsigned int atomic_data;
@@ -118,7 +119,16 @@ _nfd_flr_ack_pf(unsigned int pcie_isl)
 
     flr_addr = ((NFP_PCIEX_ISL_BASE | NFP_PCIEX_FLR_CSR) |
             (pcie_isl << NFP_PCIEX_ISL_shf));
+#if defined(__NFP_IS_6XXX)
     flr_data = (1 << NFP_PCIEX_FLR_CSR_PF_FLR_DONE_shf);
+#elif defined(__NFP_IS_38XX)
+    flr_data = (1 << NFP_PCIEX_FLR_CSR_PF_FLR_DONE_shf);
+    flr_data |=
+        ((pf & NFP_PCIEX_FLR_CSR_VF_FLR_DONE_CHANNEL_msk) <<
+         NFP_PCIEX_FLR_CSR_PF_FLR_DONE_CHANNEL_shf);
+#else
+    #error "Unsupported chip type"
+#endif
 
     atomic_addr = (NFD_FLR_LINK(pcie_isl) +
                    sizeof atomic_data * NFD_FLR_PF_ind);
@@ -127,7 +137,10 @@ _nfd_flr_ack_pf(unsigned int pcie_isl)
     /* Issue the FLR ack and then the atomic clear.  This ensures that
      * the atomic is set until the VF FLR in progress bit is cleared. */
     xpb_write(flr_addr, flr_data);
-    mem_bitclr_imm(atomic_data, atomic_addr);
+    if (pf == NFD_CFG_PF_OFFSET) {
+        /* This is the PF we're using, clear the atomic bit */
+        mem_bitclr_imm(atomic_data, atomic_addr);
+    }
 }
 
 
@@ -209,7 +222,7 @@ nfd_cfg_app_complete_cfg_msg(unsigned int pcie_isl,
             /* We have a PF FLR, but is it the last PF vNIC? */
             if (cfg_msg->vid == NFD_LAST_PF) {
                 /* Only ack the FLR on the message for the last PF vNIC */
-                _nfd_flr_ack_pf(pcie_isl);
+                _nfd_flr_ack_pf(pcie_isl, NFD_CFG_PF_OFFSET);
             }
         }
 
