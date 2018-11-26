@@ -828,8 +828,7 @@ nfd_cfg_check_flr_ap(int state_clean)
 
         /* Call nfd_flr.c API to update the FLR pending state */
         nfd_flr_check_link(PCIE_ISL, &flr_pend_status, state_clean);
-        nfd_flr_check_pf(PCIE_ISL, &flr_pend_status);
-        nfd_flr_check_vfs(PCIE_ISL, &flr_pend_status, flr_pend_vf);
+        nfd_flr_check_flr(PCIE_ISL, &flr_pend_status, flr_pend_vf);
 
         /* Acknowledge PCIE vendor defined messages */
         vendor_msg = xpb_read(NFP_PCIEX_VENDOR_MSG);

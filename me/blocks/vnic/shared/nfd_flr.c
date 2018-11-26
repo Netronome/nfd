@@ -534,6 +534,25 @@ nfd_flr_check_vfs(unsigned int pcie_isl,
 }
 
 
+/** Helper function to call PF and VF check functions above
+ * @param pcie_isl          PCIe island (0..3)
+ * @param flr_pend_status   Internal state for FLR processing
+ * @param flr_pend_vf       VF specific internal FLR state
+ *
+ * See nfd_cfg_internal.c for a description of the format of
+ * "flr_pend_status" and "flr_pend_vf".
+ */
+__intrinsic void
+nfd_flr_check_flr(unsigned int pcie_isl,
+                  __shared __gpr unsigned int *flr_pend_status,
+                  __shared __gpr unsigned int flr_pend_vf[2])
+{
+    nfd_flr_check_pf(pcie_isl, flr_pend_status);
+    nfd_flr_check_vfs(pcie_isl, flr_pend_status, flr_pend_vf);
+}
+
+
+
 /** Write the CFG BAR to indicate an FLR is in process
  * @param isl_base      start address of the CFG BARs for the PCIe island
  * @param vid           vNIC ID on the PCIe island
