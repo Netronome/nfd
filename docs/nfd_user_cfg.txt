@@ -193,10 +193,14 @@
  *                              choice depends on application details,
  *                              hence a compile time option is
  *                              provided.
- * @NFD_OUT_ALWAYS_HAS_CTM      Skip tests for MU only packets.
- *                              Applications may enable this option
- *                              if they always send NFD packets with
- *                              a CTM buffer to free.
+ * @NFD_OUT_ALWAYS_FREE_CTM     Skip tests for MU only packets where
+ *                              possible.  Applications may enable
+ *                              this option if they always send NFD
+ *                              packets with a CTM buffer to free,
+ *                              except for packets on the
+ *                              NFD_OUT_SKIP_FREE_BLQ (if used).
+ *                              That is, NFD_OUT_SKIP_FREE_BLQ takes
+ *                              precedence over NFD_OUT_ALWAYS_FREE_CTM.
  * @NFD_OUT_SKIP_FREE_BLQ       Define a BLQ where CTM buffers are not
  *                              freed when the MU buffer is returned
  *                              to that BLQ.  The define must provide
@@ -279,6 +283,10 @@
  * @NFD_VNIC_VF             Previously specified to program VF P2C
  *                          BARs.  Now NFD_MAX_VFS is tested to
  *                          determine whether to program those BARs.
+ * @NFD_OUT_ALWAYS_HAS_CTM  Renamed to NFD_OUT_ALWAYS_FREE_CTM.  This
+ *                          define will cause the new define to be set,
+ *                          but developers are encouraged to use the
+ *                          new define instead.
  */
 
 /**
