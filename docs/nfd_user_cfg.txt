@@ -263,7 +263,7 @@
 
 
 /**
- * Depreciated defines (can be removed from builds)
+ * Deprecated defines (can be removed from builds)
  * @NFD_CFG_CLASS           Sets the firmware class advertised to the
  *                          host, but no host drivers currently support
  *                          this feature.  Use APP ID instead.
