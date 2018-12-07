@@ -474,6 +474,10 @@
  * Variable, experimental IDs.  IDs designated for internal development and
  * experiments before a stable TLV ID has been allocated to a feature.  Should
  * never be present in production firmware.
+ *
+ * %NFP_NET_CFG_TLV_TYPE_REPR_CAP:
+ * Single word, equivalent of %NFP_NET_CFG_CAP for representors, features which
+ * can be used on representors.
  */
 #define NFP_NET_CFG_TLV_TYPE_UNKNOWN		0
 #define NFP_NET_CFG_TLV_TYPE_RESERVED		1
@@ -482,5 +486,6 @@
 #define NFP_NET_CFG_TLV_TYPE_MBOX		4
 #define NFP_NET_CFG_TLV_TYPE_EXPERIMENTAL0	5
 #define NFP_NET_CFG_TLV_TYPE_EXPERIMENTAL1	6
+#define NFP_NET_CFG_TLV_TYPE_REPR_CAP		7
 
 #endif /* _NFP_NET_CTRL_H_ */
