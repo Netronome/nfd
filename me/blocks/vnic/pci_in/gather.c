@@ -20,6 +20,7 @@
 #include <nfp6000/nfp_cls.h>
 #include <nfp6000/nfp_me.h>
 #include <nfp6000/nfp_pcie.h>
+#include <nfp6000/nfp_qc.h>
 
 #include <assert.h>
 #include <nfp.h>
@@ -34,6 +35,7 @@
 #include <vnic/utils/dma_seqn.h>
 #include <vnic/utils/cls_ring.h>
 #include <vnic/utils/qc.h>
+#include <vnic/utils/qcntl.h>
 
 #include <vnic/shared/nfd_cfg.h>
 #include <vnic/shared/nfd_rst_state.h>
@@ -63,9 +65,9 @@
 /*
  * State variables for PCI.IN gather
  */
-/* XXX who should conceptually own the pending_bmsk? service_qc or gather? */
-extern __shared __gpr struct qc_bitmask pending_bmsk;
-extern __shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
+__shared __gpr struct qc_bitmask active_bmsk;
+__shared __gpr struct qc_bitmask pending_bmsk;
+__shared __lmem struct nfd_in_queue_info queue_data[NFD_IN_MAX_QUEUES];
 
 #if (NFD_IN_GATHER_MAX_IN_FLIGHT > 32)
 #error "Issue DMA index ring will not work with more than 32 DMAs in flight"
@@ -182,6 +184,10 @@ gather_compl_rst()
 void
 gather_setup_shared()
 {
+     /* Zero bitmasks */
+    init_bitmasks(&active_bmsk);
+    init_bitmasks(&pending_bmsk);
+
     cls_ring_setup(NFD_IN_BATCH_RING0_NUM,
                    (__cls void *)_link_sym(nfd_in_batch_ring0_mem),
                    (NFD_IN_BATCH_RING0_SIZE_LW * 4));
@@ -338,6 +344,182 @@ gather_setup()
     descr_tmp.cpp_token = 0;    /* CLS doesn't offer write swap token */
     descr_tmp.dma_cfg_index = NFD_IN_GATHER_CFG_REG;
     descr_tmp.cpp_addr_hi = 0;
+}
+
+
+/**
+ * Change the configuration of the queues and rings associated with a vNIC
+ * @param cfg_msg       configuration information concerning the change
+ *
+ * This method performs changes to the local state for a vNIC.  The 'cfg_msg'
+ * struct is used in conjunction with 'nfd_cfg_proc_msg' and internal nfd_cfg
+ * state to determine a particular queue to change each time this method is
+ * called.  See nfd_cfg.h for further information.
+ */
+__intrinsic void
+gather_vnic_setup(struct nfd_cfg_msg *cfg_msg)
+{
+    struct qc_queue_config txq;
+    unsigned int queue;
+    unsigned char ring_sz;
+    unsigned int ring_base[2];
+    __gpr unsigned int bmsk_queue;
+
+    nfd_cfg_proc_msg(cfg_msg, &queue, &ring_sz, ring_base, NFD_CFG_PCI_IN0);
+
+    if (cfg_msg->error || !cfg_msg->interested) {
+        return;
+    }
+
+    queue = NFD_VID2NATQ(cfg_msg->vid, queue);
+    bmsk_queue = NFD_NATQ2BMQ(queue);
+
+    txq.watermark    = NFP_QC_STS_HI_WATERMARK_4;
+    txq.event_data   = NFD_EVENT_DATA;
+    txq.ptr          = 0;
+
+    if (cfg_msg->up_bit && !queue_data[bmsk_queue].up) {
+        /* Up the queue:
+         * - Set ring size and requester ID info
+         * - (Re)clear queue pointers in case something changed them
+         *   while down */
+        queue_data[bmsk_queue].tx_w = 0;
+        queue_data[bmsk_queue].tx_s = 0;
+        queue_data[bmsk_queue].ring_sz_msk = ((1 << ring_sz) - 1);
+        queue_data[bmsk_queue].requester_id = NFD_CFG_PF_OFFSET;
+        if (NFD_VID_IS_VF(cfg_msg->vid)) {
+            queue_data[bmsk_queue].requester_id = (cfg_msg->vid +
+                                                   NFD_CFG_VF_OFFSET);
+        }
+        queue_data[bmsk_queue].spare0 = 0;
+        queue_data[bmsk_queue].up = 1;
+        queue_data[bmsk_queue].ring_base_hi = ring_base[1] & 0xFF;
+        queue_data[bmsk_queue].ring_base_lo = ring_base[0];
+
+        txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY;
+        txq.size         = ring_sz - 8; /* XXX add define for size shift */
+        qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue, NFD_IN_TX_QUEUE), &txq);
+    } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
+        /* Down the queue:
+         * - Prevent it issuing events
+         * - Clear active_msk bit
+         * - Clear pending_msk bit
+         * - Clear the proc bitmask bit?
+         * - Clear tx_w and tx_s
+         * - Try to count pending packets? Host responsibility? */
+
+        /* Clear active and pending bitmask bits */
+        clear_queue(&bmsk_queue, &active_bmsk);
+        clear_queue(&bmsk_queue, &pending_bmsk);
+
+        /* Clear queue LM state */
+        queue_data[bmsk_queue].tx_w = 0;
+        queue_data[bmsk_queue].tx_s = 0;
+        queue_data[bmsk_queue].up = 0;
+
+        /* Set QC queue to safe state (known size, no events, zeroed ptrs) */
+        txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
+        txq.size         = 0;
+        qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue, NFD_IN_TX_QUEUE), &txq);
+    }
+}
+
+
+/**
+ * Check active queues for new work, updating pending_bmsk and write pointers
+ *
+ * This function uses the active mask to narrow down likely queues to check for
+ * outstanding work.  When queues with outstanding work are found, the pending
+ * mask is updated.  If a queue is marked active but found to have no pending
+ * work, the function attempts to mark it as inactive.  Per queue write pointers
+ * are updated and the serviced pointer used as input.
+ */
+__intrinsic int
+gather_check_queues()
+{
+    __gpr   unsigned int queue;
+    int     ret;
+    int     retry;
+    unsigned int qc_queue;
+    __gpr   unsigned int queue_base_addr;
+    __xread unsigned int wptr_raw;
+    struct nfp_qc_sts_hi wptr;
+    SIGNAL  qc_sig;
+    __gpr unsigned int ptr_inc;
+
+    /*
+     * Look for a queue to reread the write pointer.
+     * We try up to MAX_RETRIES times. If we do not find one,
+     * we reread the write pointer for the last queue.
+     * This loop breaks as soon as a queue is found.
+     * If there are no active queues, the method returns.
+     */
+    for (retry = 0; retry < NFD_IN_MAX_RETRIES; retry++) {
+        /* Select a queue to check */
+        ret = select_queue(&queue, &active_bmsk);
+
+        if (ret) {
+            /* Yield */
+            ctx_swap();
+            return 0;
+        }
+
+        /* Test remaining work on the queue */
+        /* XXX the factor of 7 seems about right for PCI.IN. */
+        if ((queue_data[queue].tx_w - queue_data[queue].tx_s) <
+            (7 * NFD_IN_MAX_BATCH_SZ)) {
+            /* We have found a queue to poll.
+             * Break and reread wptr */
+            break;
+        }
+    }
+
+    /*
+     * Read latest wptr value
+     * This is not necessary if wptr - sptr > n * MAX_BATCH_SIZE!
+     */
+    qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(queue), NFD_IN_TX_QUEUE);
+    __qc_read(PCIE_ISL, qc_queue, QC_WPTR, &wptr_raw, ctx_swap, &qc_sig);
+    wptr.__raw = wptr_raw;
+
+    /*
+     * Update queues[queue].wptr, stored as a unsigned int for efficient
+     * processing in future operations, and as a record of total wptr
+     * updates on the queue.
+     */
+    ptr_inc = (int) wptr.writeptr - queue_data[queue].tx_w;
+    ptr_inc &= queue_data[queue].ring_sz_msk;
+    queue_data[queue].tx_w += ptr_inc;
+
+    /*
+     * Check for pending work
+     */
+    /* XXX does this work with wrapping? */
+    if ((queue_data[queue].tx_w - queue_data[queue].tx_s) >
+        NFD_IN_PENDING_TEST) {
+        /* Mark the queue in the pending_bmsk */
+        set_queue(&queue, &pending_bmsk);
+
+        return 0; /* tx_w.empty can't be set */
+    }
+
+    /*
+     * Test to see whether to leave queue active
+     * If so, exit by returning
+     */
+    if (!wptr.empty) {
+        return 0;
+    }
+
+    /*
+     * Set the queue to not active and ping the queue to generate
+     * an event for outstanding pointer writes
+     */
+    clear_queue(&queue, &active_bmsk);
+    qc_ping_queue(PCIE_ISL, qc_queue, NFD_EVENT_DATA,
+                  NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY);
+
+    return 0;
 }
 
 

@@ -176,6 +176,8 @@ main(void)
 
             service_qc();
 
+            gather_check_queues();
+
             distr_gather();
 
             gather_status();
@@ -200,7 +202,7 @@ main(void)
                     }
                 }
             } else {
-                service_qc_vnic_setup(&cfg_msg);
+                gather_vnic_setup(&cfg_msg);
 
                 if (!cfg_msg.msg_valid) {
                     if (cfg_msg.pci_reset) {

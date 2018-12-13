@@ -84,28 +84,6 @@ struct qc_bmsk_updates {
     unsigned int bmsk_hi;
 };
 
-/**
- * A shared type PCI.IN and PCI.OUT queue data
- * PCI.IN and PCI.OUT maintain separate structs as they each require a few
- * specific fields. These structs are cast to a queue_info struct to update
- * their write and serviced pointers in a generic manner.
- */
-struct queue_info {
-    unsigned int wptr;
-    unsigned int sptr;
-    unsigned int ring_sz_msk;
-    unsigned int dummy[5];
-};
-
-struct check_queues_consts {
-    unsigned int pcie_isl;
-    unsigned int max_retries;
-    unsigned int batch_sz;
-    unsigned int queue_type;
-    unsigned int pending_test;
-    unsigned int event_data;
-    unsigned int event_type;
-};
 
 /**
  * Select a queue to service
@@ -213,32 +191,6 @@ __intrinsic void check_bitmask_filters(
     volatile SIGNAL *s6, volatile SIGNAL *s7,
     unsigned int start_handle);
 
-
-/**
- * Check active queues for new work, updating pending_bmsk and write pointers
- * @param queue_info_struct     An LM structure holding per queue data that
- *                              may be cast to a "struct queue_info" array
- * @param active_bmsk           An active bitmask as maintained by qc.X methods
- * @param pending_bmsk          A bitmask of queues that have outstanding work
- * @param queue_sz_msk          Used to mask the write pointer for the queues
- * @param c                     A struct of compile time configuration constants
- *                              the checks
- *
- * This method uses the active mask to narrow down likely queues to check for
- * outstanding work.  When queues with outstanding work are found, the pending
- * mask is updated.  If a queue is marked active but found to have no pending
- * work, the method attempts to mark it as inactive.
- * Per queue write pointers are updated by this method, and a serviced pointer
- * is taken as input to the method.  These are stored in the queue_info_struct.
- * The method requires a range of configuration data that allows it to be used
- * for either PCI.IN or PCI.OUT.  This data is stored in the "c" struct.
- * The queue size is treated as a separate parameter so that it can be
- * configured at runtime.
- */
-__intrinsic int check_queues(void *queue_info_struct,
-                             __shared __gpr struct qc_bitmask *active_bmsk,
-                             __shared __gpr struct qc_bitmask *pending_bmsk,
-                             struct check_queues_consts *c);
 
 /**
  * XXX Configure the queue controller to use 8bit queue numbers in events.
