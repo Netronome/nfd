@@ -258,6 +258,40 @@ do {                                                                    \
 #endif /* (NFD_IN_NUM_WQS == 1) */
 
 
+#ifdef NFD_IN_USE_TXR_WB
+static __gpr unsigned int tx_sent_base_addr =
+    (((0x80 | NOTIFY_RING_ISL) << 24) | (NFD_IN_TX_SENT_BASE >> 8));
+static __gpr unsigned int tx_sent_ind =
+    (NFP_MECSR_PREV_ALU_LENGTH(8) | NFP_MECSR_PREV_ALU_OV_LEN |
+     NFP_MECSR_PREV_ALU_OVE_DATA(2)) ;
+
+/**
+ * Increment an atomic counter stored in CTM
+ * @param qc_queue  QC queue equivalent to increment
+ * @param val       Value to add
+ *
+ * XXX this function is optimised for use in notify.  We have a
+ * qc_queue number available when it's called, so use that.
+ */
+__intrinsic void
+notify_tx_sent_add_imm(unsigned int qc_queue, unsigned int val)
+{
+    __asm {
+        alu[--, tx_sent_ind, or, val, <<16];
+        mem[add_imm, --, tx_sent_base_addr, <<8, qc_queue, 1], indirect_ref;
+    }
+}
+
+#else
+/**
+ * Dummy increment function when TX write back isn't used
+ */
+__intrinsic void
+notify_tx_sent_add_imm(unsigned int qc_queue, unsigned int val) { }
+
+#endif
+
+
 /* Registers to store reset state */
 __xread unsigned int notify_reset_state_xfer = 0;
 __shared __gpr unsigned int notify_reset_state_gpr = 0;
@@ -702,10 +736,11 @@ _notify(__shared __gpr unsigned int *complete,
 
         /* Map batch.queue to a QC queue and increment the TX_R pointer
          * for that queue by n_batch */
-        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(batch_in.pkt0.q_num),
-                               NFD_IN_TX_QUEUE);
-        __qc_add_to_ptr_ind(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
-                            NFD_IN_NOTIFY_QC_RD, sig_done, &qc_sig);
+        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(batch_in.pkt0.q_num), 0);
+        notify_tx_sent_add_imm(qc_queue, n_batch);
+        __qc_add_to_ptr_wr(PCIE_ISL, qc_queue | NFD_IN_TX_QUEUE, QC_RPTR,
+                           n_batch, &batch_out.pkt0.__raw[0],
+                           sig_done, &qc_sig);
 
     } else if (num_avail > 0) {
         /* There is a partial batch - process messages one at a time. */
@@ -735,8 +770,7 @@ _notify(__shared __gpr unsigned int *complete,
          * signals that will not be set while processing a partial
          * batch and store batch info. */
         n_batch = batch_in.pkt0.num_batch;
-        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(batch_in.pkt0.q_num),
-                               NFD_IN_TX_QUEUE);
+        qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(batch_in.pkt0.q_num), 0);
         wait_msk = __signals(&msg_sig0, &wq_sig0);
 
         /* Interface and queue info is the same for all packets in batch */
@@ -807,8 +841,10 @@ _notify(__shared __gpr unsigned int *complete,
         reorder_done_opt(&next_ctx, &msg_order_sig);
 
         /* Increment the TX_R pointer for this queue by n_batch */
-        __qc_add_to_ptr_ind(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
-                            NFD_IN_NOTIFY_QC_RD, sig_done, &qc_sig);
+        notify_tx_sent_add_imm(qc_queue, n_batch);
+        __qc_add_to_ptr_wr(PCIE_ISL, qc_queue | NFD_IN_TX_QUEUE, QC_RPTR,
+                           n_batch, &batch_out.pkt0.__raw[0],
+                           sig_done, &qc_sig);
 
     } else {
         /* Participate in ctm_ring_get ordering */

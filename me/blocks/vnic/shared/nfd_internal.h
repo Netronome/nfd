@@ -383,6 +383,9 @@ enum nfd_cfg_component {
 
 
 /* nfd_in internal structures */
+#define NFD_IN_TX_SENT_BASE             1024
+#define NFD_IN_TX_SENT_SZ               4
+
 struct nfd_in_queue_info {
     unsigned int tx_w;
     unsigned int tx_s;

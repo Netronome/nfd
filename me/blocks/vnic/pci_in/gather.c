@@ -121,6 +121,19 @@ _NFP_CHIPRES_ASM(.alloc_resource nfd_in_batch_ring1_num                    \
 
 
 /*
+ * Allocate memory at specified offset in CTM for TX sent counts.
+ * Forcing this to an offset on all PCIe islands makes code to access
+ * counts simpler and more efficient throughout the system.
+ */
+#define NFD_IN_TX_SENT_ALLOC_IND(_isl, _off)                               \
+    _NFP_CHIPRES_ASM(.alloc_mem nfd_in_tx_sent##_isl pcie##_isl##.ctm+##_off \
+                     global (4 * NFD_IN_MAX_QUEUES))
+#define NFD_IN_TX_SENT_ALLOC(_isl, _off) NFD_IN_TX_SENT_ALLOC_IND(_isl, _off)
+
+NFD_IN_TX_SENT_ALLOC(PCIE_ISL, NFD_IN_TX_SENT_BASE);
+
+
+/*
  * Reserve PCIe Resources
  */
 PCIE_DMA_ALLOC(nfd_in_gather_dma, island, PCIE_ISL, frompci_hi,
@@ -158,6 +171,33 @@ reflect_data(unsigned int dst_me, unsigned int dst_xfer,
         ct[reflect_write_sig_remote, *src_xfer, addr, 0, \
            __ct_const_val(count)], indirect_ref;
     };
+}
+
+
+/**
+ * Zero an atomic counter stored in local CTM
+ * @param base      Start address of structure to zero
+ * @param queue     Queue within structure to zero
+ *
+ * XXX replace this command with suitable flowenv alternative when available.
+ */
+__intrinsic void
+_zero_imm(unsigned int base, unsigned int queue, size_t size)
+{
+    unsigned int ind;
+    unsigned int count = size>>2;
+
+    ctassert(__is_ct_const(size));
+    ctassert(size <= 32);
+
+    queue = queue * 4;
+    ind = (NFP_MECSR_PREV_ALU_LENGTH(8 + (count - 1)) |
+           NFP_MECSR_PREV_ALU_OV_LEN |
+           NFP_MECSR_PREV_ALU_OVE_DATA(2));
+
+    __asm alu[--, --, B, ind];
+    __asm mem[atomic_write_imm, --, base, queue, \
+              __ct_const_val(count)], indirect_ref;
 }
 
 
@@ -399,6 +439,7 @@ gather_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NOT_EMPTY;
         txq.size         = ring_sz - 8; /* XXX add define for size shift */
         qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue, NFD_IN_TX_QUEUE), &txq);
+        _zero_imm(NFD_IN_TX_SENT_BASE, bmsk_queue, NFD_IN_TX_SENT_SZ);
     } else if (!cfg_msg->up_bit && queue_data[bmsk_queue].up) {
         /* Down the queue:
          * - Prevent it issuing events
@@ -421,6 +462,7 @@ gather_vnic_setup(struct nfd_cfg_msg *cfg_msg)
         txq.event_type   = NFP_QC_STS_LO_EVENT_TYPE_NEVER;
         txq.size         = 0;
         qc_init_queue(PCIE_ISL, NFD_NATQ2QC(queue, NFD_IN_TX_QUEUE), &txq);
+        _zero_imm(NFD_IN_TX_SENT_BASE, bmsk_queue, NFD_IN_TX_SENT_SZ);
     }
 }
 

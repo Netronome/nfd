@@ -135,6 +135,15 @@
  *                              can be for a single chained meta data
  *                              type.  Used in microcode and microC to
  *                              determine how much data to fetch.
+ * @NFD_IN_USE_TXR_WB           Enable code to perform TX ring pointer
+ *                              write back to the host. This reduces
+ *                              the latency experienced by the host
+ *                              drivers, but adds work to the FW.
+ *                              The FW must also advertise the
+ *                              capability NFP_NET_CFG_CTRL_TXRWB
+ *                              where desired and have it accepted by
+ *                              the host for write backs to be
+ *                              actually be used on a particular vNIC.
  *
  * @NFD_IN_CNTRSX_MEM           Specify the memory unit to use for
  *                              PCI.IN counters on PCIe island X.
