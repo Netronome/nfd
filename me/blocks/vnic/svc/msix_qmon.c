@@ -390,52 +390,51 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
     if (!(update & (NFP_NET_CFG_UPDATE_MSIX | NFP_NET_CFG_UPDATE_IRQMOD)))
         return;
 
-    if (update & NFP_NET_CFG_UPDATE_MSIX) {
+    /* Compute vf_tx_rings_new and vf_rx_rings_new from the message */
+    /* Check if we are up */
+    if (control & NFP_NET_CFG_CTRL_ENABLE) {
+        vf_tx_rings_new =
+            cfg_bar_data[(NFP_NET_CFG_TXRS_ENABLE >> 2) + 1];
+        vf_tx_rings_new = ((vf_tx_rings_new << 32) |
+                           cfg_bar_data[NFP_NET_CFG_TXRS_ENABLE >> 2]);
+        vf_rx_rings_new =
+            cfg_bar_data[(NFP_NET_CFG_RXRS_ENABLE >> 2) + 1];
+        vf_rx_rings_new = ((vf_rx_rings_new << 32) |
+                           cfg_bar_data[NFP_NET_CFG_RXRS_ENABLE >> 2]);
+    } else if ((update & NFP_NET_CFG_UPDATE_GEN) &&
+               (!(control & NFP_NET_CFG_CTRL_ENABLE))) {
+        /* The device got disabled */
+        vf_tx_rings_new = 0;
+        vf_rx_rings_new = 0;
+    }
 
-        /* Check if we are up */
-        if (control & NFP_NET_CFG_CTRL_ENABLE) {
-            vf_tx_rings_new =
-                cfg_bar_data[(NFP_NET_CFG_TXRS_ENABLE >> 2) + 1];
-            vf_tx_rings_new = ((vf_tx_rings_new << 32) |
-                               cfg_bar_data[NFP_NET_CFG_TXRS_ENABLE >> 2]);
-            vf_rx_rings_new =
-                cfg_bar_data[(NFP_NET_CFG_RXRS_ENABLE >> 2) + 1];
-            vf_rx_rings_new = ((vf_rx_rings_new << 32) |
-                               cfg_bar_data[NFP_NET_CFG_RXRS_ENABLE >> 2]);
-        } else if ((update & NFP_NET_CFG_UPDATE_GEN) &&
-                   (!(control & NFP_NET_CFG_CTRL_ENABLE))) {
-            /* The device got disabled */
-            vf_tx_rings_new = 0;
-            vf_rx_rings_new = 0;
-        }
-
-        /* Make sure the vnic is not configuring rings it has no control over */
-        if (NFD_VID_IS_PF(vid)) {
+    /* Make sure the vnic is not configuring rings it has no control over */
+    if (NFD_VID_IS_PF(vid)) {
 #ifdef NFD_USE_OVERSUBSCRIPTION
-            if (vid != NFD_LAST_PF) {
-                vf_tx_rings_new &= MSIX_PF_RINGS_MASK;
-                vf_rx_rings_new &= MSIX_PF_RINGS_MASK;
-            } else {
-                vf_tx_rings_new &= MSIX_LAST_PF_RINGS_MASK;
-                vf_rx_rings_new &= MSIX_LAST_PF_RINGS_MASK;
-            }
-#else
+        if (vid != NFD_LAST_PF) {
             vf_tx_rings_new &= MSIX_PF_RINGS_MASK;
             vf_rx_rings_new &= MSIX_PF_RINGS_MASK;
-#endif
-        } else if (NFD_VID_IS_CTRL(vid)) {
-            vf_tx_rings_new &= MSIX_CTRL_RINGS_MASK;
-            vf_rx_rings_new &= MSIX_CTRL_RINGS_MASK;
         } else {
-            vf_tx_rings_new &= MSIX_VF_RINGS_MASK;
-            vf_rx_rings_new &= MSIX_VF_RINGS_MASK;
+            vf_tx_rings_new &= MSIX_LAST_PF_RINGS_MASK;
+            vf_rx_rings_new &= MSIX_LAST_PF_RINGS_MASK;
         }
+#else
+        vf_tx_rings_new &= MSIX_PF_RINGS_MASK;
+        vf_rx_rings_new &= MSIX_PF_RINGS_MASK;
+#endif
+    } else if (NFD_VID_IS_CTRL(vid)) {
+        vf_tx_rings_new &= MSIX_CTRL_RINGS_MASK;
+        vf_rx_rings_new &= MSIX_CTRL_RINGS_MASK;
+    } else {
+        vf_tx_rings_new &= MSIX_VF_RINGS_MASK;
+        vf_rx_rings_new &= MSIX_VF_RINGS_MASK;
+    }
 
-        /* Avoiding TX interrupts if requested */
-        if (control & NFP_NET_CFG_CTRL_MSIX_TX_OFF)
-            vf_tx_rings_new = 0;
+    /* Avoiding TX interrupts if requested */
+    if (control & NFP_NET_CFG_CTRL_MSIX_TX_OFF)
+        vf_tx_rings_new = 0;
 
-
+    if (update & NFP_NET_CFG_UPDATE_MSIX) {
         /* Set MSI-X automask bits.  We assume that a VF/PF has the same
          * number of RX and TX rings and simple set the auto-mask bits for
          * all queues of the VF/PF depending on the auto-mask bit in the
@@ -453,16 +452,6 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
     }
 
     if (update & NFP_NET_CFG_UPDATE_IRQMOD) {
-
-        vf_tx_rings_new =
-            cfg_bar_data[(NFP_NET_CFG_TXRS_ENABLE >> 2) + 1];
-        vf_tx_rings_new = ((vf_tx_rings_new << 32) |
-                           cfg_bar_data[NFP_NET_CFG_TXRS_ENABLE >> 2]);
-        vf_rx_rings_new =
-            cfg_bar_data[(NFP_NET_CFG_RXRS_ENABLE >> 2) + 1];
-        vf_rx_rings_new = ((vf_rx_rings_new << 32) |
-                           cfg_bar_data[NFP_NET_CFG_RXRS_ENABLE >> 2]);
-
         msix_reconfig_irq_mod(pcie_isl, vid, cfg_bar, 1, vf_rx_rings_new);
         msix_reconfig_irq_mod(pcie_isl, vid, cfg_bar, 0, vf_tx_rings_new);
 
