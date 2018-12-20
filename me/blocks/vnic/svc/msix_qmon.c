@@ -1080,7 +1080,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
             }
         }
 
-        enabled = msix_tx_enabled;
+        enabled = (msix_tx_enabled | msix_txr_wb_enabled);
         while (enabled) {
             qnum = ffs64(enabled);
             qmask = 1ull << qnum;
@@ -1091,8 +1091,11 @@ msix_qmon_loop(const unsigned int pcie_isl)
             if (count != msix_prev_tx_cnt[pcie_isl][qnum]) {
                 msix_do_txr_wb(pcie_isl, qnum, count);
                 newpkts = msix_update_packet_count(pcie_isl, qnum, 0, count);
-                msix_imod_check_can_send(pcie_isl, qnum, 0, newpkts);
-                msix_tx_pending |= qmask;
+
+                if (msix_tx_enabled & qmask) {
+                    msix_imod_check_can_send(pcie_isl, qnum, 0, newpkts);
+                    msix_tx_pending |= qmask;
+                }
             }
         }
 
