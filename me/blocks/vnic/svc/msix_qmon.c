@@ -173,6 +173,30 @@ __shared __cls uint32_t msix_tx_irqc_cfg[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
 
 MSIX_DECLARE;
 
+
+/*
+ * Helper function to get mask of queues associated with a vid
+ */
+__intrinsic uint64_t
+msix_vid_queue_mask_get(vid) {
+    uint64_t queue_mask;
+
+    if (NFD_VID_IS_PF(vid)) {
+        queue_mask = MSIX_PF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
+#ifdef NFD_USE_OVERSUBSCRIPTION
+        if (vid == NFD_LAST_PF)
+            queue_mask = MSIX_LAST_PF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
+#endif
+    } else if (NFD_VID_IS_CTRL(vid)) {
+        queue_mask = MSIX_CTRL_RINGS_MASK << NFD_VID2NATQ(vid, 0);
+    } else {
+        queue_mask = MSIX_VF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
+    }
+
+    return queue_mask;
+}
+
+
 /*
  * Initialise the state (executed by context 0)
  *
@@ -282,18 +306,7 @@ msix_reconfig_rings(unsigned int pcie_isl, unsigned int vid,
     }
 
     /* Update the enabled bit mask with queues for this VF. */
-    if (NFD_VID_IS_PF(vid)) {
-        vf_queue_mask = MSIX_PF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
-#ifdef NFD_USE_OVERSUBSCRIPTION
-        if (vid == NFD_LAST_PF)
-            vf_queue_mask = MSIX_LAST_PF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
-#endif
-    } else if (NFD_VID_IS_CTRL(vid)) {
-        vf_queue_mask = MSIX_CTRL_RINGS_MASK << NFD_VID2NATQ(vid, 0);
-    } else {
-        vf_queue_mask = MSIX_VF_RINGS_MASK << NFD_VID2NATQ(vid, 0);
-    }
-
+    vf_queue_mask = msix_vid_queue_mask_get(vid);
     if (rx_rings) {
         msix_cls_rx_enabled[pcie_isl] &= ~vf_queue_mask;
         msix_cls_rx_enabled[pcie_isl] |= queues;
