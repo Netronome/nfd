@@ -715,12 +715,30 @@ msix_get_rx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
 __intrinsic static uint32_t
 msix_get_tx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
 {
+#ifndef NFD_IN_USE_TXR_WB
     uint32_t count;
 
     count = qc_read(pcie_isl, NFD_NATQ2QC(queue, NFD_IN_TX_QUEUE),
                     QC_RPTR);
     count = NFP_QC_STS_LO_READPTR_of(count);
     return count;
+
+#else
+    unsigned int addr_hi;
+    unsigned int addr_lo;
+    __xread uint32_t rdata;
+    SIGNAL rsig;
+
+    /* Calculate the offset. */
+    queue = NFD_NATQ2BMQ(queue);
+
+    addr_hi = (0x84 | (pcie_isl + 4)) << 24;
+    addr_lo = queue * NFD_IN_TX_SENT_SZ | NFD_IN_TX_SENT_BASE;
+
+    __asm mem[atomic_read, rdata, addr_hi, <<8, addr_lo, 1], ctx_swap[rsig];
+
+    return rdata;
+#endif
 }
 
 
