@@ -711,6 +711,22 @@ msix_get_rx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
     return rdata;
 }
 
+
+/*
+ * Read the number of packets transmitted (sent from host) by PCI.IN.
+ */
+__intrinsic static uint32_t
+msix_get_tx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
+{
+    uint32_t count;
+
+    count = qc_read(pcie_isl, NFD_NATQ2QC(queue, NFD_IN_TX_QUEUE),
+                    QC_RPTR);
+    count = NFP_QC_STS_LO_READPTR_of(count);
+    return count;
+}
+
+
 /*
  * Used to moderate the rate of interrupts to specific RX/TX queue
  * by testing whether the interrupt can be issued or not base on
@@ -999,9 +1015,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
             enabled &= ~qmask;
 
             /* Check if queue got new packets and try to send MSI-X if so */
-            count = qc_read(pcie_isl,
-                            NFD_NATQ2QC(qnum, NFD_IN_TX_QUEUE), QC_RPTR);
-            count = NFP_QC_STS_LO_READPTR_of(count);
+            count = msix_get_tx_queue_cnt(pcie_isl, qnum);
             if (count != msix_prev_tx_cnt[pcie_isl][qnum]) {
                 newpkts = msix_update_packet_count(pcie_isl, qnum, 0, count);
                 msix_imod_check_can_send(pcie_isl, qnum, 0, newpkts);
@@ -1043,10 +1057,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
             pending &= ~qmask;
 
             /* Update TX queue count in case it changed. */
-            count = qc_read(pcie_isl, NFD_NATQ2QC(qnum, NFD_IN_TX_QUEUE),
-                            QC_RPTR);
-            count = NFP_QC_STS_LO_READPTR_of(count);
-
+            count = msix_get_tx_queue_cnt(pcie_isl, qnum);
             newpkts = msix_update_packet_count(pcie_isl, qnum, 0, count);
 
             /* Try to send MSI-X. If successful remove from pending */
