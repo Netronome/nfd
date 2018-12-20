@@ -70,6 +70,7 @@ NFD_TLV_BASE_DECLARE(0);
 #endif
 
 PCIE_C2P_BAR_ALLOC_OFF(nfd_scv_qmon_bar0, me, 0, PCIE_CPP2PCIE_QMON, 1);
+PCIE_C2P_BAR_ALLOC_OFF(nfd_txr_wb_bar0, me, 0, PCIE_CPP2PCIE_TXR_WB, 1);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
@@ -84,6 +85,7 @@ NFD_TLV_BASE_DECLARE(1);
 #endif
 
 PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar1, me, 1, PCIE_CPP2PCIE_QMON, 1);
+PCIE_C2P_BAR_ALLOC_OFF(nfd_txr_wb_bar1, me, 1, PCIE_CPP2PCIE_TXR_WB, 1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
@@ -98,6 +100,7 @@ NFD_TLV_BASE_DECLARE(2);
 #endif
 
 PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar2, me, 2, PCIE_CPP2PCIE_QMON, 1);
+PCIE_C2P_BAR_ALLOC_OFF(nfd_txr_wb_bar2, me, 2, PCIE_CPP2PCIE_TXR_WB, 1);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
@@ -112,6 +115,7 @@ NFD_TLV_BASE_DECLARE(3);
 #endif
 
 PCIE_C2P_BAR_ALLOC_OFF(nfd_svc_qmon_bar3, me, 3, PCIE_CPP2PCIE_QMON, 1);
+PCIE_C2P_BAR_ALLOC_OFF(nfd_txr_wb_bar3, me, 3, PCIE_CPP2PCIE_TXR_WB, 1);
 #endif
 
 NFD_FLR_DECLARE;
@@ -183,8 +187,9 @@ do {                                                                        \
                 /* This is the end of PCIe island reset */                  \
                 /* processing. */                                           \
                                                                             \
-                /* Clear msix_cur_cpp2pci_addr in case the BAR is reset */  \
+                /* Clear xyz_cur_cpp2pci_addr in case the BAR is reset */   \
                 msix_rst_curr_cpp2pci_addr(_isl);                           \
+                txr_wb_rst_curr_cpp2pci_addr(_isl);                         \
             }                                                               \
         }                                                                   \
                                                                             \

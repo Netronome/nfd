@@ -136,7 +136,7 @@ __export __shared __align256 NFD_MAC_STATS_MEM_TYPE
 #define PCIE_CPP2PCIE_QMON      0
 #define PCIE_CPP2PCIE_LSC       1
 #define PCIE_CPP2PCIE_BPF_LOAD  2
-#define PCIE_CPP2PCIE_FREE3     3
+#define PCIE_CPP2PCIE_TXR_WB    3
 #define PCIE_CPP2PCIE_FREE4     4
 #define PCIE_CPP2PCIE_FREE5     5
 #define PCIE_CPP2PCIE_FREE6     6

@@ -147,6 +147,7 @@
  *
  * @msix_cls_txr_wb_enabled  Bitmask of which TX queues have write back enabled
  * @msix_txr_wb_addr         Local cache of the TX ring writeback address
+ * @txr_wb_cur_cpp2pci_addr  Current write back CPP 2 PCIe BAR config
  */
 __shared __cls uint64_t msix_cls_rx_enabled[MAX_NUM_PCI_ISLS];
 __shared __cls uint64_t msix_cls_tx_enabled[MAX_NUM_PCI_ISLS];
@@ -163,6 +164,19 @@ __shared __cls uint32_t msix_tx_irqc_cfg[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
 #ifdef NFD_IN_USE_TXR_WB
 __shared __cls uint64_t msix_cls_txr_wb_enabled[MAX_NUM_PCI_ISLS];
 __shared __cls uint32_t msix_txr_wb_addr[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX][2];
+volatile __shared __lmem uint32_t
+    txr_wb_cur_cpp2pci_addr[MAX_NUM_PCI_ISLS] = {0};
+
+__intrinsic void
+txr_wb_rst_curr_cpp2pci_addr(unsigned int pcie_nr)
+{
+    txr_wb_cur_cpp2pci_addr[pcie_nr] = 0;
+}
+
+#else
+__intrinsic void
+txr_wb_rst_curr_cpp2pci_addr(unsigned int pcie_nr)
+{ }
 #endif
 
 /*
@@ -742,6 +756,49 @@ msix_get_tx_queue_cnt(const unsigned int pcie_isl, unsigned int queue)
 }
 
 
+#ifdef NFD_IN_USE_TXR_WB
+__intrinsic void
+msix_do_txr_wb(const unsigned int pcie_isl, unsigned int queue,
+               unsigned int count)
+{
+    if (msix_txr_wb_enabled & (1ull << queue)) {
+        __xread uint32_t txr_wb_addr_rd[2];
+        __xwrite uint32_t txr_wb_data;
+
+        uint32_t bar_addr;
+        uint32_t vid, vqn;
+        uint32_t rid;
+
+        cls_read(txr_wb_addr_rd, msix_txr_wb_addr[pcie_isl][queue],
+                 sizeof txr_wb_addr_rd);
+
+        /* Check if we need to re-configure the CPP2PCI BAR */
+        rid = NFD_CFG_PF_OFFSET;
+        NFD_NATQ2VID(vid, vqn, queue);
+        if (NFD_VID_IS_VF(vid))
+            rid = NFD_CFG_VF_OFFSET + vid;
+
+        bar_addr = pcie_c2p_barcfg_val(txr_wb_addr_rd[1],
+                                       txr_wb_addr_rd[0],
+                                       rid);
+        if (bar_addr != txr_wb_cur_cpp2pci_addr[pcie_isl]) {
+            pcie_c2p_barcfg_set_expl(pcie_isl, PCIE_CPP2PCIE_TXR_WB, bar_addr);
+            txr_wb_cur_cpp2pci_addr[pcie_isl] = bar_addr;
+        }
+
+        txr_wb_data = count;
+        pcie_write(&txr_wb_data, pcie_isl, PCIE_CPP2PCIE_TXR_WB,
+                   txr_wb_addr_rd[1], txr_wb_addr_rd[0], sizeof txr_wb_data);
+    }
+}
+
+#else
+__intrinsic void
+msix_do_txr_wb(const unsigned int pcie_isl, unsigned int queue,
+               unsigned int count) { }
+#endif
+
+
 /*
  * Used to moderate the rate of interrupts to specific RX/TX queue
  * by testing whether the interrupt can be issued or not base on
@@ -1032,6 +1089,7 @@ msix_qmon_loop(const unsigned int pcie_isl)
             /* Check if queue got new packets and try to send MSI-X if so */
             count = msix_get_tx_queue_cnt(pcie_isl, qnum);
             if (count != msix_prev_tx_cnt[pcie_isl][qnum]) {
+                msix_do_txr_wb(pcie_isl, qnum, count);
                 newpkts = msix_update_packet_count(pcie_isl, qnum, 0, count);
                 msix_imod_check_can_send(pcie_isl, qnum, 0, newpkts);
                 msix_tx_pending |= qmask;
@@ -1073,6 +1131,9 @@ msix_qmon_loop(const unsigned int pcie_isl)
 
             /* Update TX queue count in case it changed. */
             count = msix_get_tx_queue_cnt(pcie_isl, qnum);
+            if (count != msix_prev_tx_cnt[pcie_isl][qnum]) {
+               msix_do_txr_wb(pcie_isl, qnum, count);
+            }
             newpkts = msix_update_packet_count(pcie_isl, qnum, 0, count);
 
             /* Try to send MSI-X. If successful remove from pending */
