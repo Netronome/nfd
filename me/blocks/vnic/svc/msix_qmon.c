@@ -145,6 +145,7 @@
  * @msix_rx_irqc_cfg         Interrupt coalescence settings for RX queues
  * @msix_tx_irqc_cfg         Interrupt coalescence settings for TX queues
  *
+ * @msix_cls_txr_wb_enabled  Bitmask of which TX queues have write back enabled
  * @msix_txr_wb_addr         Local cache of the TX ring writeback address
  */
 __shared __cls uint64_t msix_cls_rx_enabled[MAX_NUM_PCI_ISLS];
@@ -160,6 +161,7 @@ __shared __cls uint32_t msix_rx_irqc_cfg[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
 __shared __cls uint32_t msix_tx_irqc_cfg[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
 
 #ifdef NFD_IN_USE_TXR_WB
+__shared __cls uint64_t msix_cls_txr_wb_enabled[MAX_NUM_PCI_ISLS];
 __shared __cls uint32_t msix_txr_wb_addr[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX][2];
 #endif
 
@@ -466,6 +468,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
         __xread uint32_t txr_wb_addr_rd[2];
         __xwrite uint32_t txr_wb_addr_wr[2];
 
+        /* Update the msix_txr_wb_addr data */
         for (queue = 0; queue < NFD_VID_MAXQS(vid); queue++) {
             if ((control & NFP_NET_CFG_CTRL_TXRWB) &&
                 (vf_tx_rings_new & (1 << queue))) {
@@ -481,6 +484,13 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
             qnum = NFD_VID2NATQ(vid, queue);
             cls_write(txr_wb_addr_wr, msix_txr_wb_addr[pcie_isl][qnum],
                       sizeof txr_wb_addr_wr);
+        }
+
+        /* Update the txr_wb_enabled flags */
+        msix_cls_txr_wb_enabled[pcie_isl] &= ~msix_vid_queue_mask_get(vid);
+        if (control & NFP_NET_CFG_CTRL_TXRWB) {
+            msix_cls_txr_wb_enabled[pcie_isl] |=
+                vf_tx_rings_new << NFD_VID2NATQ(vid, 0);
         }
     }
 #endif
@@ -535,6 +545,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
  * - @msix_rx_pending: Bitmask of which RX queues have pending interrupts
  * - @msix_tx_pending: Bitmask of which TX queues have pending interrupts
  * - @msix_automask:   Bitmask of which RX/TX queues should automask MSI-X
+ * - @msix_txr_wb_enabled:  Bitmask of which TX queue should do write back
  *
  * - @msix_rx_entries: Indexed by RX Q, MSI-X table entry for this Q
  * - @msix_tx_entries: Indexed by TX Q, MSI-X table entry for this Q
@@ -555,6 +566,9 @@ __nnr static uint64_t msix_tx_enabled = 0;
 __nnr static uint64_t msix_rx_pending = 0;
 __nnr static uint64_t msix_tx_pending = 0;
 __nnr static uint64_t msix_automask = 0;
+#ifdef NFD_IN_USE_TXR_WB
+__nnr static uint64_t msix_txr_wb_enabled = 0;
+#endif
 
 __shared __lmem uint8_t msix_rx_entries[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
 __shared __lmem uint8_t msix_tx_entries[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX];
@@ -625,6 +639,12 @@ msix_local_reconfig(const unsigned int pcie_isl)
     /* Update automask */
     cls_read(&tmp64, &msix_cls_automask[pcie_isl], sizeof(tmp64));
     msix_automask = tmp64;
+
+#ifdef NFD_IN_USE_TXR_WB
+    /* Update TXR_WB settings */
+    cls_read(&tmp64, &msix_cls_txr_wb_enabled[pcie_isl], sizeof(tmp64));
+    msix_txr_wb_enabled = tmp64;
+#endif
 
     /* Copy entries */
     cls_read(&entries, msix_cls_rx_entries[pcie_isl], sizeof(entries));
