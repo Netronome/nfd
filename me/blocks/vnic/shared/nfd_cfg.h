@@ -46,6 +46,16 @@
 #endif
 
 
+/* Check that we're not advertising NFP_NET_CFG_CTRL_TXRWB without
+ * NFD_IN_USE_TXR_WB defined */
+#if (NFP_NET_CFG_CTRL_TXRWB &                               \
+     (NFD_CFG_VF_CAP | NFD_CFG_PF_CAP | NFD_CFG_CTRL_CAP))
+#ifndef NFD_IN_USE_TXR_WB
+#error "NFP_NET_CFG_CTRL_TXRWB advertised without NFD_IN_USE_TXR_WB defined"
+#endif
+#endif
+
+
 #ifndef NFD_CFG_MAX_MTU
 #define NFD_CFG_MAX_MTU         1500
 #endif
