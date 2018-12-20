@@ -144,6 +144,8 @@
  *
  * @msix_rx_irqc_cfg         Interrupt coalescence settings for RX queues
  * @msix_tx_irqc_cfg         Interrupt coalescence settings for TX queues
+ *
+ * @msix_txr_wb_addr         Local cache of the TX ring writeback address
  */
 __shared __cls uint64_t msix_cls_rx_enabled[MAX_NUM_PCI_ISLS];
 __shared __cls uint64_t msix_cls_tx_enabled[MAX_NUM_PCI_ISLS];
@@ -156,6 +158,10 @@ __shared __cls uint8_t msix_cls_tx_entries[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX];
 
 __shared __cls uint32_t msix_rx_irqc_cfg[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
 __shared __cls uint32_t msix_tx_irqc_cfg[MAX_NUM_PCI_ISLS][NFP_NET_RXR_MAX];
+
+#ifdef NFD_IN_USE_TXR_WB
+__shared __cls uint32_t msix_txr_wb_addr[MAX_NUM_PCI_ISLS][NFP_NET_TXR_MAX][2];
+#endif
 
 /*
  * Retrieve configured packet count and usec delay from interrupt
@@ -369,6 +375,16 @@ msix_reconfig_irq_mod(unsigned int pcie_isl, unsigned int vid,
     }
 }
 
+
+#ifdef NFD_IN_USE_TXR_WB
+#define MSIX_QMON_UPDATE_ANY                                \
+    (NFP_NET_CFG_UPDATE_MSIX | NFP_NET_CFG_UPDATE_IRQMOD |  \
+     NFP_NET_CFG_UPDATE_GEN | NFP_NET_CFG_UPDATE_RING)
+#else
+#define MSIX_QMON_UPDATE_ANY                                \
+    (NFP_NET_CFG_UPDATE_MSIX | NFP_NET_CFG_UPDATE_IRQMOD)
+#endif
+
 /*
  * Handle reconfiguration changes of RX queues (executed by context 0)
  *
@@ -400,7 +416,7 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
     control = cfg_bar_data[NFP_NET_CFG_CTRL >> 2];
     update = cfg_bar_data[NFP_NET_CFG_UPDATE >> 2];
 
-    if (!(update & (NFP_NET_CFG_UPDATE_MSIX | NFP_NET_CFG_UPDATE_IRQMOD)))
+    if (!(update & MSIX_QMON_UPDATE_ANY))
         return;
 
     /* Compute vf_tx_rings_new and vf_rx_rings_new from the message */
@@ -442,6 +458,32 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
         vf_tx_rings_new &= MSIX_VF_RINGS_MASK;
         vf_rx_rings_new &= MSIX_VF_RINGS_MASK;
     }
+
+#ifdef NFD_IN_USE_TXR_WB
+    if (update & (NFP_NET_CFG_UPDATE_GEN | NFP_NET_CFG_UPDATE_RING)) {
+        uint32_t queue;
+        uint32_t qnum;
+        __xread uint32_t txr_wb_addr_rd[2];
+        __xwrite uint32_t txr_wb_addr_wr[2];
+
+        for (queue = 0; queue < NFD_VID_MAXQS(vid); queue++) {
+            if ((control & NFP_NET_CFG_CTRL_TXRWB) &&
+                (vf_tx_rings_new & (1 << queue))) {
+                mem_read64(txr_wb_addr_rd,
+                           cfg_bar + NFP_NET_CFG_TXR_WB_ADDR(queue),
+                           sizeof txr_wb_addr_rd);
+                reg_cp(txr_wb_addr_wr, txr_wb_addr_rd, sizeof txr_wb_addr_rd);
+
+            } else {
+                reg_zero(txr_wb_addr_wr, sizeof txr_wb_addr_wr);
+            }
+
+            qnum = NFD_VID2NATQ(vid, queue);
+            cls_write(txr_wb_addr_wr, msix_txr_wb_addr[pcie_isl][qnum],
+                      sizeof txr_wb_addr_wr);
+        }
+    }
+#endif
 
     /* Avoiding TX interrupts if requested */
     if (control & NFP_NET_CFG_CTRL_MSIX_TX_OFF)
