@@ -452,12 +452,13 @@ msix_qmon_reconfig(unsigned int pcie_isl, unsigned int vid,
          * number of RX and TX rings and simple set the auto-mask bits for
          * all queues of the VF/PF depending on the auto-mask bit in the
          * control word. */
-        queues = vf_rx_rings_new << NFD_VID2NATQ(vid, 0);
-
-        if (control & NFP_NET_CFG_CTRL_MSIXAUTO)
+        if (control & NFP_NET_CFG_CTRL_MSIXAUTO) {
+            queues = vf_rx_rings_new << NFD_VID2NATQ(vid, 0);
             msix_cls_automask[pcie_isl] |= queues;
-        else
+        } else {
+            queues = msix_vid_queue_mask_get(vid);
             msix_cls_automask[pcie_isl] &= ~queues;
+        }
 
         /* Reconfigure the RX/TX ring state */
         msix_reconfig_rings(pcie_isl, vid, cfg_bar, 1, vf_rx_rings_new);
