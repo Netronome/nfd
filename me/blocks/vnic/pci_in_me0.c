@@ -40,11 +40,6 @@
 #endif
 
 
-/*
- * Temporary header includes
- */
-#include <std/event.h>                  /* TEMP */
-
 NFD_INIT_DONE_DECLARE;
 
 NFD_CFG_VF_DECLARE(PCIE_ISL);
