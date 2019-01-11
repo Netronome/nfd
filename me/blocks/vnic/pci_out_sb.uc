@@ -305,7 +305,7 @@
     .endif
     #endif
 
-    .if ($bar[NFP_NET_CFG_CTRL] & NFP_NET_CFG_CTRL_ENABLE == 0)
+    .if (($bar[NFP_NET_CFG_CTRL] & NFP_NET_CFG_CTRL_ENABLE) == 0)
 
         move(up, 0)
         move(q, 0)
