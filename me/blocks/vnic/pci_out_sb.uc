@@ -288,6 +288,11 @@
     nfd_cfg_get_bar_addr(bar_addr_hi, bar_addr_lo, in_vid, PCIE_ISL)
     mem[read32, $bar[0], bar_addr_hi, <<8, bar_addr_lo, 6], ctx_swap[read_sig]
 
+    // Don't touch the rings unless this is a general or ring update
+    alu[--, $bar[(NFP_NET_CFG_UPDATE/4)], AND,
+        (NFP_NET_CFG_UPDATE_RING | NFP_NET_CFG_UPDATE_GEN)]
+    beq[done#]
+
     /* Setup maxqs */
     nfd_vid_maxqs(maxqs, in_vid)
 
@@ -339,6 +344,8 @@
         .endw
 
     .endif
+
+done#:
 
 .end
 #endm
