@@ -1026,21 +1026,21 @@ main#:
     .sig volatile dma_sig0
 
     // XFER and signals for work/DMA block 1
-    .reg $work_in1[SB_WQ_SIZE_LW]
+    .reg read $work_in1[SB_WQ_SIZE_LW]
     .xfer_order $work_in1
-    .reg $dma_out1[PCIE_DMA_SIZE_LW]
+    .reg write $dma_out1[PCIE_DMA_SIZE_LW]
     .xfer_order $dma_out1
-    .reg $dma_out1x[PCIE_DMA_SIZE_LW]
+    .reg write $dma_out1x[PCIE_DMA_SIZE_LW]
     .xfer_order $dma_out1x
     .sig volatile work_sig1
     .sig volatile dma_sig1
 
     // XFER and signals for work/DMA block 2
-    .reg $work_in2[SB_WQ_SIZE_LW]
+    .reg read $work_in2[SB_WQ_SIZE_LW]
     .xfer_order $work_in2
-    .reg $dma_out2[PCIE_DMA_SIZE_LW]
+    .reg write $dma_out2[PCIE_DMA_SIZE_LW]
     .xfer_order $dma_out2
-    .reg $dma_out2x[PCIE_DMA_SIZE_LW]
+    .reg write $dma_out2x[PCIE_DMA_SIZE_LW]
     .xfer_order $dma_out2x
     .sig volatile work_sig2
     .sig volatile dma_sig2
