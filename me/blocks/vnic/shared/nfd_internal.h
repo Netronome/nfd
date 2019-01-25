@@ -613,11 +613,6 @@ struct nfd_out_send_desc_msg {
 #include <nfp_chipres.h>
 
 /* Helper macros */
-/* XXX can provide an extra _pool parameter here if required */
-#define NFD_BLM_Q_ALLOC_IND(_name)                  \
-    _NFP_CHIPRES_ASM(.alloc_resource _name BLQ_EMU_RINGS global 1)
-#define NFD_BLM_Q_ALLOC(_name) NFD_BLM_Q_ALLOC_IND(_name)
-
 #define NFD_BLM_Q_LINK_IND(_name)                  \
     _link_sym(_name)
 #define NFD_BLM_Q_LINK(_name) NFD_BLM_Q_LINK_IND(_name)

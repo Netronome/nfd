@@ -31,6 +31,7 @@
 #include <nfp/pcie.h>
 #include <std/reg_utils.h>
 #include <std/cntrs.h>
+#include <blm/blm.h>
 
 #include <vnic/nfd_common.h>
 #include <vnic/pci_in.h>
@@ -97,9 +98,6 @@ struct _dma_desc_batch {
     struct nfp_pcie_dma_cmd pkt6;
     struct nfp_pcie_dma_cmd pkt7;
 };
-
-NFD_BLM_Q_ALLOC(NFD_IN_BLM_REG_POOL);
-NFD_BLM_Q_ALLOC(NFD_IN_BLM_JUMBO_POOL);
 
 #define NFD_IN_DESC_RING_SZ (NFD_IN_MAX_BATCH_SZ * NFD_IN_DESC_BATCH_Q_SZ * \
                       sizeof(struct nfd_in_tx_desc))

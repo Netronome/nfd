@@ -28,6 +28,7 @@
 #include <nfp/mem_ring.h>
 #include <std/event.h>
 #include <std/reg_utils.h>
+#include <blm/blm.h>
 
 #include <vnic/shared/nfd_internal.h>
 #include <vnic/shared/nfd_rst_state.h>
@@ -70,9 +71,6 @@ struct precache_bufs_state {
     unsigned int spare:30;
 };
 
-
-NFD_BLM_Q_ALLOC(NFD_IN_BLM_REG_POOL);
-NFD_BLM_Q_ALLOC(NFD_IN_BLM_JUMBO_POOL);
 
 __shared __lmem unsigned int buf_store[NFD_IN_BUF_STORE_SZ];
 static __shared unsigned int buf_store_start; /* Units: bytes */
