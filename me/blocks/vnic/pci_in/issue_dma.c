@@ -1617,10 +1617,12 @@ __noinline void issue_proc_lso##_pkt(unsigned int queue,                     \
                 --, B, lso_payload_len] }                                    \
                                                                              \
     /* Wait for IO from final segment to complete */                         \
-    wait_sig_mask(lso_wait_msk);                                             \
-    __implicit_read(&lso_hdr_sig);                                           \
-    __implicit_read(&lso_journal_sig);                                       \
-    __implicit_read(&lso_enq_sig);                                           \
+    if (lso_wait_msk != 0) {                                                 \
+        wait_sig_mask(lso_wait_msk);                                         \
+        __implicit_read(&lso_hdr_sig);                                       \
+        __implicit_read(&lso_journal_sig);                                   \
+        __implicit_read(&lso_enq_sig);                                       \
+    }                                                                        \
                                                                              \
     /* Flag that batch_out is free to be used before this point */           \
     __implicit_write(&batch_out);                                            \
