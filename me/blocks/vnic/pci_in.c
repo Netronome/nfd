@@ -388,7 +388,12 @@ nfd_in_fill_meta(void *pkt_info,
     ((struct nbi_meta_pkt_info *) pkt_info)->pnum = 0;  /* Signal MU only */
     ((struct nbi_meta_pkt_info *) pkt_info)->split = 0; /* Signal MU only */
 
+#if defined(__NFP_IS_6XXX)
     ((struct nbi_meta_pkt_info *) pkt_info)->resv0 = 0;
+#else
+    ((struct nbi_meta_pkt_info *) pkt_info)->alloc_sz0 = 0;
+    ((struct nbi_meta_pkt_info *) pkt_info)->alloc_sz1 = 0;
+#endif
 
     /* Set the BLS, suppressing length tests if the same BLQ is used
      * for all packets.
