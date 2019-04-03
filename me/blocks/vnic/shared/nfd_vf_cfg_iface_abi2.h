@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017,  Netronome Systems, Inc.  All rights reserved.
+ * Copyright (C) 2017-2019,  Netronome Systems, Inc.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@
 #define   NFD_VF_CFG_MB_CAP_VLAN        (1 << 1)
 #define   NFD_VF_CFG_MB_CAP_SPOOF       (1 << 2)
 #define   NFD_VF_CFG_MB_CAP_LINK_STATE  (1 << 3)
+#define   NFD_VF_CFG_MB_CAP_TRUST       (1 << 4)
 #define NFD_VF_CFG_MB_VF_NUM_fld        1, 31, 24
 #define NFD_VF_CFG_MB_VF_NUM_msk        0xff
 #define NFD_VF_CFG_MB_VF_NUM_shf        24
@@ -63,14 +64,10 @@
 #define NFD_VF_CFG_CTRL_msk                 0xff
 #define NFD_VF_CFG_CTRL_shf                 0
 #define NFD_VF_CFG_CTRL_wrd                 1
-#define   NFD_VF_CFG_CTRL_TRUSTED_fld       1, 4, 4
-#define   NFD_VF_CFG_CTRL_TRUSTED_msk       0x1
-#define   NFD_VF_CFG_CTRL_TRUSTED_shf       4
-#define   NFD_VF_CFG_CTRL_TRUSTED_wrd       1
-#define   NFD_VF_CFG_CTRL_RSS_fld           1, 3, 3
-#define   NFD_VF_CFG_CTRL_RSS_msk           0x1
-#define   NFD_VF_CFG_CTRL_RSS_shf           3
-#define   NFD_VF_CFG_CTRL_RSS_wrd           1
+#define   NFD_VF_CFG_CTRL_TRUSTED_fld           1, 3, 3
+#define   NFD_VF_CFG_CTRL_TRUSTED_msk           0x1
+#define   NFD_VF_CFG_CTRL_TRUSTED_shf           3
+#define   NFD_VF_CFG_CTRL_TRUSTED_wrd           1
 #define   NFD_VF_CFG_CTRL_SPOOF_fld         1, 2, 2
 #define   NFD_VF_CFG_CTRL_SPOOF_msk         0x1
 #define   NFD_VF_CFG_CTRL_SPOOF_shf         2
@@ -173,9 +170,8 @@ struct sriov_cfg {
                     unsigned short mac_lo;
                     unsigned char resvd0;
                     /* ctrl_flags */
-                    unsigned char ctrl_resvd0:3;
+                    unsigned char ctrl_resvd0:4;
                     unsigned char ctrl_trusted:1;
-                    unsigned char ctrl_rss:1;
                     unsigned char ctrl_spoof:1;
                     unsigned char ctrl_link_state:2;
                 };
