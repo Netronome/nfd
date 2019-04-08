@@ -1086,7 +1086,11 @@ msix_qmon_loop(const unsigned int pcie_isl)
             }
         }
 
+#ifdef NFD_IN_USE_TXR_WB
         enabled = (msix_tx_enabled | msix_txr_wb_enabled);
+#else
+        enabled = msix_tx_enabled;
+#endif
         while (enabled) {
             qnum = ffs64(enabled);
             qmask = 1ull << qnum;
