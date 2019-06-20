@@ -38,6 +38,9 @@
  * Platform type defines
  * @NFD_USE_MULTI_HOST  Support connecting a single NFP to multiple
  *                      separate hosts
+ * @NFD_USE_ATMC_CNTRS  Support platforms that do not have a stats
+ *                      engine by using mem atomics to implement
+ *                      counter APIs
  */
 
 

@@ -36,6 +36,16 @@
 
 extern __intrinsic uint64_t swapw64(uint64_t val);
 
+#ifndef NFD_USE_ATMC_CNTRS
+#define NFD_OUT_CNTR_ADDR   pkt_cntr_get_addr
+#define NFD_OUT_CNTR_ADD    pkt_cntr_add
+#define NFD_OUT_CNTR_PUSH   pkt_cntr_read_and_clr
+#else
+#define NFD_OUT_CNTR_ADDR   pkt_cntr_atmc_get_addr
+#define NFD_OUT_CNTR_ADD    pkt_cntr_atmc_add
+#define NFD_OUT_CNTR_PUSH   pkt_cntr_atmc_read_and_clr
+#endif
+
 #ifndef NFD_OUT_CNTRS0_MEM
 #define NFD_OUT_CNTRS0_MEM __imem_n(0)
 #endif
@@ -87,22 +97,22 @@ nfd_out_send_init()
 {
 #ifdef NFD_PCIE0_EMEM
     NFD_OUT_RING_LINK(0);
-    nfd_out_cntrs_base[0] = pkt_cntr_get_addr(nfd_out_cntrs0);
+    nfd_out_cntrs_base[0] = NFD_OUT_CNTR_ADDR(nfd_out_cntrs0);
 #endif
 
 #ifdef NFD_PCIE1_EMEM
     NFD_OUT_RING_LINK(1);
-    nfd_out_cntrs_base[1] = pkt_cntr_get_addr(nfd_out_cntrs1);
+    nfd_out_cntrs_base[1] = NFD_OUT_CNTR_ADDR(nfd_out_cntrs1);
 #endif
 
 #ifdef NFD_PCIE2_EMEM
     NFD_OUT_RING_LINK(2);
-    nfd_out_cntrs_base[2] = pkt_cntr_get_addr(nfd_out_cntrs2);
+    nfd_out_cntrs_base[2] = NFD_OUT_CNTR_ADDR(nfd_out_cntrs2);
 #endif
 
 #ifdef NFD_PCIE3_EMEM
     NFD_OUT_RING_LINK(3);
-    nfd_out_cntrs_base[3] = pkt_cntr_get_addr(nfd_out_cntrs3);
+    nfd_out_cntrs_base[3] = NFD_OUT_CNTR_ADDR(nfd_out_cntrs3);
 #endif
 }
 
@@ -167,8 +177,8 @@ __nfd_out_cnt_pkt(unsigned int pcie_isl, unsigned int bmsk_queue,
     ctassert(__is_ct_const(sync));
     ctassert(sync == sig_done || sync == ctx_swap);
 
-    pkt_cntr_add(nfd_out_cntrs_base[pcie_isl], bmsk_queue, 0, byte_count,
-                 sync, sig);
+    NFD_OUT_CNTR_ADD(nfd_out_cntrs_base[pcie_isl], bmsk_queue, 0, byte_count,
+                     sync, sig);
 }
 
 __intrinsic void
@@ -184,8 +194,8 @@ __nfd_out_push_pkt_cnt(unsigned int pcie_isl, unsigned int bmsk_queue,
     ctassert(__is_ct_const(sync));
     ctassert(sync == sig_done || sync == ctx_swap);
 
-    pkt_cntr_read_and_clr(nfd_out_cntrs_base[pcie_isl], bmsk_queue, 0,
-                          &pkt_count, &byte_count);
+    NFD_OUT_CNTR_PUSH(nfd_out_cntrs_base[pcie_isl], bmsk_queue, 0,
+                      &pkt_count, &byte_count);
 
     if (pkt_count != 0) {
         xfer_update[0] = swapw64(pkt_count);
