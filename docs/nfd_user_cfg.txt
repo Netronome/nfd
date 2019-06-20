@@ -132,6 +132,9 @@
  *                              can be for a single chained meta data
  *                              type.  Used in microcode and microC to
  *                              determine how much data to fetch.
+ *
+ * @NFD_IN_CNTRSX_MEM           Specify the memory unit to use for
+ *                              PCI.IN counters on PCIe island X.
  */
 
 
@@ -208,6 +211,9 @@
  *                              NFD_OUT_BLS bits of the packet
  *                              descriptor for packets where CTM
  *                              buffer should not be freed.
+ *
+ * @NFD_OUT_CNTRSX_MEM          Specify the memory unit to use for
+ *                              PCI.OUT counters on PCIe island X.
  */
 
 /**
