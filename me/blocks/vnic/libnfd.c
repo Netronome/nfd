@@ -21,7 +21,7 @@
 #define _BLOCKS__VNIC_LIBNFD_C_
 
 /*
- * The following files implement all the funcitonality provided by NFD.
+ * The following files implement all the functionality provided by NFD.
  */
 
 #include "pci_out.c"
