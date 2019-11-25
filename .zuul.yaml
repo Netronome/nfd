@@ -1,0 +1,14 @@
+---
+ - project:
+    name: nfd/nfd
+    check:
+      jobs:
+        - noop
+    gate:
+      jobs:
+        - nfd-firmware
+        - nfd-firmware-tests
+    experimental:
+      jobs:
+        - nfd-firmware
+        - nfd-firmware-tests
