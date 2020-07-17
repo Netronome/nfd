@@ -179,4 +179,29 @@ __intrinsic void __qc_add_to_ptr_wr(unsigned char pcie_isl, unsigned int queue,
                                     __xwrite unsigned int *xfer,
                                     sync_t sync, SIGNAL *sig);
 
+
+/**
+ * Add specified value to given queue pointer, with read_pci indirect_ref
+ * @param pcie_isl      which PCIe island to address (0..3)
+ * @param queue         which QC queue to address
+ * @param ptr           specify read or write pointer (QC_RPTR or QC_WPTR)
+ * @param value         the value to add to the pointer
+ * @param abs_xfer      absolute transfer register to use (side effect)
+ * @param sync          type of synchronisation (sig_done or ctx_swap)
+ * @param sig           signal to use
+ *
+ * Trigger hardware add to pointer operation.  This may result in an event on
+ * the event bus depending on the state of the queue flags after the add, and
+ * the queue configuration.
+ *
+ * This option should only be used if xfers are severely constrained.
+ * "xfer_reg" specifies the absolute address of a read xfer that will
+ * receive the previous value of the queue pointer.  The caller must
+ * ensure that the transfer register is reserved.
+ */
+__intrinsic void __qc_add_to_ptr_ind(unsigned char pcie_isl, unsigned int queue,
+                                     enum qc_ptr_type ptr, unsigned int value,
+                                     unsigned int abs_xfer, sync_t sync,
+                                     SIGNAL *sig);
+
 #endif /* !_BLOCKS__VNIC_UTILS_QCNTL_H_ */

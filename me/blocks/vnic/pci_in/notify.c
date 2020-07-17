@@ -704,8 +704,8 @@ _notify(__shared __gpr unsigned int *complete,
          * for that queue by n_batch */
         qc_queue = NFD_NATQ2QC(NFD_BMQ2NATQ(batch_in.pkt0.q_num),
                                NFD_IN_TX_QUEUE);
-        __qc_add_to_ptr_wr(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
-                           &batch_out.pkt0.__raw[0], sig_done, &qc_sig);
+        __qc_add_to_ptr_ind(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
+                            NFD_IN_NOTIFY_QC_RD, sig_done, &qc_sig);
 
     } else if (num_avail > 0) {
         /* There is a partial batch - process messages one at a time. */
@@ -807,8 +807,8 @@ _notify(__shared __gpr unsigned int *complete,
         reorder_done_opt(&next_ctx, &msg_order_sig);
 
         /* Increment the TX_R pointer for this queue by n_batch */
-        __qc_add_to_ptr_wr(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
-                           &batch_out.pkt0.__raw[0], sig_done, &qc_sig);
+        __qc_add_to_ptr_ind(PCIE_ISL, qc_queue, QC_RPTR, n_batch,
+                            NFD_IN_NOTIFY_QC_RD, sig_done, &qc_sig);
 
     } else {
         /* Participate in ctm_ring_get ordering */
