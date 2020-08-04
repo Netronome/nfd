@@ -37,6 +37,7 @@
 #define   NFD_VF_CFG_MB_CAP_SPOOF       (1 << 2)
 #define   NFD_VF_CFG_MB_CAP_LINK_STATE  (1 << 3)
 #define   NFD_VF_CFG_MB_CAP_TRUST       (1 << 4)
+#define   NFD_VF_CFG_MB_CAP_VLAN_PROTO  (1 << 5)
 #define NFD_VF_CFG_MB_VF_NUM_fld        1, 31, 24
 #define NFD_VF_CFG_MB_VF_NUM_msk        0xff
 #define NFD_VF_CFG_MB_VF_NUM_shf        24
